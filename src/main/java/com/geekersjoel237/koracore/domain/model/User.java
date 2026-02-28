@@ -18,11 +18,11 @@ public class User {
     private UserStatus status;
 
     private User(Id id, String fullName, String email, Role role, UserStatus status) {
-        this.id       = id;
+        this.id = id;
         this.fullName = fullName;
-        this.email    = email;
-        this.role     = role;
-        this.status   = status;
+        this.email = email;
+        this.role = role;
+        this.status = status;
     }
 
     public static User create(Id id, String fullName, String email, Role role) {
@@ -43,10 +43,21 @@ public class User {
     }
 
 
-    public boolean isActive()    { return status == UserStatus.VERIFIED; }
-    public boolean isSuspended() { return status == UserStatus.SUSPENDED; }
-    public void suspend()        { this.status = UserStatus.SUSPENDED; }
-    public void verify()         { this.status = UserStatus.VERIFIED; }
+    public boolean isActive() {
+        return status == UserStatus.VERIFIED;
+    }
+
+    public boolean isSuspended() {
+        return status == UserStatus.SUSPENDED;
+    }
+
+    public void suspend() {
+        this.status = UserStatus.SUSPENDED;
+    }
+
+    public void verify() {
+        this.status = UserStatus.VERIFIED;
+    }
 
 
     public Snapshot snapshot() {
@@ -59,5 +70,6 @@ public class User {
             String email,
             Role role,
             UserStatus status
-    ) {}
+    ) {
+    }
 }
