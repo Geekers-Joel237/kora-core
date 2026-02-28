@@ -1,7 +1,7 @@
 package com.geekersjoel237.koracore.domain.model;
 
 import com.geekersjoel237.koracore.domain.enums.OperationType;
-import com.geekersjoel237.koracore.domain.enums.TransactionState;
+import com.geekersjoel237.koracore.domain.model.state.TransactionState;
 import com.geekersjoel237.koracore.domain.enums.TransactionType;
 import com.geekersjoel237.koracore.domain.exception.InvalidStateTransitionException;
 import com.geekersjoel237.koracore.domain.vo.Amount;
@@ -44,7 +44,7 @@ class TransactionTest {
     void should_record_initial_historic_state_on_creation() {
         Transaction tx = createTestTransaction();
         assertEquals(1, tx.snapshot().history().size());
-        assertEquals(TransactionState.INITIALIZED, tx.snapshot().history().get(0).newState());
+        assertEquals(TransactionState.INITIALIZED, tx.snapshot().history().getFirst().newState());
     }
 
     @Test

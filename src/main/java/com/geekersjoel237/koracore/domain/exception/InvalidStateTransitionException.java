@@ -1,6 +1,6 @@
 package com.geekersjoel237.koracore.domain.exception;
 
-import com.geekersjoel237.koracore.domain.enums.TransactionState;
+import com.geekersjoel237.koracore.domain.model.state.TransactionState;
 
 public class InvalidStateTransitionException extends RuntimeException {
 

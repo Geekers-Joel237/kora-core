@@ -1,6 +1,6 @@
 package com.geekersjoel237.koracore.domain.model;
 
-import com.geekersjoel237.koracore.domain.enums.TransactionState;
+import com.geekersjoel237.koracore.domain.model.state.TransactionState;
 import com.geekersjoel237.koracore.domain.vo.Id;
 
 import java.time.Instant;
@@ -23,4 +23,16 @@ public record TrxStateHistoric(
     public static TrxStateHistoric of(Id transactionId, TransactionState oldState, TransactionState newState) {
         return new TrxStateHistoric(Id.generate(), transactionId, oldState, newState, Instant.now());
     }
+
+    public Snapshot snapshot() {
+        return new Snapshot(id.value(), transactionId.value(), oldState.name(), newState.name(), occurredAt);
+    }
+
+    public record Snapshot(
+            String id,
+            String transactionId,
+            String oldState,
+            String newState,
+            Instant occurredAt
+    ){}
 }

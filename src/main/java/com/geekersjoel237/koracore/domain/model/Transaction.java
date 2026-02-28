@@ -1,8 +1,7 @@
 package com.geekersjoel237.koracore.domain.model;
 
-import com.geekersjoel237.koracore.domain.enums.TransactionState;
 import com.geekersjoel237.koracore.domain.enums.TransactionType;
-import com.geekersjoel237.koracore.domain.exception.InvalidStateTransitionException;
+import com.geekersjoel237.koracore.domain.model.state.TransactionState;
 import com.geekersjoel237.koracore.domain.vo.Amount;
 import com.geekersjoel237.koracore.domain.vo.Id;
 
@@ -58,17 +57,9 @@ public class Transaction {
     }
 
     public void transitionTo(TransactionState newState) {
-        boolean valid = switch (this.state) {
-            case INITIALIZED -> newState == TransactionState.PENDING;
-            case PENDING -> newState == TransactionState.COMPLETED
-                    || newState == TransactionState.FAILED;
-            case COMPLETED, FAILED -> false;
-        };
-        if (!valid)
-            throw new InvalidStateTransitionException(this.state, newState);
         TransactionState old = this.state;
-        this.state = newState;
-        this.history.add(TrxStateHistoric.of(this.transactionId, old, newState));
+        this.state = this.state.transitionTo(newState);
+        this.history.add(TrxStateHistoric.of(this.transactionId, old, this.state));
     }
 
     public List<Operation> operations() {
