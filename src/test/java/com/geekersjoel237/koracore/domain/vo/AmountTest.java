@@ -188,4 +188,53 @@ class AmountTest {
                 Amount.of(BigDecimal.valueOf(200), "XOF")
         );
     }
+
+    // ── isStrictPositive ──────────────────────────────────────────────────────
+
+    @Test
+    void should_return_true_when_value_is_positive() {
+        assertTrue(Amount.of(BigDecimal.valueOf(100), "XOF").isStrictPositive());
+    }
+
+    @Test
+    void should_return_false_when_value_is_zero() {
+        assertFalse(Amount.of(BigDecimal.ZERO, "XOF").isStrictPositive());
+    }
+
+    @Test
+    void should_return_false_when_value_is_zero_with_decimals() {
+        assertFalse(Amount.of(new BigDecimal("0.00"), "XOF").isStrictPositive());
+    }
+
+    // ── equals(Amount) — scale-insensitive ───────────────────────────────────
+
+    @Test
+    void should_return_true_when_same_value_and_currency_via_amount_equals() {
+        assertTrue(Amount.of(new BigDecimal("100"), "XOF")
+                .equals(Amount.of(new BigDecimal("100"), "XOF")));
+    }
+
+    @Test
+    void should_return_true_when_same_value_different_scale() {
+        // compareTo("100.00", "100.0") == 0 → equal
+        assertTrue(Amount.of(new BigDecimal("100.00"), "XOF")
+                .equals(Amount.of(new BigDecimal("100.0"), "XOF")));
+    }
+
+    @Test
+    void should_return_false_when_different_value_via_amount_equals() {
+        assertFalse(Amount.of(new BigDecimal("100"), "XOF")
+                .equals(Amount.of(new BigDecimal("200"), "XOF")));
+    }
+
+    @Test
+    void should_return_false_when_different_currency_via_amount_equals() {
+        assertFalse(Amount.of(new BigDecimal("100"), "XOF")
+                .equals(Amount.of(new BigDecimal("100"), "EUR")));
+    }
+
+    @Test
+    void should_return_false_when_other_is_null() {
+        assertFalse(Amount.of(new BigDecimal("100"), "XOF").equals((Amount) null));
+    }
 }

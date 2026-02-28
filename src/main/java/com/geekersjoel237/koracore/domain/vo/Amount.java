@@ -47,4 +47,13 @@ public record Amount(BigDecimal value, String currency) {
         if (!this.currency.equals(other.currency))
             throw new CurrencyMismatchException(this.currency, other.currency);
     }
+
+    public boolean isStrictPositive(){
+        return this.value.compareTo(BigDecimal.ZERO) > 0;
+    }
+
+    public boolean equals(Amount other){
+        if (other == null) return false;
+        return this.currency.equals(other.currency) && this.value.compareTo(other.value) == 0;
+    }
 }
