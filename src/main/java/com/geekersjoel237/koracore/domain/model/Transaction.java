@@ -56,7 +56,7 @@ public class Transaction {
         this.operations.add(op);
     }
 
-    public void transitionTo(TransactionState newState) {
+    private void transitionTo(TransactionState newState) {
         TransactionState old = this.state;
         this.state = this.state.transitionTo(newState);
         this.history.add(TrxStateHistoric.of(this.transactionId, old, this.state));
@@ -78,6 +78,18 @@ public class Transaction {
                 operations.stream().map(Operation::snapshot).toList(),
                 Collections.unmodifiableList(history)
         );
+    }
+
+    public void markPending() {
+        transitionTo(TransactionState.PENDING);
+    }
+
+    public void markCompleted() {
+        transitionTo(TransactionState.COMPLETED);
+    }
+
+    public void markFailed() {
+        transitionTo(TransactionState.FAILED);
     }
 
     public record Snapshot(

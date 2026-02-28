@@ -148,6 +148,19 @@ public class Ledger {
         return tx;
     }
 
+    public Transaction reverse(Transaction tx) {
+        Amount amount = tx.snapshot().amount();
+
+        tx.addOperation(Operation.create(
+                Id.generate(), OperationType.DEBIT, amount, tx.snapshot().toId()));
+
+        tx.addOperation(Operation.create(
+                Id.generate(), OperationType.CREDIT, amount, tx.snapshot().fromId()));
+
+        verifyDoubleEntry(tx);
+        return tx;
+    }
+
     public Snapshot snapshot() {
         return new Snapshot(ledgerId);
     }

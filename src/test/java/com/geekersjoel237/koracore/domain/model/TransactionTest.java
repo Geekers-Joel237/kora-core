@@ -78,31 +78,31 @@ class TransactionTest {
     @Test
     void should_transition_to_pending_from_initialized() {
         Transaction tx = createTestTransaction();
-        assertDoesNotThrow(() -> tx.transitionTo(TransactionState.PENDING));
+        assertDoesNotThrow(tx::markPending);
         assertEquals(TransactionState.PENDING, tx.snapshot().state());
     }
 
     @Test
     void should_transition_to_completed_from_pending() {
         Transaction tx = createTestTransaction();
-        tx.transitionTo(TransactionState.PENDING);
-        assertDoesNotThrow(() -> tx.transitionTo(TransactionState.COMPLETED));
+        tx.markPending();
+        assertDoesNotThrow(tx::markCompleted);
         assertEquals(TransactionState.COMPLETED, tx.snapshot().state());
     }
 
     @Test
     void should_transition_to_failed_from_pending() {
         Transaction tx = createTestTransaction();
-        tx.transitionTo(TransactionState.PENDING);
-        assertDoesNotThrow(() -> tx.transitionTo(TransactionState.FAILED));
+        tx.markPending();
+        assertDoesNotThrow(tx::markFailed);
         assertEquals(TransactionState.FAILED, tx.snapshot().state());
     }
 
     @Test
     void should_record_historic_state_on_each_transition() {
         Transaction tx = createTestTransaction();
-        tx.transitionTo(TransactionState.PENDING);
-        tx.transitionTo(TransactionState.COMPLETED);
+        tx.markPending();
+        tx.markCompleted();
         // INITIALIZED (creation) + PENDING + COMPLETED = 3
         assertEquals(3, tx.snapshot().history().size());
     }
@@ -112,17 +112,17 @@ class TransactionTest {
         Transaction tx = createTestTransaction();
         // INITIALIZED → COMPLETED is invalid (must go through PENDING)
         assertThrows(InvalidStateTransitionException.class,
-                () -> tx.transitionTo(TransactionState.COMPLETED));
+                tx::markCompleted);
     }
 
     @Test
     void should_throw_when_transitioning_from_terminal_state() {
         Transaction tx = createTestTransaction();
-        tx.transitionTo(TransactionState.PENDING);
-        tx.transitionTo(TransactionState.COMPLETED);
+        tx.markPending();
+        tx.markCompleted();
         // COMPLETED is terminal — any further transition is invalid
         assertThrows(InvalidStateTransitionException.class,
-                () -> tx.transitionTo(TransactionState.FAILED));
+                tx::markFailed);
     }
 
     // ── Validation construction ───────────────────────────────────────────────
