@@ -45,6 +45,17 @@ services:
     depends_on:
       - postgres
 
+  maildev:
+    image: 'maildev/maildev:latest'
+    container_name: kora-maildev
+    restart: unless-stopped
+    ports:
+      - '${MAIL_SMTP_PORT:-1025}:1025'   # SMTP — used by Spring Boot mail
+      - '${MAIL_UI_PORT:-1080}:1080'     # Web UI — http://localhost:1080
+    environment:
+      - MAILDEV_SMTP_PORT=1025
+      - MAILDEV_WEB_PORT=1080
+
 volumes:
   postgres-data:
   redis-data:
