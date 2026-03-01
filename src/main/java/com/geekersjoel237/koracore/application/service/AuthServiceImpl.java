@@ -1,7 +1,11 @@
 package com.geekersjoel237.koracore.application.service;
 
+import com.geekersjoel237.koracore.application.command.LoginCommand;
+import com.geekersjoel237.koracore.application.command.RegisterCommand;
 import com.geekersjoel237.koracore.application.port.in.AuthService;
+import com.geekersjoel237.koracore.domain.enums.Role;
 import com.geekersjoel237.koracore.domain.exception.CustomerNotFoundException;
+import com.geekersjoel237.koracore.domain.exception.DuplicateEmailException;
 import com.geekersjoel237.koracore.domain.exception.InvalidOtpException;
 import com.geekersjoel237.koracore.domain.exception.OtpExpiredException;
 import com.geekersjoel237.koracore.domain.exception.PinValidationException;
@@ -13,8 +17,10 @@ import com.geekersjoel237.koracore.domain.port.OtpStore;
 import com.geekersjoel237.koracore.domain.port.UserRepository;
 import com.geekersjoel237.koracore.domain.vo.Id;
 import com.geekersjoel237.koracore.domain.vo.Otp;
+import com.geekersjoel237.koracore.domain.vo.PhoneNumber;
 import com.geekersjoel237.koracore.domain.vo.TokenValue;
 import com.geekersjoel237.koracore.domain.vo.Tokens;
+import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -105,6 +111,51 @@ public class AuthServiceImpl implements AuthService {
         otpStore.delete(key);
     }
 
+
+    @Override
+    public String register(RegisterCommand cmd) {
+        if (customerRepository.existsByEmail(cmd.email()))
+            throw new DuplicateEmailException("Email already registered: " + cmd.email());
+
+        Id id = Id.generate();
+        User user = User.create(id, cmd.fullName(), cmd.email(), Role.CUSTOMER);
+        userRepository.save(user);
+
+        PhoneNumber phone = PhoneNumber.of(cmd.phonePrefix(), cmd.phoneNumber());
+        Customer customer = Customer.create(user, phone, cmd.rawPin(), pinEncoder);
+        customerRepository.save(customer);
+
+        return generateOtp(cmd.email());
+    }
+
+    @Override
+    public String login(LoginCommand cmd) {
+        Customer customer = customerRepository.findByEmail(cmd.email())
+                .orElseThrow(() -> new CustomerNotFoundException("Customer not found: " + cmd.email()));
+
+        validatePin(customer.snapshot().customerId(), cmd.rawPin());
+        return generateOtp(cmd.email());
+    }
+
+    @Override
+    public Tokens verifyOtpAndGetTokens(String email, String code) {
+        verifyOtp(email, code);
+        Customer customer = customerRepository.findByEmail(email)
+                .orElseThrow(() -> new CustomerNotFoundException("Customer not found: " + email));
+        User user = User.createFromSnapshot(customer.snapshot().user());
+        return generateTokens(user);
+    }
+
+    @Override
+    public Tokens refresh(String refreshToken) {
+        SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
+        Claims claims = Jwts.parser().verifyWith(key).build()
+                .parseSignedClaims(refreshToken).getPayload();
+        String userId = claims.getSubject();
+        User user = userRepository.findById(new Id(userId))
+                .orElseThrow(() -> new CustomerNotFoundException("User not found: " + userId));
+        return generateTokens(user);
+    }
 
     @Override
     public Tokens generateTokens(User user) {
