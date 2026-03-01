@@ -51,6 +51,21 @@ public class Transaction {
                 type, paymentMethod, amount);
     }
 
+    public static Transaction createFromSnapshot(Snapshot snap,
+                                                 List<Operation> operations,
+                                                 List<TrxStateHistoric> history) {
+        Transaction tx = new Transaction(
+                snap.transactionId(), snap.transactionNumber(),
+                snap.fromId(), snap.toId(),
+                snap.type(), snap.paymentMethod(), snap.amount());
+        tx.state = snap.state();
+        tx.operations.clear();
+        tx.operations.addAll(operations);
+        tx.history.clear();
+        tx.history.addAll(history);
+        return tx;
+    }
+
 
     public void addOperation(Operation op) {
         this.operations.add(op);

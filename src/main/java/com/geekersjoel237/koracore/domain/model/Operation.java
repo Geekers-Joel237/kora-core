@@ -32,6 +32,11 @@ public class Operation {
         return new Operation(operationId, type, amount, accountId, Instant.now());
     }
 
+    public static Operation createFromSnapshot(Snapshot snap) {
+        return new Operation(snap.operationId(), snap.type(), snap.amount(),
+                snap.accountId(), snap.createdAt());
+    }
+
     public Snapshot snapshot() {
         return new Snapshot(operationId, type, amount, accountId, createdAt);
     }

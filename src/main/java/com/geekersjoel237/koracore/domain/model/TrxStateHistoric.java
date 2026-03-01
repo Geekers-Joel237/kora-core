@@ -25,7 +25,9 @@ public record TrxStateHistoric(
     }
 
     public Snapshot snapshot() {
-        return new Snapshot(id.value(), transactionId.value(), oldState.name(), newState.name(), occurredAt);
+        return new Snapshot(id.value(), transactionId.value(),
+                oldState != null ? oldState.name() : null,
+                newState.name(), occurredAt);
     }
 
     public record Snapshot(

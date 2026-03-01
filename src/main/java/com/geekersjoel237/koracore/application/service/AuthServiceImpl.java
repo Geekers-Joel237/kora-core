@@ -17,6 +17,7 @@ import com.geekersjoel237.koracore.domain.vo.TokenValue;
 import com.geekersjoel237.koracore.domain.vo.Tokens;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -44,6 +45,7 @@ public class AuthServiceImpl implements AuthService {
     private final String jwtSecret;
     private final SecureRandom secureRandom = new SecureRandom();
 
+    @Autowired
     public AuthServiceImpl(UserRepository userRepository,
                            CustomerRepository customerRepository,
                            OtpStore otpStore,
