@@ -4,7 +4,9 @@ import com.geekersjoel237.koracore.domain.model.Account;
 import com.geekersjoel237.koracore.domain.model.Customer;
 import com.geekersjoel237.koracore.domain.port.AccountRepository;
 import com.geekersjoel237.koracore.domain.port.CustomerRepository;
+import com.geekersjoel237.koracore.domain.port.OtpStore;
 import com.geekersjoel237.koracore.domain.vo.Id;
+import com.geekersjoel237.koracore.domain.vo.Otp;
 import com.geekersjoel237.koracore.web.api.auth.LoginRequest;
 import com.geekersjoel237.koracore.web.api.auth.OtpResponse;
 import com.geekersjoel237.koracore.web.api.auth.RefreshRequest;
@@ -37,6 +39,8 @@ import org.testcontainers.containers.PostgreSQLContainer;
  * can assert on error status codes without catching exceptions.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@org.springframework.test.context.ActiveProfiles("test")
+@org.springframework.context.annotation.Import(TestMailConfig.class)
 public abstract class AbstractE2ETest {
 
     protected static final Id SYSTEM_PROVIDER_ID = new Id("provider-system-001");
@@ -63,6 +67,9 @@ public abstract class AbstractE2ETest {
 
     @Autowired
     protected CustomerRepository customerRepository;
+
+    @Autowired
+    protected OtpStore otpStore;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -118,7 +125,8 @@ public abstract class AbstractE2ETest {
      */
     protected TokensResponse registerAndLogin(String email, String fullName,
                                                String prefix, String phone, String pin) {
-        String otp = register(fullName, email, prefix, phone, pin).getBody().otp();
+        register(fullName, email, prefix, phone, pin);
+        String otp = waitAndGetOtpCode(email);
         return verifyOtp(email, otp).getBody();
     }
 
@@ -131,12 +139,34 @@ public abstract class AbstractE2ETest {
         TokensResponse tokens = registerAndLogin(email, fullName, prefix, phone, pin);
         Customer customer = customerRepository.findByEmail(email).orElseThrow();
         Id customerId = customer.snapshot().customerId();
-        Id accountId = Id.generate();
-        accountRepository.save(Account.createCustomerAccount(accountId, customerId));
+        Id accountId = accountRepository.findByCustomerId(customerId)
+                .map(a -> a.snapshot().accountId())
+                .orElseGet(() -> {
+                    Id newId = Id.generate();
+                    accountRepository.save(Account.createCustomerAccount(newId, customerId));
+                    return newId;
+                });
         return new SetupData(tokens, customerId, accountId);
     }
 
     protected record SetupData(TokensResponse tokens, Id customerId, Id accountId) {}
+
+    // ── OTP helper ─────────────────────────────────────────────────────────────
+
+    protected String waitAndGetOtpCode(String email) {
+        String key = "otp:" + email;
+        for (int i = 0; i < 20; i++) { // up to ~1s total
+            var otpOpt = otpStore.get(key);
+            if (otpOpt.isPresent()) {
+                return otpOpt.get().code();
+            }
+            try {
+                Thread.sleep(50);
+            } catch (InterruptedException ignored) {
+            }
+        }
+        throw new AssertionError("OTP not found in store for email: " + email);
+    }
 
     // ── HTTP with Bearer token ─────────────────────────────────────────────────
 

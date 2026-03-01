@@ -5,7 +5,7 @@ import com.geekersjoel237.koracore.application.command.CashOutCommand;
 import com.geekersjoel237.koracore.application.command.TransferCommand;
 import com.geekersjoel237.koracore.application.port.in.AuthService;
 import com.geekersjoel237.koracore.application.port.in.PaymentService;
-import com.geekersjoel237.koracore.domain.enums.UserStatus;
+import com.geekersjoel237.koracore.domain.SystemConstants;
 import com.geekersjoel237.koracore.domain.exception.AccountBlockedException;
 import com.geekersjoel237.koracore.domain.exception.AccountNotFoundException;
 import com.geekersjoel237.koracore.domain.exception.AccountSuspendedException;
@@ -22,8 +22,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @Transactional
 public class PaymentServiceImpl implements PaymentService {
-
-    private static final Id SYSTEM_PROVIDER_ID = new Id("provider-system-001");
 
     private final AuthService authService;
     private final AccountRepository accountRepository;
@@ -127,7 +125,7 @@ public class PaymentServiceImpl implements PaymentService {
         Customer customer = customerRepository.findById(customerId)
                 .orElseThrow(() -> new AccountNotFoundException("Customer not found: " + customerId.value()));
 
-        if (customer.snapshot().user().status() == UserStatus.SUSPENDED) {
+        if (customer.isSuspended()) {
             throw new AccountSuspendedException("Account suspended for customer: " + customerId.value());
         }
 
@@ -154,8 +152,8 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     private Account getSystemFloatAccount() {
-        return accountRepository.findFloatByProviderId(SYSTEM_PROVIDER_ID)
-                .orElseThrow(() -> new AccountNotFoundException("Float account not found for provider: " + SYSTEM_PROVIDER_ID.value()));
+        return accountRepository.findFloatByProviderId(SystemConstants.PROVIDER_ID)
+                .orElseThrow(() -> new AccountNotFoundException("Float account not found for provider: " + SystemConstants.PROVIDER_ID.value()));
     }
 
     private void persistTransactionState(Transaction tx) {

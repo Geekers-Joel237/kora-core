@@ -4,22 +4,12 @@ import com.geekersjoel237.koracore.application.command.LoginCommand;
 import com.geekersjoel237.koracore.application.command.RegisterCommand;
 import com.geekersjoel237.koracore.application.port.in.AuthService;
 import com.geekersjoel237.koracore.domain.enums.Role;
-import com.geekersjoel237.koracore.domain.exception.CustomerNotFoundException;
-import com.geekersjoel237.koracore.domain.exception.DuplicateEmailException;
-import com.geekersjoel237.koracore.domain.exception.InvalidOtpException;
-import com.geekersjoel237.koracore.domain.exception.OtpExpiredException;
-import com.geekersjoel237.koracore.domain.exception.PinValidationException;
+import com.geekersjoel237.koracore.domain.exception.*;
+import com.geekersjoel237.koracore.domain.model.Account;
 import com.geekersjoel237.koracore.domain.model.Customer;
 import com.geekersjoel237.koracore.domain.model.User;
-import com.geekersjoel237.koracore.domain.port.CustomerPinEncoder;
-import com.geekersjoel237.koracore.domain.port.CustomerRepository;
-import com.geekersjoel237.koracore.domain.port.OtpStore;
-import com.geekersjoel237.koracore.domain.port.UserRepository;
-import com.geekersjoel237.koracore.domain.vo.Id;
-import com.geekersjoel237.koracore.domain.vo.Otp;
-import com.geekersjoel237.koracore.domain.vo.PhoneNumber;
-import com.geekersjoel237.koracore.domain.vo.TokenValue;
-import com.geekersjoel237.koracore.domain.vo.Tokens;
+import com.geekersjoel237.koracore.domain.port.*;
+import com.geekersjoel237.koracore.domain.vo.*;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -40,41 +30,53 @@ public class AuthServiceImpl implements AuthService {
 
     public static final int ACCESS_TOKEN_LIFETIME_MINUTES = 15;
     public static final int REFRESH_TOKEN_LIFETIME_DAYS = 7;
+    public static final int OTP_LIFETIME_MINUTES = 5;
+
     private static final String DEFAULT_TEST_SECRET =
             "kora-core-test-secret-key-must-be-at-least-32-chars!";
-    public static final int OTP_LIFETIME_MINUTES = 5;
+
     private final UserRepository userRepository;
     private final CustomerRepository customerRepository;
+    private final AccountRepository accountRepository;
     private final OtpStore otpStore;
     private final CustomerPinEncoder pinEncoder;
     private final Clock clock;
     private final String jwtSecret;
+    private final MailPort mailPort;
     private final SecureRandom secureRandom = new SecureRandom();
 
     @Autowired
     public AuthServiceImpl(UserRepository userRepository,
                            CustomerRepository customerRepository,
+                           AccountRepository accountRepository,
                            OtpStore otpStore,
                            CustomerPinEncoder pinEncoder,
                            Clock clock,
-                           @Value("${jwt.secret:" + DEFAULT_TEST_SECRET + "}") String jwtSecret) {
+                           @Value("${jwt.secret:" + DEFAULT_TEST_SECRET + "}") String jwtSecret,
+                           MailPort mailPort) {
         this.userRepository = userRepository;
         this.customerRepository = customerRepository;
+        this.accountRepository = accountRepository;
         this.otpStore = otpStore;
         this.pinEncoder = pinEncoder;
         this.clock = clock;
         this.jwtSecret = jwtSecret;
+        this.mailPort = mailPort;
     }
 
-
+    /**
+     * Test constructor — no mail, no @Value injection.
+     */
     public AuthServiceImpl(UserRepository userRepository,
                            CustomerRepository customerRepository,
+                           AccountRepository accountRepository,
                            OtpStore otpStore,
                            CustomerPinEncoder pinEncoder,
-                           Clock clock) {
-        this(userRepository, customerRepository, otpStore, pinEncoder, clock, DEFAULT_TEST_SECRET);
+                           Clock clock,
+                           MailPort mailPort) {
+        this(userRepository, customerRepository, accountRepository,
+                otpStore, pinEncoder, clock, DEFAULT_TEST_SECRET, mailPort);
     }
-
 
     @Override
     public void validatePin(Id customerId, String rawPin) {
@@ -87,15 +89,6 @@ public class AuthServiceImpl implements AuthService {
 
         if (!customer.matchesPin(rawPin, pinEncoder))
             throw new PinValidationException("Invalid PIN");
-    }
-
-
-    @Override
-    public String generateOtp(String email) {
-        String code = String.format("%06d", secureRandom.nextInt(1_000_000));
-        Otp otp = Otp.of(code, Duration.ofMinutes(OTP_LIFETIME_MINUTES), clock);
-        otpStore.save("otp:" + email, otp);
-        return otp.code();
     }
 
     @Override
@@ -111,9 +104,8 @@ public class AuthServiceImpl implements AuthService {
         otpStore.delete(key);
     }
 
-
     @Override
-    public String register(RegisterCommand cmd) {
+    public void register(RegisterCommand cmd) {
         if (customerRepository.existsByEmail(cmd.email()))
             throw new DuplicateEmailException("Email already registered: " + cmd.email());
 
@@ -125,16 +117,21 @@ public class AuthServiceImpl implements AuthService {
         Customer customer = Customer.create(user, phone, cmd.rawPin(), pinEncoder);
         customerRepository.save(customer);
 
-        return generateOtp(cmd.email());
+        accountRepository.save(Account.createCustomerAccount(Id.generate(), customer.snapshot().customerId()));
+
+        var otp = generateOtp(cmd.email());
+        mailPort.sendOtp(cmd.email(), otp, OtpMailContext.REGISTRATION);
+
     }
 
     @Override
-    public String login(LoginCommand cmd) {
+    public void login(LoginCommand cmd) {
         Customer customer = customerRepository.findByEmail(cmd.email())
                 .orElseThrow(() -> new CustomerNotFoundException("Customer not found: " + cmd.email()));
 
         validatePin(customer.snapshot().customerId(), cmd.rawPin());
-        return generateOtp(cmd.email());
+        var otp = generateOtp(cmd.email());
+        mailPort.sendOtp(cmd.email(), otp, OtpMailContext.LOGIN);
     }
 
     @Override
@@ -186,5 +183,14 @@ public class AuthServiceImpl implements AuthService {
                 new TokenValue(accessValue, accessExpiry),
                 new TokenValue(refreshValue, refreshExpiry)
         );
+    }
+
+    // ── Internal ─────────────────────────────────────────────────────────────
+
+    public String generateOtp(String email) {
+        String code = String.format("%06d", secureRandom.nextInt(1_000_000));
+        Otp otp = Otp.of(code, Duration.ofMinutes(OTP_LIFETIME_MINUTES), clock);
+        otpStore.save("otp:" + email, otp);
+        return code;
     }
 }

@@ -2,7 +2,6 @@ package com.geekersjoel237.koracore.application;
 
 import com.geekersjoel237.koracore.application.service.AuthServiceImpl;
 import com.geekersjoel237.koracore.domain.enums.Role;
-import com.geekersjoel237.koracore.domain.enums.UserStatus;
 import com.geekersjoel237.koracore.domain.exception.CustomerNotFoundException;
 import com.geekersjoel237.koracore.domain.exception.InvalidOtpException;
 import com.geekersjoel237.koracore.domain.exception.OtpExpiredException;
@@ -14,9 +13,7 @@ import com.geekersjoel237.koracore.domain.vo.Id;
 import com.geekersjoel237.koracore.domain.vo.PhoneNumber;
 import com.geekersjoel237.koracore.domain.vo.Tokens;
 import com.geekersjoel237.koracore.infrastructure.security.BCryptCustomerPinEncoder;
-import com.geekersjoel237.koracore.shared.inmemory.InMemoryCustomerRepository;
-import com.geekersjoel237.koracore.shared.inmemory.InMemoryOtpStore;
-import com.geekersjoel237.koracore.shared.inmemory.InMemoryUserRepository;
+import com.geekersjoel237.koracore.shared.inmemory.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -32,24 +29,28 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class AuthServiceTest {
 
-    private static final Id     USER_ID = new Id("user-001");
-    private static final Id     CUST_ID = new Id("user-001");
-    private static final String EMAIL   = "test@koracore.com";
+    private static final Id USER_ID = new Id("user-001");
+    private static final Id CUST_ID = new Id("user-001");
+    private static final String EMAIL = "test@koracore.com";
     private static final String RAW_PIN = "123456";
 
     private final CustomerPinEncoder pinEncoder = new BCryptCustomerPinEncoder();
 
-    private InMemoryUserRepository     userRepo;
+    private InMemoryUserRepository userRepo;
     private InMemoryCustomerRepository customerRepo;
-    private InMemoryOtpStore           otpStore;
-    private AuthServiceImpl            authService;
+    private InMemoryAccountRepository accountRepo;
+    private InMemoryOtpStore otpStore;
+    private InMemoryMailPort mailPort;
+    private AuthServiceImpl authService;
 
     @BeforeEach
     void setUp() {
-        userRepo     = new InMemoryUserRepository();
+        userRepo = new InMemoryUserRepository();
         customerRepo = new InMemoryCustomerRepository();
-        otpStore     = new InMemoryOtpStore(Clock.systemUTC());
-        authService  = new AuthServiceImpl(userRepo, customerRepo, otpStore, pinEncoder, Clock.systemUTC());
+        accountRepo = new InMemoryAccountRepository();
+        otpStore = new InMemoryOtpStore(Clock.systemUTC());
+        mailPort = new InMemoryMailPort();
+        authService = new AuthServiceImpl(userRepo, customerRepo, accountRepo, otpStore, pinEncoder, Clock.systemUTC(), mailPort);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -135,9 +136,9 @@ class AuthServiceTest {
         // Clock fixée dans le passé pour que le VO soit expiré dès création
         // (OTP créé à now-10min, TTL=5min → expiré vu depuis l'horloge système)
         Clock pastClock = Clock.fixed(Instant.now().minus(10, MINUTES), ZoneOffset.UTC);
-        InMemoryOtpStore expiredStore   = new InMemoryOtpStore(pastClock);
-        AuthServiceImpl  expiredService = new AuthServiceImpl(
-                userRepo, customerRepo, expiredStore, pinEncoder, pastClock
+        InMemoryOtpStore expiredStore = new InMemoryOtpStore(pastClock);
+        AuthServiceImpl expiredService = new AuthServiceImpl(
+                userRepo, customerRepo, accountRepo, expiredStore, pinEncoder, pastClock, mailPort
         );
         String code = expiredService.generateOtp(EMAIL);
         assertThatThrownBy(() -> expiredService.verifyOtp(EMAIL, code))
@@ -157,8 +158,8 @@ class AuthServiceTest {
     @Test
     void should_generate_access_token_with_expiry_in_expected_window() {
         Instant before = Instant.now();
-        Tokens tokens  = authService.generateTokens(buildVerifiedUser());
-        Instant after  = Instant.now();
+        Tokens tokens = authService.generateTokens(buildVerifiedUser());
+        Instant after = Instant.now();
 
         assertThat(tokens.accessToken().expiredAt())
                 .isAfter(before.plus(14, MINUTES))
@@ -168,8 +169,8 @@ class AuthServiceTest {
     @Test
     void should_generate_refresh_token_with_expiry_in_expected_window() {
         Instant before = Instant.now();
-        Tokens tokens  = authService.generateTokens(buildVerifiedUser());
-        Instant after  = Instant.now();
+        Tokens tokens = authService.generateTokens(buildVerifiedUser());
+        Instant after = Instant.now();
 
         assertThat(tokens.refreshToken().expiredAt())
                 .isAfter(before.plus(6, DAYS).plus(23, HOURS))
@@ -180,7 +181,7 @@ class AuthServiceTest {
     void should_generate_distinct_token_values_on_successive_calls() {
         Tokens t1 = authService.generateTokens(buildVerifiedUser());
         Tokens t2 = authService.generateTokens(buildVerifiedUser());
-        assertNotEquals(t1.accessToken().value(),  t2.accessToken().value());
+        assertNotEquals(t1.accessToken().value(), t2.accessToken().value());
         assertNotEquals(t1.refreshToken().value(), t2.refreshToken().value());
     }
 

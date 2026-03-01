@@ -16,7 +16,7 @@ public class RegisterAction implements RegisterApi {
 
     @Override
     public ResponseEntity<OtpResponse> register(RegisterRequest request) {
-        String otp = authService.register(request.toCommand());
-        return ResponseEntity.status(HttpStatus.CREATED).body(new OtpResponse(otp));
+        authService.register(request.toCommand());
+        return ResponseEntity.status(HttpStatus.CREATED).body(new OtpResponse("OTP sent to your email"));
     }
 }

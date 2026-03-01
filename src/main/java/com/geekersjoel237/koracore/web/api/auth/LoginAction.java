@@ -15,7 +15,7 @@ public class LoginAction implements LoginApi {
 
     @Override
     public ResponseEntity<OtpResponse> login(LoginRequest request) {
-        String otp = authService.login(request.toCommand());
-        return ResponseEntity.ok(new OtpResponse(otp));
+        authService.login(request.toCommand());
+        return ResponseEntity.ok(new OtpResponse("OTP sent to your email"));
     }
 }

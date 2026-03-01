@@ -22,7 +22,7 @@ class AuthE2ETest extends AbstractE2ETest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(response.getBody()).isNotNull();
-        assertThat(response.getBody().otp()).hasSize(6);
+        assertThat(response.getBody().message()).containsIgnoringCase("otp");
     }
 
     @Test
@@ -39,7 +39,8 @@ class AuthE2ETest extends AbstractE2ETest {
 
     @Test
     void should_verify_otp_and_return_access_and_refresh_tokens() {
-        String otp = register(FULL_NAME, EMAIL, PREFIX, PHONE, PIN).getBody().otp();
+        register(FULL_NAME, EMAIL, PREFIX, PHONE, PIN);
+        String otp = waitAndGetOtpCode(EMAIL);
 
         ResponseEntity<TokensResponse> response = verifyOtp(EMAIL, otp);
 
@@ -71,18 +72,20 @@ class AuthE2ETest extends AbstractE2ETest {
     @Test
     void should_login_with_valid_pin_and_return_otp() {
         // First register + verify OTP to activate the account
-        String otp = register(FULL_NAME, EMAIL, PREFIX, PHONE, PIN).getBody().otp();
+        register(FULL_NAME, EMAIL, PREFIX, PHONE, PIN);
+        String otp = waitAndGetOtpCode(EMAIL);
         verifyOtp(EMAIL, otp);
 
         ResponseEntity<OtpResponse> loginResp = login(EMAIL, PIN);
 
         assertThat(loginResp.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(loginResp.getBody().otp()).hasSize(6);
+        assertThat(loginResp.getBody().message()).containsIgnoringCase("otp");
     }
 
     @Test
     void should_return_401_for_wrong_pin_on_login() {
-        String otp = register(FULL_NAME, EMAIL, PREFIX, PHONE, PIN).getBody().otp();
+        register(FULL_NAME, EMAIL, PREFIX, PHONE, PIN);
+        String otp = waitAndGetOtpCode(EMAIL);
         verifyOtp(EMAIL, otp);
 
         ResponseEntity<OtpResponse> response = login(EMAIL, "0000");

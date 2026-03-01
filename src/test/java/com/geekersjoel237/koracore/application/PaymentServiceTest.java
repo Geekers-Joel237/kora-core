@@ -53,6 +53,7 @@ class PaymentServiceTest {
     private InMemoryTrxHistoricStatesRepository historicRepo;
     private InMemoryOtpStore otpStore;
     private InMemoryProviderSimulator provider;
+    private InMemoryMailPort mailPort;
     private AuthServiceImpl authService;
     private PaymentServiceImpl paymentService;
     private LedgerRepository ledgerRepository;
@@ -76,8 +77,9 @@ class PaymentServiceTest {
         otpStore = new InMemoryOtpStore(Clock.systemUTC());
         provider = new InMemoryProviderSimulator(SUCCESS);
         ledgerRepository = new InMemoryLedgerRepository(Ledger.create(Id.generate()));
+        mailPort = new InMemoryMailPort();
         authService = new AuthServiceImpl(
-                new InMemoryUserRepository(), customerRepo, otpStore, pinEncoder, Clock.systemUTC());
+                new InMemoryUserRepository(), customerRepo, accountRepo, otpStore, pinEncoder, Clock.systemUTC(), mailPort);
         paymentService = new PaymentServiceImpl(
                 authService, accountRepo, customerRepo,
                 transactionRepo, historicRepo, provider, ledgerRepository);
