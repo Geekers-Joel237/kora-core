@@ -27,8 +27,8 @@ import { scenarioTransfer } from './scenarios/transfer.js';
 import { scenarioBalance } from './scenarios/balance.js';
 
 // ── Nombre d'utilisateurs de test ─────────────────────────────────────────────
-// 20 users → chaque VU a son propre user, rotation par index
-const USER_COUNT = 20;
+// 30 users = preAllocatedVUs → chaque VU a son propre user, élimine la contention OTP
+const USER_COUNT = 30;
 
 // ── Config k6 — constant arrival rate ────────────────────────────────────────
 
@@ -76,16 +76,16 @@ export default function (data) {
     const roll = Math.random();
 
     if (roll < 0.40) {
-        scenarioCashIn(userA.email, userA.pin);
+        scenarioCashIn(userA);
 
     } else if (roll < 0.75) {
-        scenarioTransfer(userA.email, userA.pin, userB.fullPhone);
+        scenarioTransfer(userA, userB.fullPhone);
 
     } else if (roll < 0.90) {
-        scenarioCashOut(userA.email, userA.pin);
+        scenarioCashOut(userA);
 
     } else {
-        scenarioBalance(userA.email, userA.pin);
+        scenarioBalance(userA);
     }
 
     // Pas de sleep fixe avec ramping-arrival-rate : k6 contrôle le débit

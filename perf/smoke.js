@@ -53,19 +53,19 @@ export default function (data) {
 
     if (roll < 0.40) {
         // 40% — cashIn
-        scenarioCashIn(userA.email, userA.pin);
+        scenarioCashIn(userA);
 
     } else if (roll < 0.75) {
         // 35% — transfer (A → B)
-        scenarioTransfer(userA.email, userA.pin, userB.fullPhone);
+        scenarioTransfer(userA, userB.fullPhone);
 
     } else if (roll < 0.90) {
         // 15% — cashOut
-        scenarioCashOut(userA.email, userA.pin);
+        scenarioCashOut(userA);
 
     } else {
         // 10% — balance
-        scenarioBalance(userA.email, userA.pin);
+        scenarioBalance(userA);
     }
 
     sleep(1);

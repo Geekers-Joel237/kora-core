@@ -29,7 +29,7 @@ export function register(fullName, email, phonePrefix, phoneNumber, pin) {
         JSON.stringify({ fullName, email, phonePrefix, phoneNumber, rawPin: pin }),
         { headers: HEADERS_JSON }
     );
-    check(regRes, { 'register 200': (r) => r.status === 200 });
+    check(regRes, { 'register 201': (r) => r.status === 201 });
 
     const otp = captureOtp(email);
 
@@ -42,6 +42,32 @@ export function register(fullName, email, phonePrefix, phoneNumber, pin) {
 
     const body = JSON.parse(verifyRes.body);
     return { accessToken: body.accessToken, refreshToken: body.refreshToken };
+}
+
+/**
+ * Retourne le token du user si encore valide, sinon renouvelle via login().
+ * Élimine le login systématique à chaque itération (source principale de surcharge).
+ *
+ * Durée de vie token : 15 min côté serveur — on utilise 14 min (marge 1 min).
+ * Chaque VU k6 possède sa propre copie de l'objet user → pas de contention.
+ *
+ * tokenExpiresAt stocké en secondes depuis epoch (pas en ms) pour éviter
+ * la corruption des grands entiers (> 2^31) lors de la sérialisation JSON
+ * entre setup() et default() dans le runtime Go de k6.
+ *
+ * @param {object} user  objet user complet (email, pin, accessToken, tokenExpiresAt)
+ * @returns {string}     accessToken valide
+ */
+export function getToken(user) {
+    const nowSec = Math.floor(Date.now() / 1000);
+    if (nowSec < user.tokenExpiresAt) {
+        return user.accessToken;
+    }
+    // Renouvellement — uniquement déclenché pour le soak test (> 14 min)
+    const { accessToken } = login(user.email, user.pin);
+    user.accessToken    = accessToken;
+    user.tokenExpiresAt = Math.floor(Date.now() / 1000) + 14 * 60;
+    return accessToken;
 }
 
 /**
@@ -93,12 +119,12 @@ export function authHeaders(token) {
  * @returns {string} code OTP
  */
 function captureOtp(email) {
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 20; i++) {
         const r = http.get(`${BASE_URL}/test/otp/${encodeURIComponent(email)}`);
         if (r.status === 200) {
             return JSON.parse(r.body).code;
         }
-        sleep(0.2);
+        sleep(0.5);
     }
     // Dernier essai — si echec, le check suivant échouera
     const r = http.get(`${BASE_URL}/test/otp/${encodeURIComponent(email)}`);

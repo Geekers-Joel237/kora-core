@@ -27,7 +27,8 @@ import { scenarioCashOut }  from './scenarios/cashOut.js';
 import { scenarioTransfer } from './scenarios/transfer.js';
 import { scenarioBalance }  from './scenarios/balance.js';
 
-const USER_COUNT = 40;
+// 200 = maxVUs — garantit 1 user par VU, élimine tout partage et contention OTP
+const USER_COUNT = 200;
 
 // ── Config k6 ─────────────────────────────────────────────────────────────────
 
@@ -84,12 +85,12 @@ export default function (data) {
     const roll = Math.random();
 
     if (roll < 0.40) {
-        scenarioCashIn(userA.email, userA.pin);
+        scenarioCashIn(userA);
     } else if (roll < 0.75) {
-        scenarioTransfer(userA.email, userA.pin, userB.fullPhone);
+        scenarioTransfer(userA, userB.fullPhone);
     } else if (roll < 0.90) {
-        scenarioCashOut(userA.email, userA.pin);
+        scenarioCashOut(userA);
     } else {
-        scenarioBalance(userA.email, userA.pin);
+        scenarioBalance(userA);
     }
 }

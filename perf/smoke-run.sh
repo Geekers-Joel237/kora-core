@@ -18,10 +18,10 @@ set -euo pipefail
 # ── Configuration ──────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-BASE_URL="${1:-http://host.docker.internal:8081}"
+BASE_URL="${1:-http://localhost:8081}"
 INFLUX_URL="http://localhost:8086/k6"
 GRAFANA_URL="http://localhost:3000"
-GRAFANA_DASHBOARD="${GRAFANA_URL}/d/k6/k6-load-testing-results"
+GRAFANA_DASHBOARD="${GRAFANA_URL}/d/kora-load/kora-load-test"
 MAILDEV_URL="http://localhost:1080"
 HEALTH_URL="${BASE_URL}/actuator/health"
 K6_IMAGE="grafana/k6:latest"
@@ -139,16 +139,21 @@ run_smoke() {
     perf_mount="${SCRIPT_DIR}"
   fi
 
+  # Sur Docker Desktop (Windows/WSL2), --network host ne partage pas le réseau de l'hôte.
+  # host.docker.internal résout vers l'IP de l'hôte Windows via --add-host.
+  local docker_base_url="${BASE_URL/localhost/host.docker.internal}"
+  local docker_influx_url="${INFLUX_URL/localhost/host.docker.internal}"
+
   (
     if [[ "$OSTYPE" == msys* ]] || [[ -n "${MSYSTEM:-}" ]]; then
       export MSYS_NO_PATHCONV=1
     fi
     docker run --rm \
-      --network host \
+      --add-host=host.docker.internal:host-gateway \
       -v "${perf_mount}:/perf" \
-      -e BASE_URL="${BASE_URL}" \
+      -e BASE_URL="${docker_base_url}" \
       "${K6_IMAGE}" \
-      run --out "influxdb=${INFLUX_URL}" /perf/smoke.js
+      run --out "influxdb=${docker_influx_url}" /perf/smoke.js
   )
 
   local exit_code=$?

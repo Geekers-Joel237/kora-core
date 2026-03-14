@@ -30,7 +30,8 @@ import { scenarioCashOut }  from './scenarios/cashOut.js';
 import { scenarioTransfer } from './scenarios/transfer.js';
 import { scenarioBalance }  from './scenarios/balance.js';
 
-const USER_COUNT = 15;
+// 40 = maxVUs — garantit 1 user par VU, élimine la contention OTP
+const USER_COUNT = 40;
 
 // Métrique custom : latence dans le temps (pour détecter drift dans Grafana)
 const latencyTrend = new Trend('soak_latency_trend', true);
@@ -76,13 +77,13 @@ export default function (data) {
 
     const roll = Math.random();
     if (roll < 0.40) {
-        scenarioCashIn(userA.email, userA.pin);
+        scenarioCashIn(userA);
     } else if (roll < 0.75) {
-        scenarioTransfer(userA.email, userA.pin, userB.fullPhone);
+        scenarioTransfer(userA, userB.fullPhone);
     } else if (roll < 0.90) {
-        scenarioCashOut(userA.email, userA.pin);
+        scenarioCashOut(userA);
     } else {
-        scenarioBalance(userA.email, userA.pin);
+        scenarioBalance(userA);
     }
 
     latencyTrend.add(Date.now() - start);

@@ -243,7 +243,7 @@
         "name": "DS_INFLUXDB_K6",
         "type": "datasource",
         "pluginId": "influxdb",
-        "current": { "text": "InfluxDB-k6", "value": "InfluxDB-k6" },
+        "current": { "text": "InfluxDB-k6", "value": "influxdb-k6" },
         "label": "k6 InfluxDB",
         "hide": 0
       },
@@ -251,7 +251,7 @@
         "name": "DS_INFLUXDB_KORA",
         "type": "datasource",
         "pluginId": "influxdb",
-        "current": { "text": "InfluxDB-kora", "value": "InfluxDB-kora" },
+        "current": { "text": "InfluxDB-kora", "value": "influxdb-kora" },
         "label": "Kora InfluxDB",
         "hide": 0
       }

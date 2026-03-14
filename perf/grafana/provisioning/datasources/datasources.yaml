@@ -1,8 +1,18 @@
 apiVersion: 1
 
+# Supprime les anciennes entrées provisionnées sans uid explicite.
+# Permet de recréer proprement avec un uid stable, sans conflit.
+# Grafana ignore silencieusement si les datasources n'existent pas encore.
+deleteDatasources:
+  - name: InfluxDB-k6
+    orgId: 1
+  - name: InfluxDB-kora
+    orgId: 1
+
 datasources:
   # ── Source k6 — métriques de charge HTTP ──────────────────────────────────
   - name: InfluxDB-k6
+    uid: influxdb-k6
     type: influxdb
     access: proxy
     url: http://influxdb:8086
@@ -14,6 +24,7 @@ datasources:
 
   # ── Source Kora — métriques applicatives Spring Boot / Micrometer ─────────
   - name: InfluxDB-kora
+    uid: influxdb-kora
     type: influxdb
     access: proxy
     url: http://influxdb:8086
