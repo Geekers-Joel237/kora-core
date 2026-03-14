@@ -8,8 +8,8 @@ import com.geekersjoel237.koracore.domain.model.TrxStateHistoric;
 import com.geekersjoel237.koracore.domain.model.state.TransactionState;
 import com.geekersjoel237.koracore.domain.vo.Amount;
 import com.geekersjoel237.koracore.domain.vo.Id;
-import com.geekersjoel237.koracore.infrastructure.persistence.entity.TransactionEntity;
-import com.geekersjoel237.koracore.infrastructure.persistence.repository.JpaTransactionRepository;
+import com.geekersjoel237.koracore.infrastructure.persistence.entities.TransactionEntity;
+import com.geekersjoel237.koracore.infrastructure.persistence.repository.SpringDataTransactionRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -25,19 +25,18 @@ class TransactionRepositoryTest extends AbstractRepositoryTest {
 
     private static final Amount AMOUNT_10K = new Amount(new BigDecimal("10000.00"), "XOF");
     @Autowired
-    private PostgresTransactionRepository txRepository;
+    private JpaTransactionRepository txRepository;
     @Autowired
-    private PostgresTrxHistoricStatesRepository historicRepository;
+    private JpaTrxHistoricStatesRepository historicRepository;
 
 
     // ── helpers ───────────────────────────────────────────────────────────────
     @Autowired
-    private JpaTransactionRepository jpaTransactionRepository;
+    private SpringDataTransactionRepository springDataTransactionRepository;
 
     private Transaction buildTransaction(Id fromId, Id toId) {
         Id txId = Id.generate();
-        String txNumber = "TRX-" + txId.value().substring(0, 8).toUpperCase();
-        Transaction tx = Transaction.create(txId, txNumber, fromId, toId,
+        Transaction tx = Transaction.create(txId, fromId, toId,
                 TransactionType.CASH_IN, "ORANGE_MONEY", AMOUNT_10K);
         tx.addOperation(Operation.create(Id.generate(), OperationType.DEBIT, AMOUNT_10K, fromId));
         tx.addOperation(Operation.create(Id.generate(), OperationType.CREDIT, AMOUNT_10K, toId));
@@ -83,7 +82,7 @@ class TransactionRepositoryTest extends AbstractRepositoryTest {
                 .build();
         duplicate.setId(Id.generate().value());
 
-        assertThatThrownBy(() -> jpaTransactionRepository.saveAndFlush(duplicate))
+        assertThatThrownBy(() -> springDataTransactionRepository.saveAndFlush(duplicate))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 

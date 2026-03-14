@@ -6,9 +6,9 @@ import com.geekersjoel237.koracore.domain.model.User;
 import com.geekersjoel237.koracore.domain.port.CustomerPinEncoder;
 import com.geekersjoel237.koracore.domain.vo.Id;
 import com.geekersjoel237.koracore.domain.vo.PhoneNumber;
-import com.geekersjoel237.koracore.infrastructure.persistence.entity.CustomerEntity;
-import com.geekersjoel237.koracore.infrastructure.persistence.entity.UserEntity;
-import com.geekersjoel237.koracore.infrastructure.persistence.repository.JpaCustomerRepository;
+import com.geekersjoel237.koracore.infrastructure.persistence.entities.CustomerEntity;
+import com.geekersjoel237.koracore.infrastructure.persistence.entities.UserEntity;
+import com.geekersjoel237.koracore.infrastructure.persistence.repository.SpringDataCustomerRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -21,10 +21,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class CustomerRepositoryTest extends AbstractRepositoryTest {
 
     @Autowired
-    private PostgresCustomerRepository repository;
+    private JpaCustomerRepository repository;
 
     @Autowired
-    private JpaCustomerRepository jpaRepository;
+    private SpringDataCustomerRepository jpaRepository;
 
     @Autowired
     private CustomerPinEncoder pinEncoder;

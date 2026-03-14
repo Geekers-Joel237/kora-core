@@ -3,8 +3,8 @@ package com.geekersjoel237.koracore.infrastructure.persistence;
 import com.geekersjoel237.koracore.domain.enums.Role;
 import com.geekersjoel237.koracore.domain.model.User;
 import com.geekersjoel237.koracore.domain.vo.Id;
-import com.geekersjoel237.koracore.infrastructure.persistence.entity.UserEntity;
-import com.geekersjoel237.koracore.infrastructure.persistence.repository.JpaUserRepository;
+import com.geekersjoel237.koracore.infrastructure.persistence.entities.UserEntity;
+import com.geekersjoel237.koracore.infrastructure.persistence.repository.SpringDataUserRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -17,10 +17,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class UserRepositoryTest extends AbstractRepositoryTest {
 
     @Autowired
-    private PostgresUserRepository repository;
+    private JpaUserRepository repository;
 
     @Autowired
-    private JpaUserRepository jpaRepository;
+    private SpringDataUserRepository jpaRepository;
 
     @Test
     void should_persist_and_return_intact_round_trip() {

@@ -42,7 +42,7 @@ public class GlobalExceptionHandler {
             CurrencyMismatchException.class, InvalidAccountException.class,
             InvalidStateTransitionException.class})
     ProblemDetail onUnprocessable(RuntimeException ex) {
-        return problem(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage());
+        return problem(HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

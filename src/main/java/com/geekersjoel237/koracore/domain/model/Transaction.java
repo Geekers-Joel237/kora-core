@@ -6,6 +6,8 @@ import com.geekersjoel237.koracore.domain.vo.Amount;
 import com.geekersjoel237.koracore.domain.vo.Id;
 
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -40,13 +42,15 @@ public class Transaction {
         this.history.add(TrxStateHistoric.of(transactionId, null, TransactionState.INITIALIZED));
     }
 
-    public static Transaction create(Id transactionId, String transactionNumber,
+    public static Transaction create(Id transactionId,
                                      Id fromId, Id toId, TransactionType type,
                                      String paymentMethod, Amount amount) {
         if (transactionId == null) throw new IllegalArgumentException("Transaction id cannot be null");
         if (fromId == null) throw new IllegalArgumentException("Transaction fromId cannot be null");
         if (toId == null) throw new IllegalArgumentException("Transaction toId cannot be null");
         if (amount == null) throw new IllegalArgumentException("Transaction amount cannot be null");
+
+        var transactionNumber = generateTransactionNumber(transactionId);
         return new Transaction(transactionId, transactionNumber, fromId, toId,
                 type, paymentMethod, amount);
     }
@@ -66,6 +70,12 @@ public class Transaction {
         return tx;
     }
 
+    private static String generateTransactionNumber(Id txId) {
+        String datePart = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        String idValue = txId.value();
+        String lastFour = idValue.substring(idValue.length() - 4).toUpperCase();
+        return "TRX-" + datePart + "-" + lastFour;
+    }
 
     public void addOperation(Operation op) {
         this.operations.add(op);
@@ -84,7 +94,6 @@ public class Transaction {
     public List<TrxStateHistoric> history() {
         return Collections.unmodifiableList(history);
     }
-
 
     public Snapshot snapshot() {
         return new Snapshot(

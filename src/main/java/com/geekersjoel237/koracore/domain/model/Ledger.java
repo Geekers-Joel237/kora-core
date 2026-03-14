@@ -9,8 +9,6 @@ import com.geekersjoel237.koracore.domain.vo.Amount;
 import com.geekersjoel237.koracore.domain.vo.Id;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
 
 public class Ledger {
 
@@ -59,12 +57,6 @@ public class Ledger {
                 .reduce(Amount.of(BigDecimal.ZERO, "XOF"), Amount::add);
     }
 
-    private static String generateTransactionNumber(Id txId) {
-        String datePart = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        String idValue = txId.value();
-        String lastFour = idValue.substring(idValue.length() - 4).toUpperCase();
-        return "TRX-" + datePart + "-" + lastFour;
-    }
 
     public Transaction cashIn(Account customerAccount, Account floatAccount,
                               Amount amount, String paymentMethod) {
@@ -75,7 +67,6 @@ public class Ledger {
         Id txId = Id.generate();
         Transaction tx = Transaction.create(
                 txId,
-                generateTransactionNumber(txId),
                 floatAccount.snapshot().accountId(),
                 customerAccount.snapshot().accountId(),
                 TransactionType.CASH_IN,
@@ -102,7 +93,6 @@ public class Ledger {
         Id txId = Id.generate();
         Transaction tx = Transaction.create(
                 txId,
-                generateTransactionNumber(txId),
                 customerAccount.snapshot().accountId(),
                 floatAccount.snapshot().accountId(),
                 TransactionType.CASH_OUT,
@@ -131,7 +121,6 @@ public class Ledger {
         Id txId = Id.generate();
         Transaction tx = Transaction.create(
                 txId,
-                generateTransactionNumber(txId),
                 accountFrom.snapshot().accountId(),
                 accountTo.snapshot().accountId(),
                 TransactionType.P2P_TRANSFER,

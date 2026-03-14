@@ -1,7 +1,7 @@
 package com.geekersjoel237.koracore.infrastructure.persistence;
 
 import com.geekersjoel237.koracore.domain.model.Ledger;
-import com.geekersjoel237.koracore.infrastructure.persistence.repository.JpaLedgerRepository;
+import com.geekersjoel237.koracore.infrastructure.persistence.repository.SpringDataLedgerRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -11,10 +11,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class LedgerRepositoryTest extends AbstractRepositoryTest {
 
     @Autowired
-    private PostgresLedgerRepository repository;
+    private JpaLedgerRepository repository;
 
     @Autowired
-    private JpaLedgerRepository jpaRepository;
+    private SpringDataLedgerRepository jpaRepository;
 
     @Test
     void should_return_the_bootstrapped_ledger_when_one_exists() {

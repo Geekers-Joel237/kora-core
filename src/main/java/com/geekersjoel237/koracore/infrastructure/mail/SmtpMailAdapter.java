@@ -1,7 +1,7 @@
 package com.geekersjoel237.koracore.infrastructure.mail;
 
 import com.geekersjoel237.koracore.domain.port.MailPort;
-import com.geekersjoel237.koracore.domain.port.OtpMailContext;
+import com.geekersjoel237.koracore.domain.OtpMailContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;

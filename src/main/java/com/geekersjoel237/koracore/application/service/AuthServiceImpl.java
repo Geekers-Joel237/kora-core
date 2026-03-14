@@ -3,6 +3,7 @@ package com.geekersjoel237.koracore.application.service;
 import com.geekersjoel237.koracore.application.command.LoginCommand;
 import com.geekersjoel237.koracore.application.command.RegisterCommand;
 import com.geekersjoel237.koracore.application.port.in.AuthService;
+import com.geekersjoel237.koracore.domain.OtpMailContext;
 import com.geekersjoel237.koracore.domain.enums.Role;
 import com.geekersjoel237.koracore.domain.exception.*;
 import com.geekersjoel237.koracore.domain.model.Account;
@@ -10,12 +11,13 @@ import com.geekersjoel237.koracore.domain.model.Customer;
 import com.geekersjoel237.koracore.domain.model.User;
 import com.geekersjoel237.koracore.domain.port.*;
 import com.geekersjoel237.koracore.domain.vo.*;
+import com.geekersjoel237.koracore.infrastructure.config.SecurityProperties;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
@@ -26,11 +28,10 @@ import java.time.Instant;
 import java.util.Date;
 
 @Service
+@Transactional
 public class AuthServiceImpl implements AuthService {
 
-    public static final int ACCESS_TOKEN_LIFETIME_MINUTES = 15;
-    public static final int REFRESH_TOKEN_LIFETIME_DAYS = 7;
-    public static final int OTP_LIFETIME_MINUTES = 5;
+    private final SecurityProperties securityProperties;
 
     private static final String DEFAULT_TEST_SECRET =
             "kora-core-test-secret-key-must-be-at-least-32-chars!";
@@ -41,7 +42,6 @@ public class AuthServiceImpl implements AuthService {
     private final OtpStore otpStore;
     private final CustomerPinEncoder pinEncoder;
     private final Clock clock;
-    private final String jwtSecret;
     private final MailPort mailPort;
     private final SecureRandom secureRandom = new SecureRandom();
 
@@ -52,7 +52,7 @@ public class AuthServiceImpl implements AuthService {
                            OtpStore otpStore,
                            CustomerPinEncoder pinEncoder,
                            Clock clock,
-                           @Value("${jwt.secret:" + DEFAULT_TEST_SECRET + "}") String jwtSecret,
+                           SecurityProperties securityProperties,
                            MailPort mailPort) {
         this.userRepository = userRepository;
         this.customerRepository = customerRepository;
@@ -60,7 +60,7 @@ public class AuthServiceImpl implements AuthService {
         this.otpStore = otpStore;
         this.pinEncoder = pinEncoder;
         this.clock = clock;
-        this.jwtSecret = jwtSecret;
+        this.securityProperties = securityProperties;
         this.mailPort = mailPort;
     }
 
@@ -75,7 +75,11 @@ public class AuthServiceImpl implements AuthService {
                            Clock clock,
                            MailPort mailPort) {
         this(userRepository, customerRepository, accountRepository,
-                otpStore, pinEncoder, clock, DEFAULT_TEST_SECRET, mailPort);
+                otpStore, pinEncoder, clock,
+                new SecurityProperties(
+                        new SecurityProperties.Jwt(DEFAULT_TEST_SECRET, 15, 7),
+                        new SecurityProperties.Otp(5)
+                ), mailPort);
     }
 
     @Override
@@ -145,7 +149,7 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public Tokens refresh(String refreshToken) {
-        SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
+        SecretKey key = Keys.hmacShaKeyFor(securityProperties.jwt().secret().getBytes(StandardCharsets.UTF_8));
         Claims claims = Jwts.parser().verifyWith(key).build()
                 .parseSignedClaims(refreshToken).getPayload();
         String userId = claims.getSubject();
@@ -157,10 +161,10 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public Tokens generateTokens(User user) {
         Instant now = Instant.now(clock);
-        Instant accessExpiry = now.plus(Duration.ofMinutes(ACCESS_TOKEN_LIFETIME_MINUTES));
-        Instant refreshExpiry = now.plus(Duration.ofDays(REFRESH_TOKEN_LIFETIME_DAYS));
+        Instant accessExpiry = now.plus(Duration.ofMinutes(securityProperties.jwt().accessTokenExpirationMinutes()));
+        Instant refreshExpiry = now.plus(Duration.ofDays(securityProperties.jwt().refreshTokenExpirationDays()));
 
-        SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
+        SecretKey key = Keys.hmacShaKeyFor(securityProperties.jwt().secret().getBytes(StandardCharsets.UTF_8));
 
         String accessValue = Jwts.builder()
                 .subject(user.snapshot().id().value())
@@ -180,8 +184,8 @@ public class AuthServiceImpl implements AuthService {
                 .compact();
 
         return new Tokens(
-                new TokenValue(accessValue, accessExpiry),
-                new TokenValue(refreshValue, refreshExpiry)
+                new Tokens.TokenValue(accessValue, accessExpiry),
+                new Tokens.TokenValue(refreshValue, refreshExpiry)
         );
     }
 
@@ -189,7 +193,7 @@ public class AuthServiceImpl implements AuthService {
 
     public String generateOtp(String email) {
         String code = String.format("%06d", secureRandom.nextInt(1_000_000));
-        Otp otp = Otp.of(code, Duration.ofMinutes(OTP_LIFETIME_MINUTES), clock);
+        Otp otp = Otp.of(code, Duration.ofMinutes(securityProperties.otp().expirationMinutes()), clock);
         otpStore.save("otp:" + email, otp);
         return code;
     }
