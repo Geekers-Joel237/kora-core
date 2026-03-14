@@ -1,7 +1,7 @@
 package com.geekersjoel237.koracore.shared.inmemory;
 
 import com.geekersjoel237.koracore.domain.port.MailPort;
-import com.geekersjoel237.koracore.domain.port.OtpMailContext;
+import com.geekersjoel237.koracore.domain.OtpMailContext;
 
 /**
  * Created on 01/03/2026

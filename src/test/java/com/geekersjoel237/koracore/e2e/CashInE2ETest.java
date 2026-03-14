@@ -1,7 +1,7 @@
 package com.geekersjoel237.koracore.e2e;
 
-import com.geekersjoel237.koracore.web.api.payment.CashInRequest;
-import com.geekersjoel237.koracore.web.api.payment.TransactionResponse;
+import com.geekersjoel237.koracore.web.api.payment.cashIn.CashInRequest;
+import com.geekersjoel237.koracore.web.api.payment.shared.TransactionResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -75,19 +75,5 @@ class CashInE2ETest extends AbstractE2ETest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
-//    @Test
-//    void should_return_404_when_customer_has_no_account() {
-//        // Register customer but do NOT create an account
-//        register(FULL_NAME, EMAIL, PREFIX, PHONE, PIN);
-//        String otp = waitAndGetOtpCode(EMAIL);
-//        var tokens = verifyOtp(EMAIL, otp).getBody();
-//
-//        ResponseEntity<String> response = postWithToken(
-//                "/payments/cash-in",
-//                new CashInRequest(PIN, AMOUNT, "XOF", "ORANGE_MONEY"),
-//                tokens.accessToken(),
-//                String.class);
-//
-//        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-//    }
+
 }

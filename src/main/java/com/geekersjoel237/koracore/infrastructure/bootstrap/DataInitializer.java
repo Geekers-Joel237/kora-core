@@ -4,8 +4,8 @@ import com.geekersjoel237.koracore.domain.SystemConstants;
 import com.geekersjoel237.koracore.domain.model.Account;
 import com.geekersjoel237.koracore.domain.port.AccountRepository;
 import com.geekersjoel237.koracore.domain.vo.Id;
-import com.geekersjoel237.koracore.infrastructure.persistence.entity.LedgerEntity;
-import com.geekersjoel237.koracore.infrastructure.persistence.repository.JpaLedgerRepository;
+import com.geekersjoel237.koracore.infrastructure.persistence.entities.LedgerEntity;
+import com.geekersjoel237.koracore.infrastructure.persistence.repository.SpringDataLedgerRepository;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
@@ -13,12 +13,12 @@ import org.springframework.stereotype.Component;
 @Component
 public class DataInitializer {
 
-    private final JpaLedgerRepository jpaLedgerRepository;
+    private final SpringDataLedgerRepository springDataLedgerRepository;
     private final AccountRepository accountRepository;
 
-    public DataInitializer(JpaLedgerRepository jpaLedgerRepository,
+    public DataInitializer(SpringDataLedgerRepository springDataLedgerRepository,
                            AccountRepository accountRepository) {
-        this.jpaLedgerRepository = jpaLedgerRepository;
+        this.springDataLedgerRepository = springDataLedgerRepository;
         this.accountRepository = accountRepository;
     }
 
@@ -29,10 +29,10 @@ public class DataInitializer {
     }
 
     private void ensureLedgerExists() {
-        if (jpaLedgerRepository.findFirstBy().isEmpty()) {
+        if (springDataLedgerRepository.findFirstBy().isEmpty()) {
             LedgerEntity entity = new LedgerEntity();
             entity.setId(Id.generate().value());
-            jpaLedgerRepository.save(entity);
+            springDataLedgerRepository.save(entity);
         }
     }
 

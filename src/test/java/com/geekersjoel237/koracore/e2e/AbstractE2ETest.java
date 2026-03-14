@@ -6,13 +6,12 @@ import com.geekersjoel237.koracore.domain.port.AccountRepository;
 import com.geekersjoel237.koracore.domain.port.CustomerRepository;
 import com.geekersjoel237.koracore.domain.port.OtpStore;
 import com.geekersjoel237.koracore.domain.vo.Id;
-import com.geekersjoel237.koracore.domain.vo.Otp;
-import com.geekersjoel237.koracore.web.api.auth.LoginRequest;
-import com.geekersjoel237.koracore.web.api.auth.OtpResponse;
-import com.geekersjoel237.koracore.web.api.auth.RefreshRequest;
-import com.geekersjoel237.koracore.web.api.auth.RegisterRequest;
-import com.geekersjoel237.koracore.web.api.auth.TokensResponse;
-import com.geekersjoel237.koracore.web.api.auth.VerifyOtpRequest;
+import com.geekersjoel237.koracore.web.api.auth.login.LoginRequest;
+import com.geekersjoel237.koracore.web.api.auth.shared.OtpResponse;
+import com.geekersjoel237.koracore.web.api.auth.refreshToken.RefreshRequest;
+import com.geekersjoel237.koracore.web.api.auth.register.RegisterRequest;
+import com.geekersjoel237.koracore.web.api.auth.shared.TokensResponse;
+import com.geekersjoel237.koracore.web.api.auth.verifyOtp.VerifyOtpRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -176,5 +175,12 @@ public abstract class AbstractE2ETest {
         headers.setBearerAuth(token);
         return http.exchange(url(path), HttpMethod.POST,
                 new HttpEntity<>(body, headers), responseType);
+    }
+
+    protected <T> ResponseEntity<T> getWithToken(String path, String token, Class<T> responseType) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(token);
+        return http.exchange(url(path), HttpMethod.GET,
+                new HttpEntity<>(headers), responseType);
     }
 }
