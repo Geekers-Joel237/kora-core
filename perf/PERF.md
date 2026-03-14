@@ -458,7 +458,7 @@ curl "http://localhost:8081/test/otp/check%40test.com"  # après register
 ./perf/stress-run.sh  [BASE_URL]   # 22 min — point de rupture
 ./perf/soak-run.sh    [BASE_URL]   # 30 min — stabilité
 
-# BASE_URL par défaut : http://localhost:8081
+# BASE_URL par défaut : http://host.docker.internal:8081
 
 # ── URLs ─────────────────────────────────────────────────────────
 # App       http://localhost:8081

@@ -69,6 +69,8 @@ export function createTestUsers(n, prefix = 'user') {
             { headers: HEADERS_JSON }
         );
 
+        console.log(`[setup] register ${email} → HTTP ${regRes.status} | body: ${regRes.body}`);
+
         // 200 = inscrit, 409 = déjà inscrit (idempotence)
         if (regRes.status !== 200 && regRes.status !== 409) {
             console.error(`[setup] register échoué pour ${email}: ${regRes.status} ${regRes.body}`);
@@ -78,7 +80,8 @@ export function createTestUsers(n, prefix = 'user') {
         // ── Capture OTP ─────────────────────────────────────────────────────
         const otp = captureOtp(email);
         if (!otp) {
-            console.error(`[setup] OTP non trouvé pour ${email}`);
+            console.error(`[setup] OTP non trouvé pour ${email} — /test/otp endpoint retourne 404 ?`);
+            console.error(`[setup] Vérifier : SPRING_PROFILES_ACTIVE=perf et curl http://localhost:8081/test/otp/${encodeURIComponent(email)}`);
             continue;
         }
 
@@ -132,6 +135,7 @@ export function createTestUsers(n, prefix = 'user') {
 function captureOtp(email) {
     for (let i = 0; i < 15; i++) {
         const r = http.get(`${BASE_URL}/test/otp/${encodeURIComponent(email)}`);
+        console.log(`[setup] captureOtp attempt ${i + 1} → HTTP ${r.status} | body: ${r.body}`);
         if (r.status === 200) {
             return JSON.parse(r.body).code;
         }

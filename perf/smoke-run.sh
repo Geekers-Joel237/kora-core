@@ -18,7 +18,7 @@ set -euo pipefail
 # ── Configuration ──────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-BASE_URL="${1:-http://localhost:8081}"
+BASE_URL="${1:-http://host.docker.internal:8081}"
 INFLUX_URL="http://localhost:8086/k6"
 GRAFANA_URL="http://localhost:3000"
 GRAFANA_DASHBOARD="${GRAFANA_URL}/d/k6/k6-load-testing-results"
