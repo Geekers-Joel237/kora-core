@@ -3,8 +3,8 @@ package com.geekersjoel237.koracore.application.service;
 import com.geekersjoel237.koracore.application.command.CashInCommand;
 import com.geekersjoel237.koracore.application.command.CashOutCommand;
 import com.geekersjoel237.koracore.application.command.TransferCommand;
-import com.geekersjoel237.koracore.application.port.in.AuthService;
-import com.geekersjoel237.koracore.application.port.in.PaymentService;
+import com.geekersjoel237.koracore.application.port.in.AuthUseCase;
+import com.geekersjoel237.koracore.application.port.in.PaymentUseCase;
 import com.geekersjoel237.koracore.domain.SystemConstants;
 import com.geekersjoel237.koracore.domain.exception.AccountBlockedException;
 import com.geekersjoel237.koracore.domain.exception.AccountNotFoundException;
@@ -21,9 +21,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @Transactional
-public class PaymentServiceImpl implements PaymentService {
+public class PaymentService implements PaymentUseCase {
 
-    private final AuthService authService;
+    private final AuthUseCase authUsecase;
     private final AccountRepository accountRepository;
     private final CustomerRepository customerRepository;
     private final TransactionRepository transactionRepository;
@@ -31,14 +31,14 @@ public class PaymentServiceImpl implements PaymentService {
     private final ProviderPort provider;
     private final LedgerRepository ledgerRepository;
 
-    public PaymentServiceImpl(AuthService authService,
-                              AccountRepository accountRepository,
-                              CustomerRepository customerRepository,
-                              TransactionRepository transactionRepository,
-                              TrxHistoricStatesRepository historicRepo,
-                              ProviderPort provider,
-                              LedgerRepository ledgerRepository) {
-        this.authService = authService;
+    public PaymentService(AuthUseCase authUsecase,
+                          AccountRepository accountRepository,
+                          CustomerRepository customerRepository,
+                          TransactionRepository transactionRepository,
+                          TrxHistoricStatesRepository historicRepo,
+                          ProviderPort provider,
+                          LedgerRepository ledgerRepository) {
+        this.authUsecase = authUsecase;
         this.accountRepository = accountRepository;
         this.customerRepository = customerRepository;
         this.transactionRepository = transactionRepository;
@@ -120,7 +120,7 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     private Account validatePayerAndGetAccount(Id customerId, String pin) {
-        authService.validatePin(customerId, pin);
+        authUsecase.validatePin(customerId, pin);
 
         Customer customer = customerRepository.findById(customerId)
                 .orElseThrow(() -> new AccountNotFoundException("Customer not found: " + customerId.value()));
@@ -149,6 +149,14 @@ public class PaymentServiceImpl implements PaymentService {
         }
 
         return accountTo;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Account getBalance(Id customerId) {
+        return accountRepository.findByCustomerId(customerId)
+                .orElseThrow(() -> new AccountNotFoundException(
+                        "Account not found for customer: " + customerId.value()));
     }
 
     private Account getSystemFloatAccount() {

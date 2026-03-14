@@ -1,6 +1,6 @@
 package com.geekersjoel237.koracore.application;
 
-import com.geekersjoel237.koracore.application.service.AuthServiceImpl;
+import com.geekersjoel237.koracore.application.service.AuthService;
 import com.geekersjoel237.koracore.domain.enums.Role;
 import com.geekersjoel237.koracore.domain.exception.CustomerNotFoundException;
 import com.geekersjoel237.koracore.domain.exception.InvalidOtpException;
@@ -27,7 +27,7 @@ import static java.time.temporal.ChronoUnit.*;
 import static org.assertj.core.api.Assertions.*;
 import static org.junit.jupiter.api.Assertions.*;
 
-class AuthServiceTest {
+class AuthUseCaseTest {
 
     private static final Id USER_ID = new Id("user-001");
     private static final Id CUST_ID = new Id("user-001");
@@ -41,7 +41,7 @@ class AuthServiceTest {
     private InMemoryAccountRepository accountRepo;
     private InMemoryOtpStore otpStore;
     private InMemoryMailPort mailPort;
-    private AuthServiceImpl authService;
+    private AuthService authService;
 
     @BeforeEach
     void setUp() {
@@ -50,7 +50,7 @@ class AuthServiceTest {
         accountRepo = new InMemoryAccountRepository();
         otpStore = new InMemoryOtpStore(Clock.systemUTC());
         mailPort = new InMemoryMailPort();
-        authService = new AuthServiceImpl(userRepo, customerRepo, accountRepo, otpStore, pinEncoder, Clock.systemUTC(), mailPort);
+        authService = new AuthService(userRepo, customerRepo, accountRepo, otpStore, pinEncoder, Clock.systemUTC(), mailPort);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -137,7 +137,7 @@ class AuthServiceTest {
         // (OTP créé à now-10min, TTL=5min → expiré vu depuis l'horloge système)
         Clock pastClock = Clock.fixed(Instant.now().minus(10, MINUTES), ZoneOffset.UTC);
         InMemoryOtpStore expiredStore = new InMemoryOtpStore(pastClock);
-        AuthServiceImpl expiredService = new AuthServiceImpl(
+        AuthService expiredService = new AuthService(
                 userRepo, customerRepo, accountRepo, expiredStore, pinEncoder, pastClock, mailPort
         );
         String code = expiredService.generateOtp(EMAIL);

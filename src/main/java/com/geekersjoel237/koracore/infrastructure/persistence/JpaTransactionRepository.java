@@ -1,18 +1,27 @@
 package com.geekersjoel237.koracore.infrastructure.persistence;
 
+import com.geekersjoel237.koracore.domain.enums.Direction;
 import com.geekersjoel237.koracore.domain.model.Operation;
 import com.geekersjoel237.koracore.domain.model.Transaction;
 import com.geekersjoel237.koracore.domain.model.TrxStateHistoric;
 import com.geekersjoel237.koracore.domain.model.state.TransactionState;
 import com.geekersjoel237.koracore.domain.port.TransactionRepository;
+import com.geekersjoel237.koracore.domain.query.PageRequest;
+import com.geekersjoel237.koracore.domain.query.PageResult;
+import com.geekersjoel237.koracore.domain.query.TransactionFilter;
 import com.geekersjoel237.koracore.domain.vo.Amount;
 import com.geekersjoel237.koracore.domain.vo.Id;
 import com.geekersjoel237.koracore.infrastructure.persistence.entities.OperationEntity;
 import com.geekersjoel237.koracore.infrastructure.persistence.entities.TransactionEntity;
 import com.geekersjoel237.koracore.infrastructure.persistence.repository.SpringDataTransactionRepository;
 import com.geekersjoel237.koracore.infrastructure.persistence.repository.SpringDataTrxStateHistoricRepository;
+import jakarta.persistence.criteria.Predicate;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Repository;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -46,6 +55,58 @@ public class JpaTransactionRepository implements TransactionRepository {
                 .stream()
                 .map(this::toDomain)
                 .toList();
+    }
+
+    @Override
+    public PageResult<Transaction> findByAccountId(Id accountId, TransactionFilter filter, PageRequest pageRequest) {
+        Specification<TransactionEntity> spec = buildSpec(accountId, filter);
+
+        org.springframework.data.domain.PageRequest springPage =
+                org.springframework.data.domain.PageRequest.of(
+                        pageRequest.page(),
+                        pageRequest.size(),
+                        Sort.by(Sort.Direction.DESC, "occurredAt"));
+
+        Page<TransactionEntity> page = jpaTransactionRepo.findAll(spec, springPage);
+
+        List<Transaction> content = page.getContent().stream()
+                .map(this::toDomain)
+                .toList();
+
+        return new PageResult<>(content, page.getNumber(), page.getSize(), page.getTotalElements());
+    }
+
+    private Specification<TransactionEntity> buildSpec(Id accountId, TransactionFilter filter) {
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+
+            String id = accountId.value();
+            if (filter.direction() == Direction.OUTBOUND) {
+                predicates.add(cb.equal(root.get("fromId"), id));
+            } else if (filter.direction() == Direction.INBOUND) {
+                predicates.add(cb.equal(root.get("toId"), id));
+            } else {
+                predicates.add(cb.or(
+                        cb.equal(root.get("fromId"), id),
+                        cb.equal(root.get("toId"), id)
+                ));
+            }
+
+            if (filter.type() != null) {
+                predicates.add(cb.equal(root.get("type"), filter.type()));
+            }
+            if (filter.state() != null) {
+                predicates.add(cb.equal(root.get("state"), filter.state()));
+            }
+            if (filter.from() != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("occurredAt"), filter.from()));
+            }
+            if (filter.to() != null) {
+                predicates.add(cb.lessThanOrEqualTo(root.get("occurredAt"), filter.to()));
+            }
+
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
     }
 
     private TransactionEntity toEntity(Transaction tx) {

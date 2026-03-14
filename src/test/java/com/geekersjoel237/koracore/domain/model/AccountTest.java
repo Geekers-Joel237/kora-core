@@ -138,6 +138,23 @@ class AccountTest {
                 () -> floatAccount.debit(Amount.of(BigDecimal.valueOf(100), "XOF")));
     }
 
+    @Test
+    void should_not_track_balance_for_float_account_debit() {
+        // Intentional design: float accounts are unbounded system accounts.
+        // debit() is a no-op on the stored balance so that the treasury account
+        // never blocks operations due to insufficient funds.
+        // Audit of float account movements must go through Operation ledger entries,
+        // not through balanceAmount. See ADR-001 and Account.debit() Javadoc.
+        Account floatAccount = Account.createFloatAccount(Id.generate(), PROVIDER_ID);
+        Amount largeDebit = Amount.of(BigDecimal.valueOf(1_000_000), "XOF");
+
+        floatAccount.debit(largeDebit);
+
+        assertEquals(Amount.of(BigDecimal.ZERO, "XOF"),
+                floatAccount.snapshot().balance().solde(),
+                "Float account balance must remain 0 after debit — it is never decremented");
+    }
+
     // ── Snapshot — reconstruction ─────────────────────────────────────────────
 
     @Test

@@ -2,7 +2,7 @@ package com.geekersjoel237.koracore.infrastructure.persistence;
 
 import com.geekersjoel237.koracore.application.command.CashInCommand;
 import com.geekersjoel237.koracore.application.command.CashOutCommand;
-import com.geekersjoel237.koracore.application.port.in.PaymentService;
+import com.geekersjoel237.koracore.application.port.in.PaymentUseCase;
 import com.geekersjoel237.koracore.domain.enums.Role;
 import com.geekersjoel237.koracore.domain.model.Account;
 import com.geekersjoel237.koracore.domain.model.Customer;
@@ -35,7 +35,7 @@ class FinancialInvariantsDbTest extends AbstractRepositoryTest {
     private static final Amount CASH_IN_AMOUNT     = new Amount(new BigDecimal("10000.00"), "XOF");
     private static final Amount CASH_OUT_AMOUNT    = new Amount(new BigDecimal("3000.00"),  "XOF");
 
-    @Autowired private PaymentService    paymentService;
+    @Autowired private PaymentUseCase paymentUseCase;
     @Autowired private CustomerRepository customerRepository;
     @Autowired private AccountRepository  accountRepository;
     @Autowired private CustomerPinEncoder pinEncoder;
@@ -66,7 +66,7 @@ class FinancialInvariantsDbTest extends AbstractRepositoryTest {
     @Test
     void double_entry_is_maintained_after_cash_in() {
         SetupResult ctx = setup("inv1@example.com", "07000000101");
-        paymentService.cashIn(new CashInCommand(ctx.customerId(), "1234", CASH_IN_AMOUNT, "ORANGE_MONEY"));
+        paymentUseCase.cashIn(new CashInCommand(ctx.customerId(), "1234", CASH_IN_AMOUNT, "ORANGE_MONEY"));
         em.flush();
 
         Number imbalance = (Number) em.createNativeQuery("""
@@ -84,7 +84,7 @@ class FinancialInvariantsDbTest extends AbstractRepositoryTest {
     @Test
     void each_cash_in_transaction_has_exactly_two_operations() {
         SetupResult ctx = setup("inv2@example.com", "07000000102");
-        Transaction tx = paymentService.cashIn(
+        Transaction tx = paymentUseCase.cashIn(
                 new CashInCommand(ctx.customerId(), "1234", CASH_IN_AMOUNT, "ORANGE_MONEY"));
         em.flush();
 
@@ -102,7 +102,7 @@ class FinancialInvariantsDbTest extends AbstractRepositoryTest {
     @Test
     void no_orphan_operations_exist_in_database() {
         SetupResult ctx = setup("inv3@example.com", "07000000103");
-        paymentService.cashIn(new CashInCommand(ctx.customerId(), "1234", CASH_IN_AMOUNT, "ORANGE_MONEY"));
+        paymentUseCase.cashIn(new CashInCommand(ctx.customerId(), "1234", CASH_IN_AMOUNT, "ORANGE_MONEY"));
         em.flush();
 
         Number orphanCount = (Number) em.createNativeQuery("""
@@ -120,9 +120,9 @@ class FinancialInvariantsDbTest extends AbstractRepositoryTest {
     @Test
     void double_entry_is_maintained_per_transaction_after_cash_in_and_cash_out() {
         SetupResult ctx = setup("inv4@example.com", "07000000104");
-        paymentService.cashIn(
+        paymentUseCase.cashIn(
                 new CashInCommand(ctx.customerId(), "1234", CASH_IN_AMOUNT, "ORANGE_MONEY"));
-        paymentService.cashOut(
+        paymentUseCase.cashOut(
                 new CashOutCommand(ctx.customerId(), "1234", CASH_OUT_AMOUNT, "ORANGE_MONEY"));
         em.flush();
 
@@ -145,9 +145,9 @@ class FinancialInvariantsDbTest extends AbstractRepositoryTest {
     @Test
     void customer_account_balance_equals_net_cash_flow_from_operations() {
         SetupResult ctx = setup("inv5@example.com", "07000000105");
-        paymentService.cashIn(
+        paymentUseCase.cashIn(
                 new CashInCommand(ctx.customerId(), "1234", CASH_IN_AMOUNT, "ORANGE_MONEY"));
-        paymentService.cashOut(
+        paymentUseCase.cashOut(
                 new CashOutCommand(ctx.customerId(), "1234", CASH_OUT_AMOUNT, "ORANGE_MONEY"));
         em.flush();
 

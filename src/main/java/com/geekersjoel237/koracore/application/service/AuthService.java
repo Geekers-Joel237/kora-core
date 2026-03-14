@@ -2,7 +2,7 @@ package com.geekersjoel237.koracore.application.service;
 
 import com.geekersjoel237.koracore.application.command.LoginCommand;
 import com.geekersjoel237.koracore.application.command.RegisterCommand;
-import com.geekersjoel237.koracore.application.port.in.AuthService;
+import com.geekersjoel237.koracore.application.port.in.AuthUseCase;
 import com.geekersjoel237.koracore.domain.OtpMailContext;
 import com.geekersjoel237.koracore.domain.enums.Role;
 import com.geekersjoel237.koracore.domain.exception.*;
@@ -29,7 +29,7 @@ import java.util.Date;
 
 @Service
 @Transactional
-public class AuthServiceImpl implements AuthService {
+public class AuthService implements AuthUseCase {
 
     private final SecurityProperties securityProperties;
 
@@ -46,14 +46,14 @@ public class AuthServiceImpl implements AuthService {
     private final SecureRandom secureRandom = new SecureRandom();
 
     @Autowired
-    public AuthServiceImpl(UserRepository userRepository,
-                           CustomerRepository customerRepository,
-                           AccountRepository accountRepository,
-                           OtpStore otpStore,
-                           CustomerPinEncoder pinEncoder,
-                           Clock clock,
-                           SecurityProperties securityProperties,
-                           MailPort mailPort) {
+    public AuthService(UserRepository userRepository,
+                       CustomerRepository customerRepository,
+                       AccountRepository accountRepository,
+                       OtpStore otpStore,
+                       CustomerPinEncoder pinEncoder,
+                       Clock clock,
+                       SecurityProperties securityProperties,
+                       MailPort mailPort) {
         this.userRepository = userRepository;
         this.customerRepository = customerRepository;
         this.accountRepository = accountRepository;
@@ -67,13 +67,13 @@ public class AuthServiceImpl implements AuthService {
     /**
      * Test constructor — no mail, no @Value injection.
      */
-    public AuthServiceImpl(UserRepository userRepository,
-                           CustomerRepository customerRepository,
-                           AccountRepository accountRepository,
-                           OtpStore otpStore,
-                           CustomerPinEncoder pinEncoder,
-                           Clock clock,
-                           MailPort mailPort) {
+    public AuthService(UserRepository userRepository,
+                       CustomerRepository customerRepository,
+                       AccountRepository accountRepository,
+                       OtpStore otpStore,
+                       CustomerPinEncoder pinEncoder,
+                       Clock clock,
+                       MailPort mailPort) {
         this(userRepository, customerRepository, accountRepository,
                 otpStore, pinEncoder, clock,
                 new SecurityProperties(

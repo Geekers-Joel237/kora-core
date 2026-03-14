@@ -176,4 +176,11 @@ public abstract class AbstractE2ETest {
         return http.exchange(url(path), HttpMethod.POST,
                 new HttpEntity<>(body, headers), responseType);
     }
+
+    protected <T> ResponseEntity<T> getWithToken(String path, String token, Class<T> responseType) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(token);
+        return http.exchange(url(path), HttpMethod.GET,
+                new HttpEntity<>(headers), responseType);
+    }
 }
