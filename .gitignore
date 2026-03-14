@@ -37,3 +37,6 @@ out/
 .vscode/
 /CLAUDE.md
 /.env
+
+### Logs perf ###
+logs/

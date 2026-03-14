@@ -1,50 +1,33 @@
 /**
- * setup.js — Création des utilisateurs de test et seed des soldes.
+ * setup.js — Création des utilisateurs de test.
  *
- * Appelé par la fonction k6 `setup()` de chaque script de test.
- * Idempotent : un utilisateur déjà inscrit retourne une erreur 409 ignorée.
+ * Chaque user est inscrit et vérifié via OTP.
+ * Les tokens NE sont PAS stockés ici — chaque VU fait son propre login
+ * au premier appel dans default(), évitant la sérialisation k6 entre contextes.
  *
- * Résultat retourné à k6 :
+ * Retour :
  * {
- *   users: [
- *     {
- *       email: string,
- *       pin: string,
- *       phonePrefix: string,
- *       phoneNumber: string,
- *       fullPhone: string,      // préfixe + numéro local — utilisé pour les transferts
- *       accessToken: string,    // token JWT frais issu du seed — réutilisé par getToken()
- *       tokenExpiresAt: number, // timestamp ms d'expiry (14 min) — getToken() renouvelle si dépassé
- *     },
- *     ...
- *   ]
+ *   users: [{
+ *     email, pin, phonePrefix, phoneNumber, fullPhone
+ *   }]
  * }
- *
- * Chaque utilisateur reçoit un seed cashIn de 200 000 XOF
- * pour garantir que cashOut (5 000) et transfer (2 000) ne s'arrêtent jamais
- * sur un solde insuffisant pendant toute la durée du test.
  */
 
 import http from 'k6/http';
-import { check, sleep } from 'k6';
+import { sleep } from 'k6';
 
-const BASE_URL = __ENV.BASE_URL || 'http://localhost:8081';
+const BASE_URL     = __ENV.BASE_URL || 'http://localhost:8081';
 const HEADERS_JSON = { 'Content-Type': 'application/json' };
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
 const PHONE_PREFIX   = '+237';
 const PIN            = '123456';
-const SEED_AMOUNT    = 200_000;       // XOF — suffisant pour toute la durée d'un soak test
-const PAYMENT_METHOD = 'ORANGE_MONEY';
 
 // Plages de numéros isolées par type de test — évite les collisions entre tests parallèles.
 // Formule : phoneBase + parseInt(RUN_SUFFIX) × 100 + i
 // Chaque plage absorbe max RUN_SUFFIX(99999) × 100 + users_max = 9 999 940 numéros → 10 M.
 // Bases espacées de 20 M pour garantir l'absence de chevauchement.
-// Vérification (9 chiffres, contrainte 8-15 respectée) :
-//   smoke  : 600000001 → 609999902   load   : 620000001 → 629999920
-//   stress : 640000001 → 649999940   soak   : 660000001 → 669999915
 const PHONE_RANGES = {
     smoke:  600_000_000,
     load:   620_000_000,
@@ -52,16 +35,15 @@ const PHONE_RANGES = {
     soak:   660_000_000,
 };
 
-// RUN_SUFFIX — 5 derniers chiffres du timestamp en SECONDES (évalué à l'init du module).
+// RUN_SUFFIX — 5 derniers chiffres du timestamp en SECONDES.
 // Cycle de 100 000 secondes ≈ 27,8 heures → collision pratiquement impossible.
-// Multiplié par 100 pour réserver 2 chiffres à l'index utilisateur (max 40).
 const RUN_SUFFIX = String(Math.floor(Date.now() / 1000)).slice(-5);
 
-// RUN_ID — unicité des adresses email entre runs (passez __ENV.RUN_ID pour rejouer).
+// RUN_ID — unicité des adresses email entre runs.
 const RUN_ID = __ENV.RUN_ID || `${Date.now()}`;
 
 /**
- * Crée N utilisateurs via l'API, seed leur solde, et retourne leurs profils.
+ * Crée N utilisateurs via l'API et retourne leurs credentials.
  *
  * @param {number} n           nombre d'utilisateurs à créer
  * @param {string} [prefix]    préfixe d'email pour ce run (défaut: "user")
@@ -105,7 +87,10 @@ export function createTestUsers(n, prefix = 'user') {
             continue;
         }
 
-        // ── Verify OTP → tokens ─────────────────────────────────────────────
+        // ── Verify OTP — juste pour activer le compte ────────────────────────
+        // Le token obtenu ici est intentionnellement ignoré.
+        // Chaque VU fera son propre login dans default() pour obtenir un token
+        // frais sans passer par la sérialisation k6 entre setup() et default().
         const verifyRes = http.post(
             `${BASE_URL}/auth/verify-otp`,
             JSON.stringify({ email, code: otp }),
@@ -117,35 +102,8 @@ export function createTestUsers(n, prefix = 'user') {
             continue;
         }
 
-        const { accessToken } = JSON.parse(verifyRes.body);
-
-        // ── Seed balance ─────────────────────────────────────────────────────
-        const cashInRes = http.post(
-            `${BASE_URL}/payments/cash-in`,
-            JSON.stringify({
-                rawPin:        PIN,
-                amount:        SEED_AMOUNT,
-                currency:      'XOF',
-                paymentMethod: PAYMENT_METHOD,
-            }),
-            {
-                headers: {
-                    'Content-Type':  'application/json',
-                    'Authorization': `Bearer ${accessToken}`,
-                },
-            }
-        );
-
-        if (cashInRes.status !== 200) {
-            console.error(`[setup] seed cashIn échoué pour ${email}: ${cashInRes.status} — user exclu`);
-            continue;  // ne pas pousser un user sans solde seed
-        }
-
-        users.push({
-            email, pin: PIN, phonePrefix: PHONE_PREFIX, phoneNumber, fullPhone,
-            accessToken,
-            tokenExpiresAt: Math.floor(Date.now() / 1000) + 14 * 60,  // secondes — safe via sérialisation k6
-        });
+        // Compte activé — credentials uniquement, pas de token
+        users.push({ email, pin: PIN, phonePrefix: PHONE_PREFIX, phoneNumber, fullPhone });
 
         // Légère pause pour ne pas saturer le setup
         sleep(0.05);
@@ -160,9 +118,7 @@ export function createTestUsers(n, prefix = 'user') {
 function captureOtp(email) {
     for (let i = 0; i < 20; i++) {
         const r = http.get(`${BASE_URL}/test/otp/${encodeURIComponent(email)}`);
-        if (r.status === 200) {
-            return JSON.parse(r.body).code;
-        }
+        if (r.status === 200) return JSON.parse(r.body).code;
         sleep(0.5);
     }
     return null;

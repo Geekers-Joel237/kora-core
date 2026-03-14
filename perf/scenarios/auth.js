@@ -1,6 +1,14 @@
 /**
  * auth.js — Helpers d'authentification réutilisables entre tous les scénarios.
  *
+ * Architecture token (VU-local) :
+ *   - Les tokens sont stockés dans des variables de module (_vuToken, _vuTokenExpires).
+ *   - Dans k6, les variables de module sont isolées par VU — chaque VU a sa propre copie.
+ *   - Le token est obtenu par login() au premier appel de getToken(), puis réutilisé.
+ *   - tokenExpiresAt en secondes depuis epoch — évite la corruption des grands entiers
+ *     lors d'une éventuelle sérialisation k6.
+ *   - Aucun token dans setup() → élimine définitivement le problème inter-contextes k6.
+ *
  * Tous les flows passent par l'OTP store exposé sur /test/otp/{email}
  * (endpoint @Profile("perf") — TestSupportAction).
  */
@@ -8,71 +16,37 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 
-const BASE_URL = __ENV.BASE_URL || 'http://localhost:8081';
-
+const BASE_URL     = __ENV.BASE_URL || 'http://localhost:8081';
 const HEADERS_JSON = { 'Content-Type': 'application/json' };
 
-/**
- * Inscrit un utilisateur et renvoie les tokens (accessToken, refreshToken).
- * Flow : POST /auth/register → GET /test/otp/{email} (retry) → POST /auth/verify-otp
- *
- * @param {string} fullName
- * @param {string} email
- * @param {string} phonePrefix  ex: "+237"
- * @param {string} phoneNumber  ex: "600000001"
- * @param {string} pin
- * @returns {{ accessToken: string, refreshToken: string }}
- */
-export function register(fullName, email, phonePrefix, phoneNumber, pin) {
-    const regRes = http.post(
-        `${BASE_URL}/auth/register`,
-        JSON.stringify({ fullName, email, phonePrefix, phoneNumber, rawPin: pin }),
-        { headers: HEADERS_JSON }
-    );
-    check(regRes, { 'register 201': (r) => r.status === 201 });
-
-    const otp = captureOtp(email);
-
-    const verifyRes = http.post(
-        `${BASE_URL}/auth/verify-otp`,
-        JSON.stringify({ email, code: otp }),
-        { headers: HEADERS_JSON }
-    );
-    check(verifyRes, { 'verify-otp 200': (r) => r.status === 200 });
-
-    const body = JSON.parse(verifyRes.body);
-    return { accessToken: body.accessToken, refreshToken: body.refreshToken };
-}
+// Variables VU-local — chaque VU k6 a sa propre copie isolée de ces variables.
+let _vuToken        = null;
+let _vuTokenExpires = 0;  // secondes depuis epoch
 
 /**
- * Retourne le token du user si encore valide, sinon renouvelle via login().
- * Élimine le login systématique à chaque itération (source principale de surcharge).
+ * Retourne un accessToken valide pour ce VU.
+ * Fait un login si le VU n'est pas encore authentifié ou si le token est expiré.
  *
- * Durée de vie token : 15 min côté serveur — on utilise 14 min (marge 1 min).
- * Chaque VU k6 possède sa propre copie de l'objet user → pas de contention.
+ * Durée de vie token : 15 min côté serveur — fenêtre d'utilisation : 14 min.
+ * Seul le soak test (30m) déclenche un renouvellement en cours de run.
  *
- * tokenExpiresAt stocké en secondes depuis epoch (pas en ms) pour éviter
- * la corruption des grands entiers (> 2^31) lors de la sérialisation JSON
- * entre setup() et default() dans le runtime Go de k6.
- *
- * @param {object} user  objet user complet (email, pin, accessToken, tokenExpiresAt)
+ * @param {object} user  { email, pin }
  * @returns {string}     accessToken valide
  */
 export function getToken(user) {
     const nowSec = Math.floor(Date.now() / 1000);
-    if (nowSec < user.tokenExpiresAt) {
-        return user.accessToken;
+    if (_vuToken && nowSec < _vuTokenExpires) {
+        return _vuToken;
     }
-    // Renouvellement — uniquement déclenché pour le soak test (> 14 min)
+    // Login — token obtenu directement dans ce VU, pas de sérialisation inter-contextes
     const { accessToken } = login(user.email, user.pin);
-    user.accessToken    = accessToken;
-    user.tokenExpiresAt = Math.floor(Date.now() / 1000) + 14 * 60;
-    return accessToken;
+    _vuToken        = accessToken;
+    _vuTokenExpires = Math.floor(Date.now() / 1000) + 14 * 60;
+    return _vuToken;
 }
 
 /**
  * Login + verify-otp → retourne les tokens frais.
- * Utilisé dans les scénarios de test (le token d'accès expire après 15 min).
  *
  * @param {string} email
  * @param {string} pin
@@ -106,13 +80,13 @@ export function login(email, pin) {
  */
 export function authHeaders(token) {
     return {
-        'Content-Type': 'application/json',
+        'Content-Type':  'application/json',
         'Authorization': `Bearer ${token}`,
     };
 }
 
 /**
- * Récupère le code OTP depuis /test/otp/{email} avec retry (max 10 × 200ms).
+ * Récupère le code OTP depuis /test/otp/{email} avec retry (max 20 × 500ms).
  * L'endpoint est exposé uniquement avec le profil "perf".
  *
  * @param {string} email
@@ -121,13 +95,30 @@ export function authHeaders(token) {
 function captureOtp(email) {
     for (let i = 0; i < 20; i++) {
         const r = http.get(`${BASE_URL}/test/otp/${encodeURIComponent(email)}`);
-        if (r.status === 200) {
-            return JSON.parse(r.body).code;
-        }
+        if (r.status === 200) return JSON.parse(r.body).code;
         sleep(0.5);
     }
     // Dernier essai — si echec, le check suivant échouera
     const r = http.get(`${BASE_URL}/test/otp/${encodeURIComponent(email)}`);
     check(r, { 'otp retrieved': (res) => res.status === 200 });
     return JSON.parse(r.body).code;
+}
+
+// register() conservé pour compatibilité — non utilisé dans les scénarios perf courants.
+export function register(fullName, email, phonePrefix, phoneNumber, pin) {
+    const regRes = http.post(
+        `${BASE_URL}/auth/register`,
+        JSON.stringify({ fullName, email, phonePrefix, phoneNumber, rawPin: pin }),
+        { headers: HEADERS_JSON }
+    );
+    check(regRes, { 'register 201': (r) => r.status === 201 });
+    const otp = captureOtp(email);
+    const verifyRes = http.post(
+        `${BASE_URL}/auth/verify-otp`,
+        JSON.stringify({ email, code: otp }),
+        { headers: HEADERS_JSON }
+    );
+    check(verifyRes, { 'verify-otp 200': (r) => r.status === 200 });
+    const body = JSON.parse(verifyRes.body);
+    return { accessToken: body.accessToken, refreshToken: body.refreshToken };
 }

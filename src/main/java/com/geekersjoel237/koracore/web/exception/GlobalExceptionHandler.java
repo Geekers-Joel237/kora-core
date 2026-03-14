@@ -16,6 +16,7 @@ import com.geekersjoel237.koracore.domain.exception.SelfTransferException;
 import io.jsonwebtoken.JwtException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.web.bind.ServletRequestBindingException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -30,6 +31,16 @@ public class GlobalExceptionHandler {
     @ExceptionHandler({InvalidOtpException.class, OtpExpiredException.class, PinValidationException.class, JwtException.class})
     ProblemDetail onUnauthorized(RuntimeException ex) {
         return problem(HttpStatus.UNAUTHORIZED, ex.getMessage());
+    }
+
+
+    // Spring Framework 7 : MissingRequestAttributeException supprimée —
+    // RequestAttributeMethodArgumentResolver lève ServletRequestBindingException directement.
+    // customerId absent = JwtAuthenticationFilter n'a pas pu valider le token
+    // → 401 explicite au lieu du 404 opaque de BasicErrorController.
+    @ExceptionHandler(ServletRequestBindingException.class)
+    ProblemDetail onMissingAttribute(ServletRequestBindingException ex) {
+        return problem(HttpStatus.UNAUTHORIZED, "Authentication required: " + ex.getMessage());
     }
 
     @ExceptionHandler({CustomerNotFoundException.class, AccountNotFoundException.class})
