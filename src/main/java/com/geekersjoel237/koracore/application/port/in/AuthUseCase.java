@@ -6,7 +6,7 @@ import com.geekersjoel237.koracore.domain.model.User;
 import com.geekersjoel237.koracore.domain.vo.Id;
 import com.geekersjoel237.koracore.domain.vo.Tokens;
 
-public interface AuthService {
+public interface AuthUseCase {
     void validatePin(Id customerId, String rawPin);
 
     void verifyOtp(String email, String code);

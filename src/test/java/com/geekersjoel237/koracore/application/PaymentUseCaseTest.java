@@ -3,8 +3,8 @@ package com.geekersjoel237.koracore.application;
 import com.geekersjoel237.koracore.application.command.CashInCommand;
 import com.geekersjoel237.koracore.application.command.CashOutCommand;
 import com.geekersjoel237.koracore.application.command.TransferCommand;
-import com.geekersjoel237.koracore.application.service.AuthServiceImpl;
-import com.geekersjoel237.koracore.application.service.PaymentServiceImpl;
+import com.geekersjoel237.koracore.application.service.AuthService;
+import com.geekersjoel237.koracore.application.service.PaymentService;
 import com.geekersjoel237.koracore.domain.enums.OperationType;
 import com.geekersjoel237.koracore.domain.enums.Role;
 import com.geekersjoel237.koracore.domain.enums.UserStatus;
@@ -32,7 +32,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class PaymentServiceTest {
+class PaymentUseCaseTest {
 
     private static final Id CUST_ID_A = new Id("cust-001");
     private static final Id CUST_ID_B = new Id("cust-002");
@@ -54,8 +54,8 @@ class PaymentServiceTest {
     private InMemoryOtpStore otpStore;
     private InMemoryProviderSimulator provider;
     private InMemoryMailPort mailPort;
-    private AuthServiceImpl authService;
-    private PaymentServiceImpl paymentService;
+    private AuthService authService;
+    private PaymentService paymentService;
     private LedgerRepository ledgerRepository;
 
     private static PhoneNumber phoneNumberA() {
@@ -78,9 +78,9 @@ class PaymentServiceTest {
         provider = new InMemoryProviderSimulator(SUCCESS);
         ledgerRepository = new InMemoryLedgerRepository(Ledger.create(Id.generate()));
         mailPort = new InMemoryMailPort();
-        authService = new AuthServiceImpl(
+        authService = new AuthService(
                 new InMemoryUserRepository(), customerRepo, accountRepo, otpStore, pinEncoder, Clock.systemUTC(), mailPort);
-        paymentService = new PaymentServiceImpl(
+        paymentService = new PaymentService(
                 authService, accountRepo, customerRepo,
                 transactionRepo, historicRepo, provider, ledgerRepository);
 
@@ -324,5 +324,39 @@ class PaymentServiceTest {
         assertThatThrownBy(() -> paymentService.transfer(new TransferCommand(
                 CUST_ID_A, RAW_PIN, AMOUNT_5K, PAYMENT_METHOD, phoneNumberB().fullNumber())))
                 .isInstanceOf(InsufficientFundsException.class);
+    }
+
+    // ── Groupe 4 — getBalance ─────────────────────────────────────────────────
+
+    @Test
+    void should_return_zero_balance_for_new_customer_account() {
+        Account account = paymentService.getBalance(CUST_ID_A);
+
+        assertTrue(AMOUNT_ZERO.equals(account.snapshot().balance().solde()));
+    }
+
+    @Test
+    void should_return_balance_reflecting_cash_in() {
+        paymentService.cashIn(new CashInCommand(CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
+
+        Account account = paymentService.getBalance(CUST_ID_A);
+
+        assertTrue(AMOUNT_10K.equals(account.snapshot().balance().solde()));
+    }
+
+    @Test
+    void should_return_balance_reflecting_cash_in_then_cash_out() {
+        paymentService.cashIn(new CashInCommand(CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
+        paymentService.cashOut(new CashOutCommand(CUST_ID_A, RAW_PIN, AMOUNT_5K, PAYMENT_METHOD));
+
+        Account account = paymentService.getBalance(CUST_ID_A);
+
+        assertTrue(AMOUNT_5K.equals(account.snapshot().balance().solde()));
+    }
+
+    @Test
+    void should_throw_account_not_found_when_customer_has_no_account() {
+        assertThatThrownBy(() -> paymentService.getBalance(new Id("ghost-customer")))
+                .isInstanceOf(AccountNotFoundException.class);
     }
 }

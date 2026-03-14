@@ -1,5 +1,6 @@
 package com.geekersjoel237.koracore.infrastructure.security;
 
+import com.geekersjoel237.koracore.infrastructure.config.SecurityProperties;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
@@ -8,7 +9,6 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
@@ -22,14 +22,10 @@ import java.util.List;
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
-    private static final String DEFAULT_TEST_SECRET =
-            "kora-core-test-secret-key-must-be-at-least-32-chars!";
-
     private final String jwtSecret;
 
-    public JwtAuthenticationFilter(
-            @Value("${jwt.secret:" + DEFAULT_TEST_SECRET + "}") String jwtSecret) {
-        this.jwtSecret = jwtSecret;
+    public JwtAuthenticationFilter(SecurityProperties securityProperties) {
+        this.jwtSecret = securityProperties.jwt().secret();
     }
 
     @Override

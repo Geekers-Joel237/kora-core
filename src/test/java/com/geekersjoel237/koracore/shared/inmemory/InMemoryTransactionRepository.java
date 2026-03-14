@@ -1,10 +1,15 @@
 package com.geekersjoel237.koracore.shared.inmemory;
 
+import com.geekersjoel237.koracore.domain.enums.Direction;
 import com.geekersjoel237.koracore.domain.model.Transaction;
 import com.geekersjoel237.koracore.domain.port.TransactionRepository;
+import com.geekersjoel237.koracore.domain.query.PageRequest;
+import com.geekersjoel237.koracore.domain.query.PageResult;
+import com.geekersjoel237.koracore.domain.query.TransactionFilter;
 import com.geekersjoel237.koracore.domain.vo.Id;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +35,40 @@ public class InMemoryTransactionRepository implements TransactionRepository {
                 .filter(tx -> tx.snapshot().fromId().equals(accountId)
                         || tx.snapshot().toId().equals(accountId))
                 .toList();
+    }
+
+    @Override
+    public PageResult<Transaction> findByAccountId(Id accountId, TransactionFilter filter, PageRequest pageRequest) {
+        List<Transaction> matched = store.values().stream()
+                .filter(tx -> matchesAccount(tx, accountId, filter.direction()))
+                .filter(tx -> matchesFilter(tx, filter))
+                .sorted(Comparator.comparing(tx -> tx.snapshot().createdAt(),
+                        Comparator.reverseOrder()))
+                .toList();
+
+        int total = matched.size();
+        int from = pageRequest.page() * pageRequest.size();
+        List<Transaction> page = from >= total
+                ? List.of()
+                : matched.subList(from, Math.min(from + pageRequest.size(), total));
+
+        return new PageResult<>(page, pageRequest.page(), pageRequest.size(), total);
+    }
+
+    private boolean matchesAccount(Transaction tx, Id accountId, Direction direction) {
+        Transaction.Snapshot snap = tx.snapshot();
+        if (direction == Direction.OUTBOUND) return snap.fromId().equals(accountId);
+        if (direction == Direction.INBOUND)  return snap.toId().equals(accountId);
+        return snap.fromId().equals(accountId) || snap.toId().equals(accountId);
+    }
+
+    private boolean matchesFilter(Transaction tx, TransactionFilter f) {
+        Transaction.Snapshot snap = tx.snapshot();
+        if (f.type()  != null && !snap.type().equals(f.type()))            return false;
+        if (f.state() != null && !snap.state().name().equals(f.state()))   return false;
+        if (f.from()  != null && snap.createdAt().isBefore(f.from()))      return false;
+        if (f.to()    != null && snap.createdAt().isAfter(f.to()))         return false;
+        return true;
     }
 
     public List<Transaction> findAll() {
