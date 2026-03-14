@@ -1,0 +1,24 @@
+apiVersion: 1
+
+datasources:
+  # ── Source k6 — métriques de charge HTTP ──────────────────────────────────
+  - name: InfluxDB-k6
+    type: influxdb
+    access: proxy
+    url: http://influxdb:8086
+    database: k6
+    isDefault: true
+    editable: false
+    jsonData:
+      httpMode: GET
+
+  # ── Source Kora — métriques applicatives Spring Boot / Micrometer ─────────
+  - name: InfluxDB-kora
+    type: influxdb
+    access: proxy
+    url: http://influxdb:8086
+    database: kora_metrics
+    isDefault: false
+    editable: false
+    jsonData:
+      httpMode: GET

@@ -1,0 +1,266 @@
+{
+  "__inputs": [],
+  "__requires": [],
+  "annotations": { "list": [] },
+  "description": "Kora Core — Load Test Dashboard (k6 + Spring Boot Micrometer)",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+
+    {
+      "id": 1,
+      "title": "HTTP Latency — p50 / p95 / p99 (k6)",
+      "type": "timeseries",
+      "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB_K6}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "color": { "mode": "palette-classic" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red",   "value": 150 }
+            ]
+          }
+        }
+      },
+      "options": {
+        "tooltip": { "mode": "multi" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "SELECT percentile(\"value\", 50) AS \"p50\" FROM \"http_req_duration\" WHERE $timeFilter GROUP BY time($__interval) fill(none)",
+          "rawQuery": true,
+          "resultFormat": "time_series",
+          "alias": "p50"
+        },
+        {
+          "refId": "B",
+          "query": "SELECT percentile(\"value\", 95) AS \"p95\" FROM \"http_req_duration\" WHERE $timeFilter GROUP BY time($__interval) fill(none)",
+          "rawQuery": true,
+          "resultFormat": "time_series",
+          "alias": "p95"
+        },
+        {
+          "refId": "C",
+          "query": "SELECT percentile(\"value\", 99) AS \"p99\" FROM \"http_req_duration\" WHERE $timeFilter GROUP BY time($__interval) fill(none)",
+          "rawQuery": true,
+          "resultFormat": "time_series",
+          "alias": "p99"
+        }
+      ]
+    },
+
+    {
+      "id": 2,
+      "title": "Throughput — req/sec (k6)",
+      "type": "timeseries",
+      "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB_K6}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "color": { "mode": "palette-classic" }
+        }
+      },
+      "options": {
+        "tooltip": { "mode": "single" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "SELECT non_negative_derivative(max(\"value\"), 1s) AS \"req/sec\" FROM \"http_reqs\" WHERE $timeFilter GROUP BY time($__interval) fill(none)",
+          "rawQuery": true,
+          "resultFormat": "time_series",
+          "alias": "req/sec"
+        }
+      ]
+    },
+
+    {
+      "id": 3,
+      "title": "Error Rate % (k6)",
+      "type": "timeseries",
+      "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB_K6}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "color": { "mode": "palette-classic" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red",   "value": 0.01 }
+            ]
+          }
+        }
+      },
+      "options": {
+        "tooltip": { "mode": "single" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "SELECT mean(\"value\") AS \"error rate\" FROM \"http_req_failed\" WHERE $timeFilter GROUP BY time($__interval) fill(none)",
+          "rawQuery": true,
+          "resultFormat": "time_series",
+          "alias": "error rate"
+        }
+      ]
+    },
+
+    {
+      "id": 4,
+      "title": "HikariCP — Active / Pending Connections (Kora)",
+      "type": "timeseries",
+      "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB_KORA}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "palette-classic" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 15 },
+              { "color": "red",    "value": 19 }
+            ]
+          }
+        }
+      },
+      "options": {
+        "tooltip": { "mode": "multi" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "SELECT mean(\"value\") AS \"active\" FROM \"hikaricp_connections_active\" WHERE $timeFilter GROUP BY time($__interval) fill(none)",
+          "rawQuery": true,
+          "resultFormat": "time_series",
+          "alias": "active"
+        },
+        {
+          "refId": "B",
+          "query": "SELECT mean(\"value\") AS \"pending\" FROM \"hikaricp_connections_pending\" WHERE $timeFilter GROUP BY time($__interval) fill(none)",
+          "rawQuery": true,
+          "resultFormat": "time_series",
+          "alias": "pending (⚠ saturation)"
+        }
+      ]
+    },
+
+    {
+      "id": 5,
+      "title": "JVM Heap Usage — MB (Kora)",
+      "type": "timeseries",
+      "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB_KORA}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decmbytes",
+          "color": { "mode": "palette-classic" }
+        }
+      },
+      "options": {
+        "tooltip": { "mode": "multi" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "SELECT mean(\"value\") / 1048576 AS \"heap used (MB)\" FROM \"jvm_memory_used_bytes\" WHERE \"area\" = 'heap' AND $timeFilter GROUP BY time($__interval) fill(none)",
+          "rawQuery": true,
+          "resultFormat": "time_series",
+          "alias": "heap used (MB)"
+        },
+        {
+          "refId": "B",
+          "query": "SELECT mean(\"value\") / 1048576 AS \"heap committed (MB)\" FROM \"jvm_memory_committed_bytes\" WHERE \"area\" = 'heap' AND $timeFilter GROUP BY time($__interval) fill(none)",
+          "rawQuery": true,
+          "resultFormat": "time_series",
+          "alias": "heap committed (MB)"
+        }
+      ]
+    },
+
+    {
+      "id": 6,
+      "title": "Applicative Latency p95 — Spring Boot (Kora)",
+      "description": "Latence côté serveur mesurée par Micrometer (hors réseau k6). Comparer avec le panneau k6 pour quantifier l'overhead réseau.",
+      "type": "timeseries",
+      "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB_KORA}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "palette-classic" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red",   "value": 0.15 }
+            ]
+          }
+        }
+      },
+      "options": {
+        "tooltip": { "mode": "multi" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "SELECT percentile(\"value\", 95) AS \"p95\" FROM \"http_server_requests_seconds\" WHERE $timeFilter GROUP BY time($__interval) fill(none)",
+          "rawQuery": true,
+          "resultFormat": "time_series",
+          "alias": "p95 applicatif"
+        }
+      ]
+    }
+
+  ],
+
+  "refresh": "5s",
+  "schemaVersion": 38,
+  "tags": ["kora", "load-test", "k6", "performance"],
+  "templating": {
+    "list": [
+      {
+        "name": "DS_INFLUXDB_K6",
+        "type": "datasource",
+        "pluginId": "influxdb",
+        "current": { "text": "InfluxDB-k6", "value": "InfluxDB-k6" },
+        "label": "k6 InfluxDB",
+        "hide": 0
+      },
+      {
+        "name": "DS_INFLUXDB_KORA",
+        "type": "datasource",
+        "pluginId": "influxdb",
+        "current": { "text": "InfluxDB-kora", "value": "InfluxDB-kora" },
+        "label": "Kora InfluxDB",
+        "hide": 0
+      }
+    ]
+  },
+  "time": { "from": "now-30m", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Kora — Load Test",
+  "uid": "kora-load",
+  "version": 1
+}
