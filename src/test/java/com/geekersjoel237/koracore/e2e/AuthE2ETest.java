@@ -1,7 +1,9 @@
 package com.geekersjoel237.koracore.e2e;
 
-import com.geekersjoel237.koracore.web.api.auth.OtpResponse;
-import com.geekersjoel237.koracore.web.api.auth.TokensResponse;
+import com.geekersjoel237.koracore.web.api.auth.shared.OtpResponse;
+import com.geekersjoel237.koracore.web.api.auth.shared.TokensResponse;
+import com.geekersjoel237.koracore.web.api.auth.register.RegisterRequest;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -30,7 +32,7 @@ class AuthE2ETest extends AbstractE2ETest {
         register(FULL_NAME, EMAIL, PREFIX, PHONE, PIN);
 
         ResponseEntity<String> duplicate = http.postForEntity(url("/auth/register"),
-                new com.geekersjoel237.koracore.web.api.auth.RegisterRequest(
+                new RegisterRequest(
                         FULL_NAME, EMAIL, "+237", "677000001", PIN),
                 String.class);
 
@@ -79,6 +81,7 @@ class AuthE2ETest extends AbstractE2ETest {
         ResponseEntity<OtpResponse> loginResp = login(EMAIL, PIN);
 
         assertThat(loginResp.getStatusCode()).isEqualTo(HttpStatus.OK);
+        Assertions.assertNotNull(loginResp.getBody());
         assertThat(loginResp.getBody().message()).containsIgnoringCase("otp");
     }
 
@@ -101,6 +104,7 @@ class AuthE2ETest extends AbstractE2ETest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         TokensResponse newTokens = response.getBody();
+        Assertions.assertNotNull(newTokens);
         assertThat(newTokens.accessToken()).isNotBlank();
         assertThat(newTokens.refreshToken()).isNotBlank();
     }

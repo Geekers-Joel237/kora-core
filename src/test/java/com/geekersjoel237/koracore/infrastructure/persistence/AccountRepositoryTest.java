@@ -4,8 +4,8 @@ import com.geekersjoel237.koracore.domain.enums.ResourceType;
 import com.geekersjoel237.koracore.domain.model.Account;
 import com.geekersjoel237.koracore.domain.vo.Amount;
 import com.geekersjoel237.koracore.domain.vo.Id;
-import com.geekersjoel237.koracore.infrastructure.persistence.entity.AccountEntity;
-import com.geekersjoel237.koracore.infrastructure.persistence.repository.JpaAccountRepository;
+import com.geekersjoel237.koracore.infrastructure.persistence.entities.AccountEntity;
+import com.geekersjoel237.koracore.infrastructure.persistence.repository.SpringDataAccountRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -20,10 +20,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class AccountRepositoryTest extends AbstractRepositoryTest {
 
     @Autowired
-    private PostgresAccountRepository repository;
+    private JpaAccountRepository repository;
 
     @Autowired
-    private JpaAccountRepository jpaRepository;
+    private SpringDataAccountRepository jpaRepository;
 
     @Test
     void should_persist_and_return_intact_when_saving_customer_account() {

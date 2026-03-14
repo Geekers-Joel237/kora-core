@@ -1,8 +1,9 @@
 package com.geekersjoel237.koracore.e2e;
 
-import com.geekersjoel237.koracore.web.api.payment.CashInRequest;
-import com.geekersjoel237.koracore.web.api.payment.TransactionResponse;
-import com.geekersjoel237.koracore.web.api.payment.TransferRequest;
+import com.geekersjoel237.koracore.web.api.payment.cashIn.CashInRequest;
+import com.geekersjoel237.koracore.web.api.payment.shared.TransactionResponse;
+import com.geekersjoel237.koracore.web.api.payment.transfer.TransferRequest;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -19,7 +20,7 @@ class TransferE2ETest extends AbstractE2ETest {
     @Test
     void should_transfer_funds_between_two_customers() {
         SetupData sender   = setupCustomerWithAccount("sender@example.com",   "Sender",   "+225", "07000003001", "1234");
-        SetupData receiver = setupCustomerWithAccount("receiver@example.com", "Receiver", "+225", "07000003002", "5678");
+        setupCustomerWithAccount("receiver@example.com", "Receiver", "+225", "07000003002", "5678");
 
         // Fund sender first
         postWithToken("/payments/cash-in",
@@ -34,6 +35,7 @@ class TransferE2ETest extends AbstractE2ETest {
                 TransactionResponse.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        Assertions.assertNotNull(response.getBody());
         assertThat(response.getBody().state()).isEqualTo("COMPLETED");
     }
 

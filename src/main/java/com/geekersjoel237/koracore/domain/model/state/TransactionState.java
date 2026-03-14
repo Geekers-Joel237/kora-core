@@ -9,5 +9,15 @@ public interface TransactionState {
     TransactionState COMPLETED   = new CompletedState();
     TransactionState FAILED      = new FailedState();
 
+    static TransactionState fromValue(String value){
+        return switch (value) {
+            case "INITIALIZED" -> INITIALIZED;
+            case "PENDING"     -> PENDING;
+            case "COMPLETED"   -> COMPLETED;
+            case "FAILED"      -> FAILED;
+            default -> throw new IllegalArgumentException("Unknown transaction state: " + value);
+        };
+    }
+
     String name();
 }

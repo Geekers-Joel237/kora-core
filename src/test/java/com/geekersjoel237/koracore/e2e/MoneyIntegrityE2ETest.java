@@ -1,9 +1,9 @@
 package com.geekersjoel237.koracore.e2e;
 
-import com.geekersjoel237.koracore.web.api.payment.CashInRequest;
-import com.geekersjoel237.koracore.web.api.payment.CashOutRequest;
-import com.geekersjoel237.koracore.web.api.payment.TransactionResponse;
-import com.geekersjoel237.koracore.web.api.payment.TransferRequest;
+import com.geekersjoel237.koracore.web.api.payment.cashIn.CashInRequest;
+import com.geekersjoel237.koracore.web.api.payment.cashOut.CashOutRequest;
+import com.geekersjoel237.koracore.web.api.payment.shared.TransactionResponse;
+import com.geekersjoel237.koracore.web.api.payment.transfer.TransferRequest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -11,6 +11,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -48,11 +49,11 @@ class MoneyIntegrityE2ETest extends AbstractE2ETest {
                 new CashInRequest("1234", amount, "XOF", "ORANGE_MONEY"),
                 ctx.tokens().accessToken(), TransactionResponse.class);
 
-        BigDecimal imbalance = new BigDecimal(jdbcTemplate.queryForObject("""
+        BigDecimal imbalance = new BigDecimal(Objects.requireNonNull(jdbcTemplate.queryForObject("""
                 SELECT SUM(CASE WHEN type = 'CREDIT' THEN amount ELSE 0 END)
                      - SUM(CASE WHEN type = 'DEBIT'  THEN amount ELSE 0 END)
                 FROM operations WHERE deleted_at IS NULL
-                """, Object.class).toString());
+                """, Object.class)).toString());
 
         assertThat(imbalance).isEqualByComparingTo(BigDecimal.ZERO);
     }
@@ -111,7 +112,7 @@ class MoneyIntegrityE2ETest extends AbstractE2ETest {
         BigDecimal transfer = new BigDecimal("2000.00");
 
         SetupData sender   = setupCustomerWithAccount("mi5s@example.com", "MI5S", "+225", "07000004006", "1234");
-        SetupData receiver = setupCustomerWithAccount("mi5r@example.com", "MI5R", "+225", "07000004007", "5678");
+        setupCustomerWithAccount("mi5r@example.com", "MI5R", "+225", "07000004007", "5678");
 
         postWithToken("/payments/cash-in",
                 new CashInRequest("1234", cashIn, "XOF", "ORANGE_MONEY"),

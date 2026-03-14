@@ -1,9 +1,9 @@
 package com.geekersjoel237.koracore.domain.model;
 
 import com.geekersjoel237.koracore.domain.enums.OperationType;
-import com.geekersjoel237.koracore.domain.model.state.TransactionState;
 import com.geekersjoel237.koracore.domain.enums.TransactionType;
 import com.geekersjoel237.koracore.domain.exception.InvalidStateTransitionException;
+import com.geekersjoel237.koracore.domain.model.state.TransactionState;
 import com.geekersjoel237.koracore.domain.vo.Amount;
 import com.geekersjoel237.koracore.domain.vo.Id;
 import org.junit.jupiter.api.Test;
@@ -18,7 +18,7 @@ class TransactionTest {
 
     private Transaction createTestTransaction() {
         return Transaction.create(
-                Id.generate(), "TRX-001",
+                Id.generate(),
                 new Id("from-001"), new Id("to-001"),
                 TransactionType.CASH_IN, "MOBILE", AMT
         );
@@ -50,11 +50,11 @@ class TransactionTest {
     @Test
     void should_store_from_and_to_ids_correctly() {
         Transaction tx = Transaction.create(
-                Id.generate(), "TRX-001",
+                Id.generate(),
                 new Id("from-001"), new Id("to-001"),
                 TransactionType.CASH_IN, "MOBILE", AMT);
         assertEquals(new Id("from-001"), tx.snapshot().fromId());
-        assertEquals(new Id("to-001"),  tx.snapshot().toId());
+        assertEquals(new Id("to-001"), tx.snapshot().toId());
     }
 
     // ── addOperation ──────────────────────────────────────────────────────────
@@ -130,28 +130,28 @@ class TransactionTest {
     @Test
     void should_throw_when_transaction_id_is_null() {
         assertThrows(IllegalArgumentException.class, () ->
-                Transaction.create(null, "TRX-001", new Id("from"), new Id("to"),
+                Transaction.create(null, new Id("from"), new Id("to"),
                         TransactionType.CASH_IN, "MOBILE", AMT));
     }
 
     @Test
     void should_throw_when_from_id_is_null() {
         assertThrows(IllegalArgumentException.class, () ->
-                Transaction.create(Id.generate(), "TRX-001", null, new Id("to"),
+                Transaction.create(Id.generate(), null, new Id("to"),
                         TransactionType.CASH_IN, "MOBILE", AMT));
     }
 
     @Test
     void should_throw_when_to_id_is_null() {
         assertThrows(IllegalArgumentException.class, () ->
-                Transaction.create(Id.generate(), "TRX-001", new Id("from"), null,
+                Transaction.create(Id.generate(), new Id("from"), null,
                         TransactionType.CASH_IN, "MOBILE", AMT));
     }
 
     @Test
     void should_throw_when_amount_is_null() {
         assertThrows(IllegalArgumentException.class, () ->
-                Transaction.create(Id.generate(), "TRX-001", new Id("from"), new Id("to"),
+                Transaction.create(Id.generate(), new Id("from"), new Id("to"),
                         TransactionType.CASH_IN, "MOBILE", null));
     }
 }
