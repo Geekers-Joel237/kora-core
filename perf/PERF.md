@@ -1,205 +1,205 @@
-# Kora Core — Runbook Tests de Performance
+# Kora Core — Performance Test Runbook
 
-Stack : **k6** · **InfluxDB 1.8** · **Grafana** · **Micrometer** (Spring Boot)
+Stack: **k6** · **InfluxDB 1.8** · **Grafana** · **Micrometer** (Spring Boot)
 
 ---
 
-## Table des matières
+## Table of Contents
 
-1. [Prérequis](#1-prérequis)
+1. [Prerequisites](#1-prerequisites)
 2. [Architecture](#2-architecture)
-3. [SLOs Étape 0](#3-slos-étape-0)
-4. [Exécution locale (tout en une machine)](#4-exécution-locale)
-5. [Exécution distante (app sur serveur, k6 en local)](#5-exécution-distante)
-6. [Ordre des tests et gates de progression](#6-ordre-des-tests-et-gates)
-7. [Résultats attendus par test](#7-résultats-attendus)
-8. [Que surveiller dans Grafana](#8-grafana)
+3. [Step 0 SLOs](#3-step-0-slos)
+4. [Local execution (everything on one machine)](#4-local-execution)
+5. [Remote execution (app on server, k6 locally)](#5-remote-execution)
+6. [Test order and progression gates](#6-test-order-and-gates)
+7. [Expected results per test](#7-expected-results)
+8. [What to monitor in Grafana](#8-grafana)
 9. [Troubleshooting](#9-troubleshooting)
 
 ---
 
-## 1. Prérequis
+## 1. Prerequisites
 
-### Outils requis
+### Required tools
 
-| Outil | Rôle | Vérification |
+| Tool | Role | Verification |
 |---|---|---|
 | Docker Desktop | InfluxDB, Grafana, MailDev | `docker --version` |
-| Java 21 | Runtime Spring Boot | `java --version` |
-| Gradle wrapper | Build et lancement | `./gradlew --version` |
-| curl, nc | Health checks dans les scripts | `curl --version` |
+| Java 21 | Spring Boot runtime | `java --version` |
+| Gradle wrapper | Build and launch | `./gradlew --version` |
+| curl, nc | Health checks in scripts | `curl --version` |
 
-k6 tourne dans un container Docker — pas d'installation locale requise.
+k6 runs inside a Docker container — no local installation required.
 
-### Ports utilisés
+### Ports used
 
-| Port | Service | Utilisé par |
+| Port | Service | Used by |
 |---|---|---|
-| 8081 | Spring Boot | k6, navigateur |
+| 8081 | Spring Boot | k6, browser |
 | 8086 | InfluxDB | k6 (`--out influxdb`), Micrometer, Grafana |
-| 3000 | Grafana | Navigateur |
+| 3000 | Grafana | Browser |
 | 1025 | MailDev SMTP | Spring Boot (`SmtpMailAdapter`) |
-| 1080 | MailDev UI | Navigateur |
+| 1080 | MailDev UI | Browser |
 
-S'assurer qu'aucun de ces ports n'est déjà occupé avant de commencer.
+Make sure none of these ports are already in use before starting.
 
 ---
 
 ## 2. Architecture
 
 ```
-k6 (container Docker)
+k6 (Docker container)
   │
   ├── HTTP ──────────────────► Spring Boot :8081
   │                             SPRING_PROFILES_ACTIVE=perf
   │                             └── TestSupportAction (@Profile("perf"))
-  │                                 GET /test/otp/{email}  ← k6 setup récupère les OTPs
+  │                                 GET /test/otp/{email}  ← k6 setup retrieves OTPs
   │
-  ├── --out influxdb ────────► InfluxDB :8086  (base: k6)
+  ├── --out influxdb ────────► InfluxDB :8086  (database: k6)
   │
 Spring Boot (Micrometer)
-  └── export step=10s ───────► InfluxDB :8086  (base: kora_metrics)
+  └── export step=10s ───────► InfluxDB :8086  (database: kora_metrics)
 
 Grafana :3000
-  ├── datasource: InfluxDB-k6     (base: k6)
-  └── datasource: InfluxDB-kora   (base: kora_metrics)
+  ├── datasource: InfluxDB-k6     (database: k6)
+  └── datasource: InfluxDB-kora   (database: kora_metrics)
 
 MailDev :1025 (SMTP)
-  └── requis par Spring Actuator MailHealthIndicator
-      sans MailDev → health=DOWN → les scripts de santé échouent
+  └── required by Spring Actuator MailHealthIndicator
+      without MailDev → health=DOWN → health check scripts fail
 ```
 
 ---
 
-## 3. SLOs Étape 0
+## 3. Step 0 SLOs
 
-Ces valeurs sont les thresholds du **load test**. Tout dépassement est un signal d'architecture.
+These values are the thresholds for the **load test**. Any breach is an architecture signal.
 
-| SLO | Valeur | Mesuré par |
+| SLO | Value | Measured by |
 |---|---|---|
-| Latence P95 | < 150ms | k6 `http_req_duration` |
+| P95 Latency | < 150ms | k6 `http_req_duration` |
 | Error rate | < 1% | k6 `http_req_failed` |
-| Throughput plateau | ≥ 10 req/sec | k6 `http_reqs` |
+| Plateau throughput | ≥ 10 req/sec | k6 `http_reqs` |
 | Check rate (COMPLETED) | > 99% | k6 `checks` |
 
 ---
 
-## 4. Exécution locale
+## 4. Local execution
 
-> Tout tourne sur la même machine : Spring Boot + Docker (InfluxDB, Grafana, MailDev) + k6.
+> Everything runs on the same machine: Spring Boot + Docker (InfluxDB, Grafana, MailDev) + k6.
 
-### Étape 1 — Démarrer le monitoring
+### Step 1 — Start monitoring
 
 ```bash
 docker compose up -d influxdb grafana maildev
 ```
 
-Attendre ~10s, puis vérifier :
+Wait ~10s, then verify:
 
 ```bash
 curl -s http://localhost:8086/ping   # → pong
-curl -s http://localhost:1080        # → page MailDev
+curl -s http://localhost:1080        # → MailDev page
 ```
 
-### Étape 2 — Démarrer l'app Spring Boot
+### Step 2 — Start the Spring Boot app
 
 ```bash
 SPRING_PROFILES_ACTIVE=perf ./gradlew bootRun
 ```
 
-Attendre le message `Started KoraCoreApplication` dans les logs.
+Wait for the `Started KoraCoreApplication` message in the logs.
 
-Vérifier :
+Verify:
 
 ```bash
 curl -s http://localhost:8081/actuator/health
-# Résultat attendu :
+# Expected result:
 # {"status":"UP","components":{"db":{"status":"UP"},"mail":{"status":"UP"},...}}
 ```
 
-Si `mail: DOWN` → MailDev non démarré, reprendre depuis l'étape 1.
+If `mail: DOWN` → MailDev not started, go back to Step 1.
 
-Vérifier l'export Micrometer (après ~15s) :
+Verify the Micrometer export (after ~15s):
 
 ```bash
 curl -s "http://localhost:8086/query?db=kora_metrics&q=SHOW+MEASUREMENTS"
-# Résultat attendu : hikaricp_connections_active, jvm_memory_used_bytes, ...
+# Expected result: hikaricp_connections_active, jvm_memory_used_bytes, ...
 ```
 
-Vérifier l'endpoint OTP perf :
+Verify the OTP perf endpoint:
 
 ```bash
-# Inscrire un user test
+# Register a test user
 curl -s -X POST http://localhost:8081/auth/register \
   -H "Content-Type: application/json" \
   -d '{"fullName":"Test","email":"check@test.com","phonePrefix":"+237","phoneNumber":"699999998","rawPin":"123456"}'
 
-# Récupérer l'OTP
+# Retrieve the OTP
 curl -s "http://localhost:8081/test/otp/check%40test.com"
-# Résultat attendu : {"code":"XXXXXX"}
+# Expected result: {"code":"XXXXXX"}
 ```
 
-Si `404` → l'app n'est pas démarrée avec `SPRING_PROFILES_ACTIVE=perf`.
+If `404` → the app was not started with `SPRING_PROFILES_ACTIVE=perf`.
 
-### Étape 3 — Lancer les tests (dans l'ordre)
+### Step 3 — Run the tests (in order)
 
 ```bash
-# 1. Smoke (toujours en premier — 2 min)
+# 1. Smoke (always first — 2 min)
 ./perf/smoke-run.sh
 
-# 2. Load (validation SLOs — 11 min)
+# 2. Load (SLO validation — 11 min)
 ./perf/load-run.sh
 
-# 3. Stress (point de rupture — 22 min max)
+# 3. Stress (breaking point — 22 min max)
 ./perf/stress-run.sh
 
-# 4. Soak (stabilité longue durée — 30 min)
+# 4. Soak (long-term stability — 30 min)
 ./perf/soak-run.sh
 ```
 
 ---
 
-## 5. Exécution distante
+## 5. Remote execution
 
-> L'app tourne sur un serveur distant. k6 et le monitoring tournent en local ou sur une machine séparée.
+> The app runs on a remote server. k6 and monitoring run locally or on a separate machine.
 
-### Cas A — App sur serveur, monitoring + k6 en local
+### Case A — App on server, monitoring + k6 locally
 
 ```bash
-# Démarrer le monitoring en local
+# Start monitoring locally
 docker compose up -d influxdb grafana maildev
 
-# Passer l'URL de l'app à chaque script
-./perf/smoke-run.sh http://mon-serveur:8081
-./perf/load-run.sh  http://mon-serveur:8081
+# Pass the app URL to each script
+./perf/smoke-run.sh http://my-server:8081
+./perf/load-run.sh  http://my-server:8081
 ```
 
-Le script utilise `--network host` pour que k6 (container Docker) atteigne `localhost:8086` (InfluxDB local).
-L'app sur le serveur doit être accessible depuis la machine qui lance k6.
+The script uses `--network host` so that k6 (Docker container) can reach `localhost:8086` (local InfluxDB).
+The app on the server must be reachable from the machine running k6.
 
-**Préconditions serveur :**
-- `SPRING_PROFILES_ACTIVE=perf` actif sur le serveur
-- Ports 8081 ouvert vers la machine de test
-- `GET /test/otp/{email}` accessible depuis la machine de test
+**Server preconditions:**
+- `SPRING_PROFILES_ACTIVE=perf` active on the server
+- Port 8081 open toward the test machine
+- `GET /test/otp/{email}` accessible from the test machine
 
-### Cas B — App + k6 sur serveur, Grafana en local
+### Case B — App + k6 on server, Grafana locally
 
-Dans ce cas, modifier `INFLUX_URL` dans le script pour pointer vers l'InfluxDB du serveur, puis configurer la datasource Grafana locale vers ce même InfluxDB.
+In this case, modify `INFLUX_URL` in the script to point to the server's InfluxDB, then configure the local Grafana datasource to point to that same InfluxDB.
 
-> Pour l'Étape 0 (charge nominale modeste : 10 req/sec), le cas A est suffisant.
+> For Step 0 (modest nominal load: 10 req/sec), Case A is sufficient.
 
 ---
 
-## 6. Ordre des tests et gates
+## 6. Test order and gates
 
-**Ne jamais sauter une étape. Chaque test est un gate vers le suivant.**
+**Never skip a step. Each test is a gate to the next.**
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  PRÉCONDITIONS                                               │
+│  PRECONDITIONS                                               │
 │  □ health = UP (db + mail)                                  │
 │  □ /test/otp/{email} → {"code":"..."}                       │
-│  □ kora_metrics dans InfluxDB                               │
+│  □ kora_metrics in InfluxDB                                 │
 └───────────────────────┬─────────────────────────────────────┘
                         │
                         ▼
@@ -208,146 +208,146 @@ Dans ce cas, modifier `INFLUX_URL` dans le script pour pointer vers l'InfluxDB d
               │   1 VU · 2 min  │
               └────────┬────────┘
                        │
-              PASS ?   │
+              PASS?    │
           ┌────────────┴────────────┐
-         NON                       OUI
+          NO                       YES
           │                         │
-    Corriger le bug          ┌──────▼──────────┐
-    avant de continuer       │   LOAD TEST     │  ./perf/load-run.sh
-                             │  10 req/s · 11m │
-                             └──────┬──────────┘
-                                    │
-                           SLOs OK? │  p95<150ms · errors<1%
-                        ┌───────────┴───────────┐
-                       NON                      OUI
-                        │                        │
-                 Analyser Grafana         ┌──────▼──────────┐
-                 (section 8)             │  STRESS TEST    │  ./perf/stress-run.sh
-                 Corriger                │  5→50 req/s     │
-                 Re-lancer load          │  22 min max     │
-                                         └──────┬──────────┘
-                                                │
-                                    Documenter  │  palier de rupture
-                                    dans l'ADR  │
-                                                │
-                                         ┌──────▼──────────┐
-                                         │   SOAK TEST     │  ./perf/soak-run.sh
-                                         │  5 req/s · 30m  │
-                                         └──────┬──────────┘
-                                                │
-                                       Stable?  │  heap + connexions + p95
-                                    ┌───────────┴───────────┐
-                                   NON                      OUI
-                                    │                        │
-                             Chercher fuite           ✓ Étape 0 validée
-                             mémoire / connexion
+    Fix the bug                ┌──────▼──────────┐
+    before continuing          │   LOAD TEST     │  ./perf/load-run.sh
+                               │  10 req/s · 11m │
+                               └──────┬──────────┘
+                                      │
+                             SLOs OK? │  p95<150ms · errors<1%
+                          ┌───────────┴───────────┐
+                         NO                       YES
+                          │                        │
+                   Analyze Grafana         ┌──────▼──────────┐
+                   (section 8)             │  STRESS TEST    │  ./perf/stress-run.sh
+                   Fix                     │  5→50 req/s     │
+                   Re-run load             │  22 min max     │
+                                           └──────┬──────────┘
+                                                  │
+                                      Document    │  breaking point
+                                      in the ADR  │
+                                                  │
+                                           ┌──────▼──────────┐
+                                           │   SOAK TEST     │  ./perf/soak-run.sh
+                                           │  5 req/s · 30m  │
+                                           └──────┬──────────┘
+                                                  │
+                                         Stable?  │  heap + connections + p95
+                                      ┌───────────┴───────────┐
+                                     NO                       YES
+                                      │                        │
+                               Look for leak           ✓ Step 0 validated
+                               memory / connection
 ```
 
 ---
 
-## 7. Résultats attendus
+## 7. Expected results
 
 ### Smoke test
 
-| Indicateur | Résultat attendu |
+| Indicator | Expected result |
 |---|---|
 | Exit code | 0 |
-| Sortie k6 | `✓ register 200`, `✓ cash-in 200`, `✓ cash-in COMPLETED` |
+| k6 output | `✓ register 200`, `✓ cash-in 200`, `✓ cash-in COMPLETED` |
 | `http_req_failed` | 0% |
-| `http_req_duration` p95 | < 2 000ms (seuil souple) |
-| Grafana | Les 6 panneaux alimentés, courbes visibles |
+| `http_req_duration` p95 | < 2 000ms (soft threshold) |
+| Grafana | All 6 panels populated, curves visible |
 
-Si le smoke **échoue** : ne pas lancer le load test. Corriger d'abord.
+If the smoke test **fails**: do not run the load test. Fix the issue first.
 
 ---
 
 ### Load test
 
-| Indicateur | Résultat attendu | Threshold k6 |
+| Indicator | Expected result | k6 threshold |
 |---|---|---|
 | `http_req_duration` p95 | < 150ms | strict (`abortOnFail: false`) |
 | `http_req_failed` rate | < 1% | strict |
 | `checks` rate | > 99% | strict |
 | Exit code | 0 = PASS, 1 = FAIL | — |
-| Sortie finale | `✓ load test PASSED — SLOs validés` | — |
+| Final output | `✓ load test PASSED — SLOs validated` | — |
 
-**Courbe de latence attendue dans Grafana :**
+**Expected latency curve in Grafana:**
 ```
-Ramp-up (0-2min)  : p95 monte progressivement jusqu'à ~80-120ms
-Plateau (2-10min) : p95 stable entre 50 et 120ms
-Ramp-down (10-11m): p95 redescend vers 20-40ms
+Ramp-up (0-2min)  : p95 rises progressively up to ~80-120ms
+Plateau (2-10min) : p95 stable between 50 and 120ms
+Ramp-down (10-11m): p95 drops back toward 20-40ms
 ```
 
-Si la courbe monte et ne se stabilise pas au plateau → le système est saturé à 10 req/sec, c'est un bug d'architecture.
+If the curve rises and does not stabilize at the plateau → the system is saturated at 10 req/sec, this is an architecture bug.
 
 ---
 
 ### Stress test
 
-Le stress test ne PASS/FAIL pas au sens strict. Il s'arrête quand la rupture est atteinte (ou à 50 req/sec si le système tient).
+The stress test does not PASS/FAIL in the strict sense. It stops when the breaking point is reached (or at 50 req/sec if the system holds).
 
-| Palier | p95 attendu (système sain) | Signal de rupture |
+| Level | Expected p95 (healthy system) | Breaking signal |
 |---|---|---|
 | 5 req/s | < 100ms | — |
 | 10 req/s | < 150ms (=SLO) | — |
-| 20 req/s | 150–300ms | p95 > 500ms = rupture |
-| 30 req/s | 300–500ms | hikaricp_pending > 0 = pool saturé |
-| 50 req/s | > 500ms probable | errors > 5% = arrêt conditionnel |
+| 20 req/s | 150–300ms | p95 > 500ms = breaking point |
+| 30 req/s | 300–500ms | hikaricp_pending > 0 = pool saturated |
+| 50 req/s | > 500ms likely | errors > 5% = conditional stop |
 
-**Documenter :** à quel palier le p95 dépasse 500ms et quelle métrique dégrade en premier (latence ? pool DB ? heap ?).
+**Document:** at which level p95 exceeds 500ms and which metric degrades first (latency? DB pool? heap?).
 
 ---
 
 ### Soak test
 
-| Indicateur | Résultat attendu |
+| Indicator | Expected result |
 |---|---|
 | Exit code | 0 |
-| `http_req_duration` p95 | < 300ms sur toute la durée |
+| `http_req_duration` p95 | < 300ms throughout the entire duration |
 | `http_req_failed` | < 1% |
-| JVM heap | Stable — oscille dans une bande de ±100MB, ne dérive pas à la hausse |
-| `hikaricp_connections_pending` | Reste à 0 pendant les 30 min |
-| `soak_latency_trend` p95 | Stable — pas de tendance haussière |
+| JVM heap | Stable — oscillates within a ±100MB band, does not drift upward |
+| `hikaricp_connections_pending` | Stays at 0 for the full 30 min |
+| `soak_latency_trend` p95 | Stable — no upward trend |
 
-**Signal de fuite mémoire :**
+**Memory leak signal:**
 ```
-Normal   : heap  200MB ──▲──▼──▲──▼──  200MB  (cycles GC)
-Fuite    : heap  200MB ─────────────────────►  600MB  (dérive monotone)
+Normal : heap  200MB ──▲──▼──▲──▼──  200MB  (GC cycles)
+Leak   : heap  200MB ─────────────────────►  600MB  (monotonic drift)
 ```
 
 ---
 
 ## 8. Grafana
 
-URL : `http://localhost:3000/d/kora-load/kora-load-test`
-Credentials : `admin / admin`
+URL: `http://localhost:3000/d/kora-load/kora-load-test`
+Credentials: `admin / admin`
 
-Le dashboard est auto-provisionné — aucune configuration manuelle.
+The dashboard is auto-provisioned — no manual configuration needed.
 
-### Pendant un test : paramètres recommandés
+### During a test: recommended settings
 
-- Fenêtre temporelle : `Last 30 minutes`
-- Rafraîchissement : `5s` (menu en haut à droite)
+- Time window: `Last 30 minutes`
+- Refresh: `5s` (top-right menu)
 
-### Checklist des 6 panneaux
+### Checklist of the 6 panels
 
-| # | Panneau | Source | Ce qu'on doit voir |
+| # | Panel | Source | What you should see |
 |---|---|---|---|
-| 1 | Latence p50/p95/p99 | k6 | 3 courbes distinctes, p95 sous la ligne rouge 150ms |
-| 2 | Throughput req/sec | k6 | Montée progressive, plateau à 10 req/s pendant 8 min |
-| 3 | Error Rate % | k6 | Proche de 0%, sous la ligne rouge 1% |
-| 4 | HikariCP connections | kora | `active` entre 0 et 20, `pending` à 0 |
-| 5 | JVM Heap MB | kora | Courbe stable avec oscillations GC normales |
-| 6 | Latence applicative p95 | kora | Proche du panneau 1, légèrement inférieure (pas de réseau) |
+| 1 | Latency p50/p95/p99 | k6 | 3 distinct curves, p95 below the red 150ms line |
+| 2 | Throughput req/sec | k6 | Progressive ramp-up, plateau at 10 req/s for 8 min |
+| 3 | Error Rate % | k6 | Near 0%, below the red 1% line |
+| 4 | HikariCP connections | kora | `active` between 0 and 20, `pending` at 0 |
+| 5 | JVM Heap MB | kora | Stable curve with normal GC oscillations |
+| 6 | Application latency p95 | kora | Close to panel 1, slightly lower (no network) |
 
-Si un panneau est **vide** :
-1. Vérifier que le test est bien en cours (pas encore terminé ?)
-2. Vérifier la datasource : `http://localhost:3000/connections/datasources`
-3. Vérifier que la base InfluxDB contient des données :
+If a panel is **empty**:
+1. Verify the test is still running (not finished yet?)
+2. Check the datasource: `http://localhost:3000/connections/datasources`
+3. Verify the InfluxDB database contains data:
    ```bash
-   # Pour les métriques k6
+   # For k6 metrics
    curl -s "http://localhost:8086/query?db=k6&q=SHOW+MEASUREMENTS"
-   # Pour les métriques Micrometer
+   # For Micrometer metrics
    curl -s "http://localhost:8086/query?db=kora_metrics&q=SHOW+MEASUREMENTS"
    ```
 
@@ -355,46 +355,46 @@ Si un panneau est **vide** :
 
 ## 9. Troubleshooting
 
-### `health = DOWN` au démarrage
+### `health = DOWN` at startup
 
 ```bash
 curl http://localhost:8081/actuator/health | python -m json.tool
 ```
 
-| Composant DOWN | Cause | Correction |
+| Component DOWN | Cause | Fix |
 |---|---|---|
-| `mail` | MailDev non démarré | `docker compose up -d maildev` |
-| `db` | PostgreSQL non démarré | `docker compose up -d postgres` |
+| `mail` | MailDev not started | `docker compose up -d maildev` |
+| `db` | PostgreSQL not started | `docker compose up -d postgres` |
 
 ---
 
 ### `docker: Error response from daemon: invalid mode: /perf`
 
-Problème MSYS2/Git Bash : conversion automatique des chemins Unix en chemins Windows.
-Les scripts gèrent déjà ce cas avec `export MSYS_NO_PATHCONV=1` dans un sous-shell.
+MSYS2/Git Bash issue: automatic conversion of Unix paths to Windows paths.
+The scripts already handle this case with `export MSYS_NO_PATHCONV=1` in a sub-shell.
 
-Si l'erreur persiste : lancer depuis **PowerShell** ou **WSL** plutôt que Git Bash.
+If the error persists: run from **PowerShell** or **WSL** instead of Git Bash.
 
 ---
 
-### `/test/otp/{email}` retourne 404
+### `/test/otp/{email}` returns 404
 
-Causes et corrections dans l'ordre :
+Causes and fixes in order:
 
-1. **App démarrée sans le profil perf**
+1. **App started without the perf profile**
    ```bash
-   # Mauvais
+   # Wrong
    ./gradlew bootRun
    # Correct
    SPRING_PROFILES_ACTIVE=perf ./gradlew bootRun
    ```
 
-2. **OTP expiré** (TTL : 5 min) — le setup est trop lent pour le nombre d'users
-   → Réduire `USER_COUNT` dans `load.js` / `stress.js`
+2. **OTP expired** (TTL: 5 min) — the setup is too slow for the number of users
+   → Reduce `USER_COUNT` in `load.js` / `stress.js`
 
-3. **Email mal encodé dans l'URL**
+3. **Email not URL-encoded**
    ```bash
-   # Mauvais (@ non encodé)
+   # Wrong (@ not encoded)
    curl http://localhost:8081/test/otp/user@test.com
    # Correct
    curl http://localhost:8081/test/otp/user%40test.com
@@ -402,33 +402,33 @@ Causes et corrections dans l'ordre :
 
 ---
 
-### `InsufficientFundsException` en masse pendant le test
+### Bulk `InsufficientFundsException` during the test
 
-Le seed de 200 000 XOF a été épuisé. Le cashOut (5 000) ou le transfer (2 000) a été appelé plus de fois que prévu.
+The 200,000 XOF seed has been exhausted. The cashOut (5,000) or transfer (2,000) was called more times than expected.
 
-Calcul du seed minimum pour un soak test :
+Minimum seed calculation for a soak test:
 ```
-5 req/sec × 30 min = 9 000 requêtes
-cashOut 15% + transfer 35% = 50% de requêtes débitent
-9 000 × 0.50 × 5 000 XOF = 22 500 000 XOF / nb_users
+5 req/sec × 30 min = 9,000 requests
+cashOut 15% + transfer 35% = 50% of requests are debits
+9,000 × 0.50 × 5,000 XOF = 22,500,000 XOF / nb_users
 
-Pour 15 users : 22 500 000 / 15 = 1 500 000 XOF par user
+For 15 users: 22,500,000 / 15 = 1,500,000 XOF per user
 ```
 
-Corriger dans `data/setup.js` : augmenter `SEED_AMOUNT`.
+Fix in `data/setup.js`: increase `SEED_AMOUNT`.
 
 ---
 
-### Grafana — panneaux vides après le test
+### Grafana — empty panels after the test
 
-1. Vérifier que les measurements existent dans InfluxDB :
+1. Verify that measurements exist in InfluxDB:
    ```bash
    curl -s "http://localhost:8086/query?db=k6&q=SHOW+MEASUREMENTS"
    ```
 
-2. Si vide : le `--out influxdb` n'a pas fonctionné → relancer avec les logs k6 visibles :
+2. If empty: the `--out influxdb` did not work → re-run with k6 logs visible:
    ```bash
-   # Lancer manuellement sans le script shell pour voir les erreurs k6
+   # Run manually without the shell script to see k6 errors
    docker run --rm --network host \
      -v "$(pwd)/perf:/perf" \
      -e BASE_URL=http://localhost:8081 \
@@ -436,31 +436,31 @@ Corriger dans `data/setup.js` : augmenter `SEED_AMOUNT`.
      run --out influxdb=http://localhost:8086/k6 /perf/smoke.js
    ```
 
-3. Si les measurements existent mais Grafana est vide : ajuster la fenêtre temporelle sur l'heure du run.
+3. If measurements exist but Grafana is empty: adjust the time window to the run's time range.
 
 ---
 
-## Référence rapide
+## Quick Reference
 
 ```bash
-# ── Démarrage ────────────────────────────────────────────────────
+# ── Startup ───────────────────────────────────────────────────
 docker compose up -d influxdb grafana maildev
 SPRING_PROFILES_ACTIVE=perf ./gradlew bootRun
 
-# ── Sanité avant test ────────────────────────────────────────────
+# ── Pre-test sanity check ─────────────────────────────────────
 curl http://localhost:8081/actuator/health
 curl "http://localhost:8086/query?db=kora_metrics&q=SHOW+MEASUREMENTS"
-curl "http://localhost:8081/test/otp/check%40test.com"  # après register
+curl "http://localhost:8081/test/otp/check%40test.com"  # after register
 
-# ── Tests (dans l'ordre) ─────────────────────────────────────────
-./perf/smoke-run.sh   [BASE_URL]   # 2 min  — gate obligatoire
-./perf/load-run.sh    [BASE_URL]   # 11 min — valide les SLOs
-./perf/stress-run.sh  [BASE_URL]   # 22 min — point de rupture
-./perf/soak-run.sh    [BASE_URL]   # 30 min — stabilité
+# ── Tests (in order) ─────────────────────────────────────────
+./perf/smoke-run.sh   [BASE_URL]   # 2 min  — mandatory gate
+./perf/load-run.sh    [BASE_URL]   # 11 min — validates SLOs
+./perf/stress-run.sh  [BASE_URL]   # 22 min — breaking point
+./perf/soak-run.sh    [BASE_URL]   # 30 min — stability
 
-# BASE_URL par défaut : http://host.docker.internal:8081
+# BASE_URL default: http://host.docker.internal:8081
 
-# ── URLs ─────────────────────────────────────────────────────────
+# ── URLs ─────────────────────────────────────────────────────
 # App       http://localhost:8081
 # Health    http://localhost:8081/actuator/health
 # Grafana   http://localhost:3000   (admin/admin)

@@ -1,15 +1,13 @@
 /**
  * auth.js — Helpers d'authentification réutilisables entre tous les scénarios.
  *
- * Architecture token (VU-local) :
- *   - Les tokens sont stockés dans des variables de module (_vuToken, _vuTokenExpires).
- *   - Dans k6, les variables de module sont isolées par VU — chaque VU a sa propre copie.
- *   - Le token est obtenu par login() au premier appel de getToken(), puis réutilisé.
- *   - tokenExpiresAt en secondes depuis epoch — évite la corruption des grands entiers
- *     lors d'une éventuelle sérialisation k6.
- *   - Aucun token dans setup() → élimine définitivement le problème inter-contextes k6.
+ * getToken() utilise le token pré-obtenu dans setup() tant qu'il est valide.
+ * Pour le soak test (> 14 min), un renouvellement par login() est déclenché.
  *
- * Tous les flows passent par l'OTP store exposé sur /test/otp/{email}
+ * tokenExpiresAt en secondes depuis epoch (pas en ms) — évite la corruption des
+ * grands entiers par la sérialisation JSON entre setup() et default() dans k6.
+ *
+ * Tous les flows OTP passent par /test/otp/{email}
  * (endpoint @Profile("perf") — TestSupportAction).
  */
 
@@ -19,38 +17,37 @@ import { check, sleep } from 'k6';
 const BASE_URL     = __ENV.BASE_URL || 'http://localhost:8081';
 const HEADERS_JSON = { 'Content-Type': 'application/json' };
 
-// Variables VU-local — chaque VU k6 a sa propre copie isolée de ces variables.
-let _vuToken        = null;
-let _vuTokenExpires = 0;  // secondes depuis epoch
-
 /**
- * Retourne un accessToken valide pour ce VU.
- * Fait un login si le VU n'est pas encore authentifié ou si le token est expiré.
+ * Retourne un accessToken valide.
  *
- * Durée de vie token : 15 min côté serveur — fenêtre d'utilisation : 14 min.
- * Seul le soak test (30m) déclenche un renouvellement en cours de run.
+ * Priorité :
+ *   1. Token de setup() si non expiré (nowSec < user.tokenExpiresAt)
+ *   2. login() si expiré — déclenché uniquement pour le soak test (> 14 min)
  *
- * @param {object} user  { email, pin }
+ * Mutations sur user.accessToken et user.tokenExpiresAt restent locales au VU
+ * (k6 désérialise setup() data par VU — pas de partage entre VUs).
+ *
+ * @param {object} user  { email, pin, accessToken, tokenExpiresAt }
  * @returns {string}     accessToken valide
  */
 export function getToken(user) {
     const nowSec = Math.floor(Date.now() / 1000);
-    if (_vuToken && nowSec < _vuTokenExpires) {
-        return _vuToken;
+    if (user.accessToken && nowSec < user.tokenExpiresAt) {
+        return user.accessToken;
     }
-    // Login — token obtenu directement dans ce VU, pas de sérialisation inter-contextes
+    // Renouvellement — uniquement déclenché pour le soak test (> 14 min)
     const { accessToken } = login(user.email, user.pin);
-    _vuToken        = accessToken;
-    _vuTokenExpires = Math.floor(Date.now() / 1000) + 14 * 60;
-    return _vuToken;
+    user.accessToken    = accessToken;
+    user.tokenExpiresAt = Math.floor(Date.now() / 1000) + 14 * 60;
+    return accessToken;
 }
 
 /**
- * Login + verify-otp → retourne les tokens frais.
+ * Login complet : POST /auth/login → captureOtp → POST /auth/verify-otp.
  *
  * @param {string} email
  * @param {string} pin
- * @returns {{ accessToken: string, refreshToken: string }}
+ * @returns {{ accessToken: string }}
  */
 export function login(email, pin) {
     const loginRes = http.post(
@@ -69,8 +66,7 @@ export function login(email, pin) {
     );
     check(verifyRes, { 'verify-otp (login) 200': (r) => r.status === 200 });
 
-    const body = JSON.parse(verifyRes.body);
-    return { accessToken: body.accessToken, refreshToken: body.refreshToken };
+    return { accessToken: JSON.parse(verifyRes.body).accessToken };
 }
 
 /**
