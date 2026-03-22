@@ -37,3 +37,4 @@ out/
 .vscode/
 /CLAUDE.md
 /.env
+/logs/
