@@ -21,7 +21,7 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class TransactionEntity extends BaseEntity {
+public class TransactionEntity extends VersionedEntity {
 
     @Column(name = "transaction_number", unique = true, nullable = false)
     private String transactionNumber;

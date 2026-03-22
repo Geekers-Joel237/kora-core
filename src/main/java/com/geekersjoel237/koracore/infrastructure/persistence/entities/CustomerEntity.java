@@ -13,7 +13,7 @@ import lombok.*;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class CustomerEntity extends BaseEntity {
+public class CustomerEntity extends VersionedEntity {
 
     @OneToOne(cascade = CascadeType.ALL)
     @MapsId

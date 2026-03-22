@@ -5,8 +5,9 @@ import com.geekersjoel237.koracore.application.command.CashOutCommand;
 import com.geekersjoel237.koracore.application.command.TransferCommand;
 import com.geekersjoel237.koracore.application.query.TransactionSummary;
 import com.geekersjoel237.koracore.application.service.AuthService;
-import com.geekersjoel237.koracore.application.service.TransactionHistoryService;
 import com.geekersjoel237.koracore.application.service.PaymentService;
+import com.geekersjoel237.koracore.application.service.PaymentTransactionalExecutor;
+import com.geekersjoel237.koracore.application.service.TransactionHistoryService;
 import com.geekersjoel237.koracore.domain.enums.Direction;
 import com.geekersjoel237.koracore.domain.enums.Role;
 import com.geekersjoel237.koracore.domain.enums.TransactionType;
@@ -66,9 +67,10 @@ class TransactionHistoryServiceTest {
         AuthService authService = new AuthService(
                 new InMemoryUserRepository(), customerRepo, accountRepo, otpStore, pinEncoder,
                 Clock.systemUTC(), mailPort);
-        paymentService = new PaymentService(
+        PaymentTransactionalExecutor executor = new PaymentTransactionalExecutor(
                 authService, accountRepo, customerRepo,
                 transactionRepo, historicRepo, new InMemoryProviderSimulator(SUCCESS), ledgerRepo);
+        paymentService = new PaymentService(executor, accountRepo);
 
         historyService = new TransactionHistoryService(transactionRepo, accountRepo, customerRepo);
 

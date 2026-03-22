@@ -40,7 +40,18 @@ public class JpaTransactionRepository implements TransactionRepository {
 
     @Override
     public void save(Transaction transaction) {
-        jpaTransactionRepo.save(toEntity(transaction));
+        String id = transaction.snapshot().transactionId().value();
+
+        TransactionEntity entity = jpaTransactionRepo.findById(id).orElse(null);
+        if (entity == null) {
+            jpaTransactionRepo.save(toEntity(transaction));
+        } else {
+            // Only the state changes after the initial INSERT.
+            // Operations are immutable — do not replace the collection to
+            // avoid orphan-removal deleting them.
+            entity.setState(transaction.snapshot().state().name());
+            jpaTransactionRepo.save(entity);
+        }
     }
 
     @Override

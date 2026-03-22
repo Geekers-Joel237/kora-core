@@ -367,43 +367,163 @@ account are no longer statistically negligible. Two concurrent CAPTURE operation
 on accounts with shared balance references can produce incorrect `balance_amount`
 cache values.
 
-### Decision: Optimistic Locking on AccountEntity
+---
+
+### Decision: VersionedEntity — Explicit Mutability Contract
+
+`@Version` is **not** placed on `BaseEntity`. It is placed on a dedicated
+abstract superclass `VersionedEntity`, inserted between `BaseEntity` and
+the mutable entities that require concurrency protection.
+
+```
+BaseEntity             — all entities (createdAt, updatedAt, deletedAt)
+└─ VersionedEntity     — mutable entities only (adds version: Long)
+   ├─ AccountEntity
+   ├─ TransactionEntity
+   ├─ UserEntity
+   └─ CustomerEntity
+   └─ AuthorizationRecordEntity
+```
+
+Immutable entities remain direct children of `BaseEntity`:
+
+```
+BaseEntity
+├─ LedgerEntity             — read-only after bootstrap
+├─ OperationEntity          — INSERT only (audit trail, ADR-001)
+└─ TrxStateHistoricEntity   — INSERT only (audit trail, ADR-002)
+```
+
+**Why not BaseEntity:**
+`OperationEntity` and `TrxStateHistoricEntity` are **immutable by design** —
+they are INSERT-only append structures. Placing `@Version` on them would be an
+architectural contradiction: it implies Hibernate may emit UPDATE statements on
+these entities, which must never happen. The `VersionedEntity` intermediate class
+encodes the mutability contract directly in the type hierarchy. An entity that
+extends `BaseEntity` directly is a contract that it will never be updated.
 
 ```java
-@Entity
-public class AccountEntity extends BaseEntity {
+@MappedSuperclass
+public abstract class VersionedEntity extends BaseEntity {
 
     @Version
-    private Long version;   // ← resolves ADR-001 concurrency gap
-
-    private BigDecimal balanceAmount;
-    // ...
+    @Column(name = "version", nullable = false)
+    private Long version;
 }
 ```
 
-On concurrent update collision, Spring Data throws `OptimisticLockException`.
-The application layer catches this exception and retries the operation with
-exponential backoff (max 3 attempts before surfacing as a transient error).
+On concurrent update collision, Hibernate generates:
 
-**Why optimistic over pessimistic locking:**
-At 20–30 req/sec, contention on any individual account is low. Optimistic locking
-avoids the performance overhead of `SELECT FOR UPDATE` row locks on the common
-path. Pessimistic locking is reserved for the float account, which is a shared
-resource with guaranteed high contention.
-
-**Float account — pessimistic locking:**
-
-```java
-// Float account operations use SELECT FOR UPDATE
-// to prevent concurrent debits from multiple transactions
-@Lock(LockModeType.PESSIMISTIC_WRITE)
-Optional<AccountEntity> findByAccountTypeForUpdate(AccountType type);
+```sql
+UPDATE accounts
+SET balance_amount = ?, version = 2
+WHERE id = ? AND version = 1   -- ← guards against lost update
 ```
 
-**Suitability boundary:**
-Optimistic locking on `AccountEntity` is suitable up to ~50 req/sec per account.
-Beyond this, the retry rate becomes a latency problem. Resolution at Step 3+:
-event-sourced balance computation removing `balance_amount` entirely.
+If `version` no longer matches (another thread committed first), Hibernate throws
+`OptimisticLockingFailureException`. The application layer catches this and retries
+with exponential backoff — maximum 3 attempts before surfacing as `503 Service
+Unavailable` (`TransientPaymentException`).
+
+---
+
+### Float Account — Pessimistic Locking
+
+The float account is a **structural hot spot**: every payment in the system
+touches it. Unlike user accounts where concurrent operations on the same account
+are statistically rare, concurrent hits on the float account are **guaranteed**
+under any meaningful load.
+
+Under optimistic locking, the float account under 30 concurrent payments would
+generate a retry storm: every thread loses the race, retries, loses again.
+Instead of throughput, the system produces contention cascades.
+
+**The decision: `SELECT FOR UPDATE` on the float account.**
+
+```java
+@Lock(LockModeType.PESSIMISTIC_WRITE)
+@Query("SELECT a FROM AccountEntity a " +
+       "WHERE a.resourceType = 'FLOAT_ACCOUNT' " +
+       "AND a.resourceId = :providerId " +
+       "AND a.deletedAt IS NULL")
+Optional<AccountEntity> findFloatAccountForUpdate(
+        @Param("providerId") String providerId);
+```
+
+PostgreSQL translates this to:
+
+```sql
+SELECT * FROM accounts
+WHERE resource_type = 'FLOAT_ACCOUNT'
+AND resource_id = :providerId
+AND deleted_at IS NULL
+FOR UPDATE   -- ← exclusive row lock
+```
+
+The row lock is held for the entire `@Transactional` boundary. Concurrent threads
+queue behind the lock holder instead of racing and failing. This transforms a
+retry storm into a serialized queue — predictable, bounded, measurable.
+
+**Critical constraint: provider calls must not occur inside the lock boundary.**
+
+If the payment service calls an external provider (MTN MoMo, Campost) within the
+same `@Transactional` that holds the float account lock, the lock is held for the
+full provider round-trip — potentially 200ms to 2s. Every other concurrent payment
+is blocked for that duration.
+
+```
+❌ Wrong:
+@Transactional
+executePayment() {
+    floatAccount = findFloatAccountForUpdate()   ← lock acquired
+    provider.capture(...)                        ← 800ms external call
+    save(floatAccount)                           ← lock released on commit
+}
+
+✓ Correct:
+@Transactional
+executePayment() {
+    validate, initiate, authorize               ← no lock
+}
+
+@Transactional (separate)
+capturePayment() {
+    floatAccount = findFloatAccountForUpdate()  ← lock acquired
+    writeEntries(floatAccount)                  ← in-memory, fast
+    save(floatAccount)                          ← lock released immediately
+}
+```
+
+Provider calls at Step 1 are stub implementations. This constraint is documented
+now so it is enforced before Step 3 introduces real async provider calls.
+
+---
+
+### Locking Strategy Summary
+
+| Entity | Strategy | Rationale |
+|---|---|---|
+| `AccountEntity` | Optimistic (`@Version`) | Contention per user account is rare at 20–30 req/sec |
+| `TransactionEntity` | Optimistic (`@Version`) | Flow + TTL job collision is unlikely |
+| `AuthorizationRecordEntity` | Optimistic (`@Version`) | Same as TransactionEntity |
+| Float `AccountEntity` | Pessimistic (`FOR UPDATE`) | Every payment hits this row — retry storm under optimistic |
+| `OperationEntity` | None | Immutable — INSERT only |
+| `TrxStateHistoricEntity` | None | Immutable — INSERT only |
+| `LedgerEntity` | None | Read-only after bootstrap |
+
+---
+
+### Suitability Boundary
+
+Optimistic locking on `AccountEntity` is suitable up to approximately 50 req/sec
+**per account**. At Step 1 (20–30 req/sec total, many distinct accounts), this
+boundary is not approached.
+
+If Step 3+ reaches a scenario where a single account is targeted by concentrated
+traffic (e.g. a merchant account receiving many payments), the retry rate on that
+account will spike. Resolution at that point: event-sourced balance computation
+removing `balance_amount` from `AccountEntity` entirely, making the row write-free
+on the read path.
 
 ---
 
@@ -494,8 +614,11 @@ timeline — is out of scope for Step 1.
   traceability requirements for the full lifecycle of electronic money operations.
 - **Clean reversal semantics**: technical compensation (ADR-001) and business
   reversal (ADR-002) are distinct, non-conflatable operations.
-- **Concurrency debt resolved**: `@Version` optimistic locking eliminates the
-  lost update problem documented in ADR-001 before scaling to Step 1 volume.
+- **Concurrency debt resolved**: `VersionedEntity` introduces optimistic locking
+  on mutable entities and pessimistic locking on the float account hot spot,
+  eliminating the lost update problem documented in ADR-001. The type hierarchy
+  encodes mutability as an explicit architectural contract — immutable entities
+  (`OperationEntity`, `TrxStateHistoricEntity`) cannot accidentally acquire `@Version`.
 
 ### Negative / Trade-offs
 
@@ -551,7 +674,8 @@ lifecycle — one transaction, multiple states.
 | p95 latency (payment endpoints) | < 200ms | < 150ms |
 | Error rate | < 1% | < 1% |
 | DB QPS | ~100–150 | ~30–60 |
-| Optimistic lock retry rate | < 2% | N/A |
+| Optimistic lock retry rate (user accounts) | < 2% | N/A |
+| Float account lock wait time (p95) | < 10ms | N/A |
 | Authorization TTL expiry job | runs every 60s | N/A |
 
 ---

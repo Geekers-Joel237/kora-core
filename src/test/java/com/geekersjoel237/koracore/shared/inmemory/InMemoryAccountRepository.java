@@ -32,11 +32,22 @@ public class InMemoryAccountRepository implements AccountRepository {
     }
 
     @Override
+    public Optional<Account> findByCustomerIdForUpdate(Id customerId) {
+        return findByCustomerId(customerId);
+    }
+
+    @Override
     public Optional<Account> findFloatByProviderId(Id providerId) {
         return store.values().stream()
                 .filter(a -> a.snapshot().accountType().resourceType() == ResourceType.FLOAT_ACCOUNT
                         && a.snapshot().accountType().resourceId().equals(providerId))
                 .findFirst();
+    }
+
+    @Override
+    public Optional<Account> findFloatByProviderIdForUpdate(Id providerId) {
+        // In-memory: no locking needed — delegate to the same logic
+        return findFloatByProviderId(providerId);
     }
 
     public void reset() {

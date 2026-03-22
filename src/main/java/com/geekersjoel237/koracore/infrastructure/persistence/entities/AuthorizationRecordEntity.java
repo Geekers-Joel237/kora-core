@@ -19,7 +19,7 @@ import java.time.Instant;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class AuthorizationRecordEntity extends BaseEntity {
+public class AuthorizationRecordEntity extends VersionedEntity {
 
     @Column(name = "transaction_id", nullable = false)
     private String transactionId;

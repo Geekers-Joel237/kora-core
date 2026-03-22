@@ -1,6 +1,7 @@
 package com.geekersjoel237.koracore.web.exception;
 
 import com.geekersjoel237.koracore.domain.exception.AccountBlockedException;
+import com.geekersjoel237.koracore.domain.exception.TransientPaymentException;
 import com.geekersjoel237.koracore.domain.exception.AccountNotFoundException;
 import com.geekersjoel237.koracore.domain.exception.AccountSuspendedException;
 import com.geekersjoel237.koracore.domain.exception.CurrencyMismatchException;
@@ -43,6 +44,11 @@ public class GlobalExceptionHandler {
             InvalidStateTransitionException.class})
     ProblemDetail onUnprocessable(RuntimeException ex) {
         return problem(HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());
+    }
+
+    @ExceptionHandler(TransientPaymentException.class)
+    ProblemDetail onTransient(TransientPaymentException ex) {
+        return problem(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

@@ -5,6 +5,7 @@ import com.geekersjoel237.koracore.application.command.CashOutCommand;
 import com.geekersjoel237.koracore.application.command.TransferCommand;
 import com.geekersjoel237.koracore.application.service.AuthService;
 import com.geekersjoel237.koracore.application.service.PaymentService;
+import com.geekersjoel237.koracore.application.service.PaymentTransactionalExecutor;
 import com.geekersjoel237.koracore.domain.enums.OperationType;
 import com.geekersjoel237.koracore.domain.enums.Role;
 import com.geekersjoel237.koracore.domain.enums.UserStatus;
@@ -81,9 +82,10 @@ class PaymentUseCaseTest {
         mailPort = new InMemoryMailPort();
         authService = new AuthService(
                 new InMemoryUserRepository(), customerRepo, accountRepo, otpStore, pinEncoder, Clock.systemUTC(), mailPort);
-        paymentService = new PaymentService(
+        PaymentTransactionalExecutor executor = new PaymentTransactionalExecutor(
                 authService, accountRepo, customerRepo,
                 transactionRepo, historicRepo, provider, ledgerRepository);
+        paymentService = new PaymentService(executor, accountRepo);
 
         preloadCustomerA();
         preloadFloatAccount();

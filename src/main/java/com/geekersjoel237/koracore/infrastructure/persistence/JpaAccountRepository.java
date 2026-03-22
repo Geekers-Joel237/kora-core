@@ -24,7 +24,19 @@ public class JpaAccountRepository implements AccountRepository {
 
     @Override
     public void save(Account account) {
-        jpaRepository.save(toEntity(account));
+        Account.Snapshot snap = account.snapshot();
+        String id = snap.accountId().value();
+
+        AccountEntity entity = jpaRepository.findById(id).orElse(null);
+        if (entity == null) {
+            entity = toEntity(account);
+        } else {
+            // Update mutable fields on the already-managed entity.
+            // This avoids merging a null-version builder entity into the session,
+            // which would corrupt Hibernate's optimistic-lock snapshot.
+            entity.update(snap);
+        }
+        jpaRepository.save(entity);
     }
 
     @Override
@@ -39,8 +51,20 @@ public class JpaAccountRepository implements AccountRepository {
     }
 
     @Override
+    public Optional<Account> findByCustomerIdForUpdate(Id customerId) {
+        return jpaRepository.findCustomerAccountForUpdate(customerId.value())
+                .map(this::toDomain);
+    }
+
+    @Override
     public Optional<Account> findFloatByProviderId(Id providerId) {
         return jpaRepository.findByResourceTypeAndResourceId(ResourceType.FLOAT_ACCOUNT, providerId.value())
+                .map(this::toDomain);
+    }
+
+    @Override
+    public Optional<Account> findFloatByProviderIdForUpdate(Id providerId) {
+        return jpaRepository.findFloatAccountForUpdate(providerId.value())
                 .map(this::toDomain);
     }
 
