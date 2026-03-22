@@ -153,11 +153,19 @@ class PaymentUseCaseTest {
 
         List<TrxStateHistoric> history =
                 historicRepo.findByTransactionId(tx.snapshot().transactionId());
-        assertEquals(2, history.size());
-        assertEquals("INITIALIZED", history.get(0).snapshot().oldState());
-        assertEquals("PENDING", history.get(0).snapshot().newState());
-        assertEquals("PENDING", history.get(1).snapshot().oldState());
-        assertEquals("COMPLETED", history.get(1).snapshot().newState());
+        // INITIALIZED→AUTHORIZED, AUTHORIZED→CAPTURED, CAPTURED→SETTLEMENT_PENDING,
+        // SETTLEMENT_PENDING→SETTLED, SETTLED→COMPLETED
+        assertEquals(5, history.size());
+        assertEquals("INITIALIZED",        history.get(0).snapshot().oldState());
+        assertEquals("AUTHORIZED",         history.get(0).snapshot().newState());
+        assertEquals("AUTHORIZED",         history.get(1).snapshot().oldState());
+        assertEquals("CAPTURED",           history.get(1).snapshot().newState());
+        assertEquals("CAPTURED",           history.get(2).snapshot().oldState());
+        assertEquals("SETTLEMENT_PENDING", history.get(2).snapshot().newState());
+        assertEquals("SETTLEMENT_PENDING", history.get(3).snapshot().oldState());
+        assertEquals("SETTLED",            history.get(3).snapshot().newState());
+        assertEquals("SETTLED",            history.get(4).snapshot().oldState());
+        assertEquals("COMPLETED",          history.get(4).snapshot().newState());
 
         Account customerAccount = accountRepo.findByCustomerId(CUST_ID_A).orElseThrow();
         assertTrue(AMOUNT_10K.equals(customerAccount.snapshot().balance().solde()));

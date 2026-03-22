@@ -104,8 +104,20 @@ public class Transaction {
         );
     }
 
-    public void markPending() {
-        transitionTo(TransactionState.PENDING);
+    public void authorize() {
+        transitionTo(TransactionState.AUTHORIZED);
+    }
+
+    public void capture() {
+        transitionTo(TransactionState.CAPTURED);
+    }
+
+    public void pendSettlement() {
+        transitionTo(TransactionState.SETTLEMENT_PENDING);
+    }
+
+    public void settle() {
+        transitionTo(TransactionState.SETTLED);
     }
 
     public void markCompleted() {

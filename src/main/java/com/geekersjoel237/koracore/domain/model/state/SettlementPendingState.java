@@ -2,16 +2,16 @@ package com.geekersjoel237.koracore.domain.model.state;
 
 import com.geekersjoel237.koracore.domain.exception.InvalidStateTransitionException;
 
-class InitializedState implements TransactionState {
+class SettlementPendingState implements TransactionState {
 
     @Override
     public TransactionState transitionTo(TransactionState next) {
-        if (next instanceof AuthorizedState) return next;
+        if (next instanceof SettledState) return next;
         throw new InvalidStateTransitionException(this, next);
     }
 
     @Override
     public String name() {
-        return "INITIALIZED";
+        return "SETTLEMENT_PENDING";
     }
 }

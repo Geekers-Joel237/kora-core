@@ -98,16 +98,30 @@ public class PaymentService implements PaymentUseCase {
     }
 
 
-    private Transaction executePayment(Transaction tx, Ledger ledger, Runnable providerAction, Runnable onSuccess) {
-        tx.markPending();
+    private Transaction executePayment(Transaction tx, Ledger ledger,
+                                       Runnable providerAction, Runnable onSuccess) {
+        // AUTHORIZED replaces PENDING as the first active state
+        tx.authorize();
         persistTransactionState(tx);
 
         try {
             providerAction.run();
 
-            tx.markCompleted();
+            // CAPTURED: ledger entries are committed
+            tx.capture();
             persistTransactionState(tx);
             onSuccess.run();
+
+            // SETTLEMENT_PENDING: awaiting interbank settlement
+            tx.pendSettlement();
+            persistTransactionState(tx);
+
+            // SETTLED: settlement confirmed (stub for Step 1)
+            tx.settle();
+            persistTransactionState(tx);
+
+            tx.markCompleted();
+            persistTransactionState(tx);
 
         } catch (ProviderException e) {
             tx.markFailed();

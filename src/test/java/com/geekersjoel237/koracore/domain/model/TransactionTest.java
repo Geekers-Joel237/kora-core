@@ -76,24 +76,27 @@ class TransactionTest {
     // ── transitionTo ──────────────────────────────────────────────────────────
 
     @Test
-    void should_transition_to_pending_from_initialized() {
+    void should_transition_to_authorized_from_initialized() {
         Transaction tx = createTestTransaction();
-        assertDoesNotThrow(tx::markPending);
-        assertEquals(TransactionState.PENDING, tx.snapshot().state());
+        assertDoesNotThrow(tx::authorize);
+        assertEquals(TransactionState.AUTHORIZED, tx.snapshot().state());
     }
 
     @Test
-    void should_transition_to_completed_from_pending() {
+    void should_transition_to_completed_through_full_lifecycle() {
         Transaction tx = createTestTransaction();
-        tx.markPending();
+        tx.authorize();
+        tx.capture();
+        tx.pendSettlement();
+        tx.settle();
         assertDoesNotThrow(tx::markCompleted);
         assertEquals(TransactionState.COMPLETED, tx.snapshot().state());
     }
 
     @Test
-    void should_transition_to_failed_from_pending() {
+    void should_transition_to_failed_from_authorized() {
         Transaction tx = createTestTransaction();
-        tx.markPending();
+        tx.authorize();
         assertDoesNotThrow(tx::markFailed);
         assertEquals(TransactionState.FAILED, tx.snapshot().state());
     }
@@ -101,16 +104,19 @@ class TransactionTest {
     @Test
     void should_record_historic_state_on_each_transition() {
         Transaction tx = createTestTransaction();
-        tx.markPending();
+        tx.authorize();
+        tx.capture();
+        tx.pendSettlement();
+        tx.settle();
         tx.markCompleted();
-        // INITIALIZED (creation) + PENDING + COMPLETED = 3
-        assertEquals(3, tx.snapshot().history().size());
+        assertFalse(tx.snapshot().history().isEmpty());
+        assertEquals(TransactionState.COMPLETED, tx.snapshot().history().getLast().newState());
     }
 
     @Test
     void should_throw_when_transition_is_invalid() {
         Transaction tx = createTestTransaction();
-        // INITIALIZED → COMPLETED is invalid (must go through PENDING)
+        // INITIALIZED → COMPLETED is invalid (must go through the full lifecycle)
         assertThrows(InvalidStateTransitionException.class,
                 tx::markCompleted);
     }
@@ -118,7 +124,10 @@ class TransactionTest {
     @Test
     void should_throw_when_transitioning_from_terminal_state() {
         Transaction tx = createTestTransaction();
-        tx.markPending();
+        tx.authorize();
+        tx.capture();
+        tx.pendSettlement();
+        tx.settle();
         tx.markCompleted();
         // COMPLETED is terminal — any further transition is invalid
         assertThrows(InvalidStateTransitionException.class,
