@@ -134,6 +134,77 @@ class TransactionTest {
                 tx::markFailed);
     }
 
+    // ── New terminal failure states ───────────────────────────────────────────
+
+    @Test
+    void should_transition_to_authorization_failed_from_authorized() {
+        Transaction tx = createTestTransaction();
+        tx.authorize();
+        assertDoesNotThrow(tx::failAuthorization);
+        assertEquals(TransactionState.AUTHORIZATION_FAILED, tx.snapshot().state());
+        assertTrue(tx.snapshot().state().isTerminal());
+    }
+
+    @Test
+    void should_transition_to_capture_failed_from_captured() {
+        Transaction tx = createTestTransaction();
+        tx.authorize();
+        tx.capture();
+        assertDoesNotThrow(tx::failCapture);
+        assertEquals(TransactionState.CAPTURE_FAILED, tx.snapshot().state());
+        assertTrue(tx.snapshot().state().isTerminal());
+    }
+
+    @Test
+    void should_transition_to_settlement_failed_from_settlement_pending() {
+        Transaction tx = createTestTransaction();
+        tx.authorize();
+        tx.capture();
+        tx.pendSettlement();
+        assertDoesNotThrow(tx::failSettlement);
+        assertEquals(TransactionState.SETTLEMENT_FAILED, tx.snapshot().state());
+        assertTrue(tx.snapshot().state().isTerminal());
+    }
+
+    @Test
+    void should_transition_to_reversed_from_authorized() {
+        Transaction tx = createTestTransaction();
+        tx.authorize();
+        assertDoesNotThrow(tx::reverse);
+        assertEquals(TransactionState.REVERSED, tx.snapshot().state());
+        assertTrue(tx.snapshot().state().isTerminal());
+    }
+
+    @Test
+    void should_transition_to_reversed_from_captured() {
+        Transaction tx = createTestTransaction();
+        tx.authorize();
+        tx.capture();
+        assertDoesNotThrow(tx::reverse);
+        assertEquals(TransactionState.REVERSED, tx.snapshot().state());
+    }
+
+    @Test
+    void should_throw_when_reversing_from_completed() {
+        Transaction tx = createTestTransaction();
+        tx.authorize();
+        tx.capture();
+        tx.pendSettlement();
+        tx.settle();
+        tx.markCompleted();
+        assertThrows(InvalidStateTransitionException.class, tx::reverse);
+    }
+
+    @Test
+    void should_record_history_on_failure_transition() {
+        Transaction tx = createTestTransaction();
+        tx.authorize();
+        tx.failAuthorization();
+        var history = tx.snapshot().history();
+        assertEquals("AUTHORIZED", history.getLast().snapshot().oldState());
+        assertEquals("AUTHORIZATION_FAILED", history.getLast().snapshot().newState());
+    }
+
     // ── Validation construction ───────────────────────────────────────────────
 
     @Test

@@ -14,4 +14,9 @@ class SettledState implements TransactionState {
     public String name() {
         return "SETTLED";
     }
+
+    @Override
+    public boolean isTerminal() {
+        return false;
+    }
 }

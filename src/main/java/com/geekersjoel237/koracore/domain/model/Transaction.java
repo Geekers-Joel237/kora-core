@@ -128,6 +128,22 @@ public class Transaction {
         transitionTo(TransactionState.FAILED);
     }
 
+    public void failAuthorization() {
+        transitionTo(TransactionState.AUTHORIZATION_FAILED);
+    }
+
+    public void failCapture() {
+        transitionTo(TransactionState.CAPTURE_FAILED);
+    }
+
+    public void failSettlement() {
+        transitionTo(TransactionState.SETTLEMENT_FAILED);
+    }
+
+    public void reverse() {
+        transitionTo(TransactionState.REVERSED);
+    }
+
     public record Snapshot(
             Id transactionId,
             String transactionNumber,

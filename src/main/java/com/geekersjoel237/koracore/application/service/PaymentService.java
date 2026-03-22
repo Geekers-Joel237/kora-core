@@ -100,6 +100,9 @@ public class PaymentService implements PaymentUseCase {
 
     private Transaction executePayment(Transaction tx, Ledger ledger,
                                        Runnable providerAction, Runnable onSuccess) {
+        // Persist the initial INITIALIZED state before the first transition
+        persistTransactionState(tx);
+
         // AUTHORIZED replaces PENDING as the first active state
         tx.authorize();
         persistTransactionState(tx);

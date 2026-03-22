@@ -2,7 +2,7 @@ package com.geekersjoel237.koracore.domain.model.state;
 
 import com.geekersjoel237.koracore.domain.exception.InvalidStateTransitionException;
 
-class CompletedState implements TransactionState {
+class SettlementFailedState implements TransactionState {
 
     @Override
     public TransactionState transitionTo(TransactionState next) {
@@ -11,7 +11,7 @@ class CompletedState implements TransactionState {
 
     @Override
     public String name() {
-        return "COMPLETED";
+        return "SETTLEMENT_FAILED";
     }
 
     @Override

@@ -30,6 +30,7 @@ import static com.geekersjoel237.koracore.shared.inmemory.InMemoryProviderSimula
 import static com.geekersjoel237.koracore.shared.inmemory.InMemoryProviderSimulator.Behavior.SUCCESS;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PaymentUseCaseTest {
@@ -153,19 +154,21 @@ class PaymentUseCaseTest {
 
         List<TrxStateHistoric> history =
                 historicRepo.findByTransactionId(tx.snapshot().transactionId());
-        // INITIALIZED→AUTHORIZED, AUTHORIZED→CAPTURED, CAPTURED→SETTLEMENT_PENDING,
-        // SETTLEMENT_PENDING→SETTLED, SETTLED→COMPLETED
-        assertEquals(5, history.size());
-        assertEquals("INITIALIZED",        history.get(0).snapshot().oldState());
-        assertEquals("AUTHORIZED",         history.get(0).snapshot().newState());
-        assertEquals("AUTHORIZED",         history.get(1).snapshot().oldState());
-        assertEquals("CAPTURED",           history.get(1).snapshot().newState());
-        assertEquals("CAPTURED",           history.get(2).snapshot().oldState());
-        assertEquals("SETTLEMENT_PENDING", history.get(2).snapshot().newState());
-        assertEquals("SETTLEMENT_PENDING", history.get(3).snapshot().oldState());
-        assertEquals("SETTLED",            history.get(3).snapshot().newState());
-        assertEquals("SETTLED",            history.get(4).snapshot().oldState());
-        assertEquals("COMPLETED",          history.get(4).snapshot().newState());
+        // null→INITIALIZED, INITIALIZED→AUTHORIZED, AUTHORIZED→CAPTURED,
+        // CAPTURED→SETTLEMENT_PENDING, SETTLEMENT_PENDING→SETTLED, SETTLED→COMPLETED
+        assertEquals(6, history.size());
+        assertNull(                                history.get(0).snapshot().oldState());
+        assertEquals("INITIALIZED",               history.get(0).snapshot().newState());
+        assertEquals("INITIALIZED",               history.get(1).snapshot().oldState());
+        assertEquals("AUTHORIZED",                history.get(1).snapshot().newState());
+        assertEquals("AUTHORIZED",                history.get(2).snapshot().oldState());
+        assertEquals("CAPTURED",                  history.get(2).snapshot().newState());
+        assertEquals("CAPTURED",                  history.get(3).snapshot().oldState());
+        assertEquals("SETTLEMENT_PENDING",        history.get(3).snapshot().newState());
+        assertEquals("SETTLEMENT_PENDING",        history.get(4).snapshot().oldState());
+        assertEquals("SETTLED",                   history.get(4).snapshot().newState());
+        assertEquals("SETTLED",                   history.get(5).snapshot().oldState());
+        assertEquals("COMPLETED",                 history.get(5).snapshot().newState());
 
         Account customerAccount = accountRepo.findByCustomerId(CUST_ID_A).orElseThrow();
         assertTrue(AMOUNT_10K.equals(customerAccount.snapshot().balance().solde()));
@@ -179,6 +182,17 @@ class PaymentUseCaseTest {
 
         assertEquals(FAILED, tx.snapshot().state());
         assertEquals(4, tx.snapshot().operations().size());
+
+        List<TrxStateHistoric> history =
+                historicRepo.findByTransactionId(tx.snapshot().transactionId());
+        // null→INITIALIZED, INITIALIZED→AUTHORIZED, AUTHORIZED→FAILED
+        assertEquals(3, history.size());
+        assertNull(history.get(0).snapshot().oldState());
+        assertEquals("INITIALIZED", history.get(0).snapshot().newState());
+        assertEquals("INITIALIZED", history.get(1).snapshot().oldState());
+        assertEquals("AUTHORIZED",  history.get(1).snapshot().newState());
+        assertEquals("AUTHORIZED",  history.get(2).snapshot().oldState());
+        assertEquals("FAILED",      history.get(2).snapshot().newState());
 
         Account customerAccount = accountRepo.findByCustomerId(CUST_ID_A).orElseThrow();
         assertTrue(AMOUNT_ZERO.equals(customerAccount.snapshot().balance().solde()));
