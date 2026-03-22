@@ -1,6 +1,7 @@
 package com.geekersjoel237.koracore.infrastructure.persistence;
 
 import com.geekersjoel237.koracore.domain.enums.Direction;
+import com.geekersjoel237.koracore.domain.enums.TriggerSource;
 import com.geekersjoel237.koracore.domain.model.Operation;
 import com.geekersjoel237.koracore.domain.model.Transaction;
 import com.geekersjoel237.koracore.domain.model.TrxStateHistoric;
@@ -162,7 +163,12 @@ public class JpaTransactionRepository implements TransactionRepository {
                         new Id(h.getTransactionId()),
                         h.getOldState() != null ? TransactionState.fromValue(h.getOldState()) : null,
                         TransactionState.fromValue(h.getNewState()),
-                        h.getOccurredAt()
+                        h.getOccurredAt(),
+                        h.getTriggeredBy() != null ? TriggerSource.valueOf(h.getTriggeredBy()) : null,
+                        h.getCorrelationId(),
+                        h.getProviderRef(),
+                        h.getActorId(),
+                        h.getNotes()
                 ))
                 .toList();
 
