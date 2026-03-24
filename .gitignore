@@ -38,3 +38,4 @@ out/
 /CLAUDE.md
 /.env
 /logs/
+/.claude/
