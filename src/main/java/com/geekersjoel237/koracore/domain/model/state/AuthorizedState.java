@@ -9,6 +9,7 @@ class AuthorizedState implements TransactionState {
         if (next instanceof CapturedState
                 || next instanceof FailedState
                 || next instanceof AuthorizationFailedState
+                || next instanceof CaptureFailedState
                 || next instanceof ReversedState) return next;
         throw new InvalidStateTransitionException(this, next);
     }

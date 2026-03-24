@@ -6,7 +6,9 @@ class SettlementPendingState implements TransactionState {
 
     @Override
     public TransactionState transitionTo(TransactionState next) {
-        if (next instanceof SettledState || next instanceof SettlementFailedState) return next;
+        if (next instanceof SettledState
+                || next instanceof SettlementFailedState
+                || next instanceof ReversedState) return next;
         throw new InvalidStateTransitionException(this, next);
     }
 

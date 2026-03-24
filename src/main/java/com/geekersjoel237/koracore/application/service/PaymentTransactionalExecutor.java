@@ -1,22 +1,33 @@
 package com.geekersjoel237.koracore.application.service;
 
+import com.geekersjoel237.koracore.application.command.AuthorizePaymentCommand;
+import com.geekersjoel237.koracore.application.command.CapturePaymentCommand;
 import com.geekersjoel237.koracore.application.command.CashInCommand;
 import com.geekersjoel237.koracore.application.command.CashOutCommand;
+import com.geekersjoel237.koracore.application.command.ReversePaymentCommand;
 import com.geekersjoel237.koracore.application.command.TransferCommand;
 import com.geekersjoel237.koracore.application.port.in.AuthUseCase;
 import com.geekersjoel237.koracore.domain.SystemConstants;
+import com.geekersjoel237.koracore.domain.enums.TransactionType;
+import com.geekersjoel237.koracore.domain.enums.TriggerSource;
 import com.geekersjoel237.koracore.domain.exception.AccountBlockedException;
 import com.geekersjoel237.koracore.domain.exception.AccountNotFoundException;
 import com.geekersjoel237.koracore.domain.exception.AccountSuspendedException;
+import com.geekersjoel237.koracore.domain.exception.InvalidStateTransitionException;
 import com.geekersjoel237.koracore.domain.exception.ProviderException;
 import com.geekersjoel237.koracore.domain.model.Account;
+import com.geekersjoel237.koracore.domain.model.AuthorizationRecord;
 import com.geekersjoel237.koracore.domain.model.Customer;
 import com.geekersjoel237.koracore.domain.model.Ledger;
 import com.geekersjoel237.koracore.domain.model.Transaction;
+import com.geekersjoel237.koracore.domain.model.TrxStateHistoric;
+import com.geekersjoel237.koracore.domain.model.state.TransactionState;
 import com.geekersjoel237.koracore.domain.port.*;
 import com.geekersjoel237.koracore.domain.vo.Id;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Duration;
 
 /**
  * Executes one payment attempt inside a single, self-contained transaction.
@@ -38,6 +49,7 @@ public class PaymentTransactionalExecutor {
     private final TrxHistoricStatesRepository historicRepo;
     private final ProviderPort provider;
     private final LedgerRepository ledgerRepository;
+    private final AuthorizationRecordRepository authorizationRecordRepository;
 
     public PaymentTransactionalExecutor(AuthUseCase authUseCase,
                                         AccountRepository accountRepository,
@@ -45,7 +57,8 @@ public class PaymentTransactionalExecutor {
                                         TransactionRepository transactionRepository,
                                         TrxHistoricStatesRepository historicRepo,
                                         ProviderPort provider,
-                                        LedgerRepository ledgerRepository) {
+                                        LedgerRepository ledgerRepository,
+                                        AuthorizationRecordRepository authorizationRecordRepository) {
         this.authUseCase = authUseCase;
         this.accountRepository = accountRepository;
         this.customerRepository = customerRepository;
@@ -53,7 +66,10 @@ public class PaymentTransactionalExecutor {
         this.historicRepo = historicRepo;
         this.provider = provider;
         this.ledgerRepository = ledgerRepository;
+        this.authorizationRecordRepository = authorizationRecordRepository;
     }
+
+    // ── existing payment flows ────────────────────────────────────────────────
 
     public Transaction executeCashIn(CashInCommand cmd) {
         var customerAccount = validatePayerAndGetAccount(cmd.customerId(), cmd.rawPin());
@@ -101,6 +117,156 @@ public class PaymentTransactionalExecutor {
                     accountRepository.save(toAccount);
                 });
     }
+
+    // ── new lifecycle flows ───────────────────────────────────────────────────
+
+    public Transaction executeAuthorizePayment(AuthorizePaymentCommand cmd) {
+        Account customerAccount = validatePayerAndGetAccount(cmd.customerId(), cmd.rawPin());
+        Account floatAccount = getSystemFloatAccount();
+        Ledger ledger = ledgerRepository.findFirst();
+
+        Transaction tx = ledger.initiate(customerAccount, floatAccount,
+                TransactionType.CASH_OUT, cmd.paymentMethod(), cmd.amount());
+
+        persistTransactionState(tx);    // INITIALIZED
+
+        tx.authorize();
+
+        try {
+            var result = provider.authorize(cmd.amount(), cmd.paymentMethod(), cmd.correlationId());
+            if (result.success()) {
+                AuthorizationRecord authRecord = AuthorizationRecord.create(
+                        tx.snapshot().transactionId(),
+                        result.providerReference(),
+                        cmd.amount(),
+                        Duration.ofMinutes(15));
+                authorizationRecordRepository.save(authRecord);
+                persistTransactionState(tx); // AUTHORIZED
+            }
+        } catch (ProviderException e) {
+            tx.failAuthorization();
+            persistTransactionState(tx); // AUTHORIZATION_FAILED
+        }
+
+        return tx;
+    }
+
+    public Transaction executeCapturePayment(CapturePaymentCommand cmd) {
+        Transaction tx = transactionRepository.findById(cmd.transactionId())
+                .orElseThrow(() -> new AccountNotFoundException(
+                        "Transaction not found: " + cmd.transactionId().value()));
+
+        if (tx.snapshot().state() != TransactionState.AUTHORIZED) {
+            throw new InvalidStateTransitionException(tx.snapshot().state(), TransactionState.CAPTURED);
+        }
+
+        AuthorizationRecord authRecord = authorizationRecordRepository
+                .findActiveByTransactionId(cmd.transactionId())
+                .orElseThrow(() -> new IllegalStateException(
+                        "No active authorization for transaction: " + cmd.transactionId().value()));
+
+        if (!authRecord.isActive()) {
+            tx.failAuthorization();
+            authRecord.expire();
+            authorizationRecordRepository.save(authRecord);
+            persistTransactionState(tx);
+            return tx;
+        }
+
+        try {
+            provider.capture(authRecord.snapshot().providerReference(), cmd.correlationId());
+
+            Account customerAccount = accountRepository.findByCustomerId(cmd.customerId())
+                    .orElseThrow(() -> new AccountNotFoundException(
+                            "Account not found for customer: " + cmd.customerId().value()));
+            Account floatAccount = getSystemFloatAccountForUpdate();
+            Ledger ledger = ledgerRepository.findFirst();
+
+            ledger.writeEntries(tx, customerAccount, floatAccount, tx.snapshot().amount());
+            customerAccount.debit(tx.snapshot().amount());
+            accountRepository.save(customerAccount);
+
+            authRecord.consume();
+            authorizationRecordRepository.save(authRecord);
+
+            tx.capture();
+            persistTransactionState(tx); // CAPTURED
+
+            tx.pendSettlement();
+            persistTransactionState(tx); // SETTLEMENT_PENDING
+
+        } catch (ProviderException e) {
+            tx.failCapture();
+            authRecord.cancel();
+            authorizationRecordRepository.save(authRecord);
+            persistTransactionState(tx); // CAPTURE_FAILED
+        }
+
+        return tx;
+    }
+
+    public Transaction executeReversePayment(ReversePaymentCommand cmd) {
+        if (cmd.reason() == null || cmd.reason().isBlank()) {
+            throw new IllegalArgumentException("Reason is required for reversal");
+        }
+
+        Transaction tx = transactionRepository.findById(cmd.transactionId())
+                .orElseThrow(() -> new AccountNotFoundException(
+                        "Transaction not found: " + cmd.transactionId().value()));
+
+        TransactionState currentState = tx.snapshot().state();
+
+        if (currentState == TransactionState.AUTHORIZED) {
+            AuthorizationRecord authRecord = authorizationRecordRepository
+                    .findActiveByTransactionId(cmd.transactionId())
+                    .orElseThrow(() -> new IllegalStateException(
+                            "No active authorization for transaction: " + cmd.transactionId().value()));
+
+            provider.reverse(authRecord.snapshot().providerReference(),
+                    tx.snapshot().amount(), cmd.correlationId());
+
+            authRecord.cancel();
+            authorizationRecordRepository.save(authRecord);
+
+            tx.reverse();
+            historicRepo.save(TrxStateHistoric.of(
+                    tx.snapshot().transactionId(),
+                    TransactionState.AUTHORIZED,
+                    TransactionState.REVERSED,
+                    TriggerSource.OPERATOR_ACTION,
+                    cmd.correlationId(), null, cmd.actorId(), cmd.reason()));
+            transactionRepository.save(tx);
+            return tx;
+        }
+
+        if (currentState == TransactionState.CAPTURED
+                || currentState == TransactionState.SETTLEMENT_PENDING) {
+            // fromId is the customer account ID for CASH_OUT transactions
+            Account customerAccount = accountRepository.findById(tx.snapshot().fromId())
+                    .orElseThrow(() -> new AccountNotFoundException(
+                            "Account not found: " + tx.snapshot().fromId().value()));
+            Ledger ledger = ledgerRepository.findFirst();
+
+            ledger.reverse(tx);
+            customerAccount.credit(tx.snapshot().amount());
+            accountRepository.save(customerAccount);
+
+            TransactionState stateBeforeReverse = currentState;
+            tx.reverse();
+            historicRepo.save(TrxStateHistoric.of(
+                    tx.snapshot().transactionId(),
+                    stateBeforeReverse,
+                    TransactionState.REVERSED,
+                    TriggerSource.OPERATOR_ACTION,
+                    cmd.correlationId(), null, cmd.actorId(), cmd.reason()));
+            transactionRepository.save(tx);
+            return tx;
+        }
+
+        throw new InvalidStateTransitionException(currentState, TransactionState.REVERSED);
+    }
+
+    // ── shared helpers ────────────────────────────────────────────────────────
 
     private Transaction executePayment(Transaction tx, Ledger ledger,
                                        Runnable providerAction, Runnable onSuccess) {
@@ -165,6 +331,12 @@ public class PaymentTransactionalExecutor {
         }
 
         return accountTo;
+    }
+
+    private Account getSystemFloatAccount() {
+        return accountRepository.findFloatByProviderId(SystemConstants.PROVIDER_ID)
+                .orElseThrow(() -> new AccountNotFoundException(
+                        "Float account not found for provider: " + SystemConstants.PROVIDER_ID.value()));
     }
 
     private Account getSystemFloatAccountForUpdate() {

@@ -69,7 +69,8 @@ class TransactionHistoryServiceTest {
                 Clock.systemUTC(), mailPort);
         PaymentTransactionalExecutor executor = new PaymentTransactionalExecutor(
                 authService, accountRepo, customerRepo,
-                transactionRepo, historicRepo, new InMemoryProviderSimulator(SUCCESS), ledgerRepo);
+                transactionRepo, historicRepo, new InMemoryProviderSimulator(SUCCESS), ledgerRepo,
+                new InMemoryAuthorizationRecordRepository());
         paymentService = new PaymentService(executor, accountRepo);
 
         historyService = new TransactionHistoryService(transactionRepo, accountRepo, customerRepo);

@@ -20,10 +20,14 @@ public class InMemoryAuthorizationRecordRepository implements AuthorizationRecor
         store.put(record.transactionId().value(), record);
     }
 
+    /**
+     * Returns a record whose status is ACTIVE, regardless of TTL.
+     * The TTL check is the service's responsibility (via {@code authRecord.isActive()}).
+     */
     @Override
     public Optional<AuthorizationRecord> findActiveByTransactionId(Id transactionId) {
         AuthorizationRecord record = store.get(transactionId.value());
-        if (record != null && record.isActive()) {
+        if (record != null && record.snapshot().status() == AuthorizationStatus.ACTIVE) {
             return Optional.of(record);
         }
         return Optional.empty();
@@ -35,5 +39,10 @@ public class InMemoryAuthorizationRecordRepository implements AuthorizationRecor
                 .filter(r -> r.snapshot().status() == AuthorizationStatus.ACTIVE
                         && r.snapshot().expiresAt().isBefore(now))
                 .toList();
+    }
+
+    /** Test utility: load any record for a transaction, regardless of status. */
+    public Optional<AuthorizationRecord> findByTransactionId(Id transactionId) {
+        return Optional.ofNullable(store.get(transactionId.value()));
     }
 }

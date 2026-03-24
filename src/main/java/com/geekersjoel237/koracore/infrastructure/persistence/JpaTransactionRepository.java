@@ -25,6 +25,8 @@ import org.springframework.stereotype.Repository;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Repository
 public class JpaTransactionRepository implements TransactionRepository {
@@ -46,10 +48,28 @@ public class JpaTransactionRepository implements TransactionRepository {
         if (entity == null) {
             jpaTransactionRepo.save(toEntity(transaction));
         } else {
-            // Only the state changes after the initial INSERT.
-            // Operations are immutable — do not replace the collection to
-            // avoid orphan-removal deleting them.
-            entity.setState(transaction.snapshot().state().name());
+            Transaction.Snapshot snap = transaction.snapshot();
+            entity.setState(snap.state().name());
+
+            // Add any new operations added after INSERT (e.g., writeEntries in capturePayment).
+            // Never clear or replace the collection — orphanRemoval would delete existing ops.
+            Set<String> existingIds = entity.getOperations().stream()
+                    .map(OperationEntity::getId)
+                    .collect(Collectors.toSet());
+            snap.operations().stream()
+                    .filter(op -> !existingIds.contains(op.operationId().value()))
+                    .forEach(op -> {
+                        OperationEntity e = OperationEntity.builder()
+                                .transactionId(snap.transactionId().value())
+                                .type(op.type())
+                                .amount(op.amount().value())
+                                .currency(op.amount().currency())
+                                .accountId(op.accountId().value())
+                                .occurredAt(op.createdAt())
+                                .build();
+                        e.setId(op.operationId().value());
+                        entity.getOperations().add(e);
+                    });
             jpaTransactionRepo.save(entity);
         }
     }

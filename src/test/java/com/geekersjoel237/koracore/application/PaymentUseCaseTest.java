@@ -84,7 +84,8 @@ class PaymentUseCaseTest {
                 new InMemoryUserRepository(), customerRepo, accountRepo, otpStore, pinEncoder, Clock.systemUTC(), mailPort);
         PaymentTransactionalExecutor executor = new PaymentTransactionalExecutor(
                 authService, accountRepo, customerRepo,
-                transactionRepo, historicRepo, provider, ledgerRepository);
+                transactionRepo, historicRepo, provider, ledgerRepository,
+                new InMemoryAuthorizationRecordRepository());
         paymentService = new PaymentService(executor, accountRepo);
 
         preloadCustomerA();

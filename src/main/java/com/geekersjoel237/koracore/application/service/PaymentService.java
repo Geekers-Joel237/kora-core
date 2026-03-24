@@ -1,7 +1,10 @@
 package com.geekersjoel237.koracore.application.service;
 
+import com.geekersjoel237.koracore.application.command.AuthorizePaymentCommand;
+import com.geekersjoel237.koracore.application.command.CapturePaymentCommand;
 import com.geekersjoel237.koracore.application.command.CashInCommand;
 import com.geekersjoel237.koracore.application.command.CashOutCommand;
+import com.geekersjoel237.koracore.application.command.ReversePaymentCommand;
 import com.geekersjoel237.koracore.application.command.TransferCommand;
 import com.geekersjoel237.koracore.application.port.in.PaymentUseCase;
 import com.geekersjoel237.koracore.domain.exception.AccountNotFoundException;
@@ -59,6 +62,21 @@ public class PaymentService implements PaymentUseCase {
         return accountRepository.findByCustomerId(customerId)
                 .orElseThrow(() -> new AccountNotFoundException(
                         "Account not found for customer: " + customerId.value()));
+    }
+
+    @Override
+    public Transaction authorizePayment(AuthorizePaymentCommand cmd) {
+        return withOptimisticRetry(() -> executor.executeAuthorizePayment(cmd));
+    }
+
+    @Override
+    public Transaction capturePayment(CapturePaymentCommand cmd) {
+        return withOptimisticRetry(() -> executor.executeCapturePayment(cmd));
+    }
+
+    @Override
+    public Transaction reversePayment(ReversePaymentCommand cmd) {
+        return withOptimisticRetry(() -> executor.executeReversePayment(cmd));
     }
 
     private <T> T withOptimisticRetry(Supplier<T> action) {

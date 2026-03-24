@@ -137,6 +137,28 @@ public class Ledger {
         return tx;
     }
 
+    public Transaction initiate(Account fromAccount, Account toAccount,
+                                TransactionType type, String paymentMethod,
+                                Amount amount) {
+        requireActive(fromAccount, "Source account is not active");
+        requirePositive(amount);
+        requireSufficientFunds(fromAccount, amount);
+        return Transaction.create(
+                Id.generate(),
+                fromAccount.snapshot().accountId(),
+                toAccount.snapshot().accountId(),
+                type, paymentMethod, amount);
+    }
+
+    public void writeEntries(Transaction tx, Account fromAccount,
+                              Account floatAccount, Amount amount) {
+        tx.addOperation(Operation.create(Id.generate(), OperationType.DEBIT,
+                amount, fromAccount.snapshot().accountId()));
+        tx.addOperation(Operation.create(Id.generate(), OperationType.CREDIT,
+                amount, floatAccount.snapshot().accountId()));
+        verifyDoubleEntry(tx);
+    }
+
     public Transaction reverse(Transaction tx) {
         Amount amount = tx.snapshot().amount();
 
