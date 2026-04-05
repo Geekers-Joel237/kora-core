@@ -24,7 +24,19 @@ public class JpaAuthorizationRecordRepository implements AuthorizationRecordRepo
 
     @Override
     public void save(AuthorizationRecord record) {
-        jpaRepository.save(toEntity(record));
+        AuthorizationRecord.Snapshot snap = record.snapshot();
+        String id = snap.id().value();
+
+        AuthorizationRecordEntity entity = jpaRepository.findById(id).orElse(null);
+        if (entity == null) {
+            entity = toEntity(record);
+        } else {
+            // Update the managed entity in place so its @Version is preserved.
+            // Merging a newly-built detached entity (version=null) into a managed one
+            // (version=N) causes Hibernate 6 to throw StaleObjectStateException immediately.
+            entity.setStatus(snap.status().name());
+        }
+        jpaRepository.save(entity);
     }
 
     @Override
