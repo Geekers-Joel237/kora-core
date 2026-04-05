@@ -266,6 +266,28 @@ public class PaymentTransactionalExecutor {
         throw new InvalidStateTransitionException(currentState, TransactionState.REVERSED);
     }
 
+    // ── TTL expiry ────────────────────────────────────────────────────────────
+
+    public void executeExpireAuthorizations(java.time.Instant now) {
+        var expired = authorizationRecordRepository.findExpiredActive(now);
+        for (AuthorizationRecord authRecord : expired) {
+            authRecord.expire();
+            authorizationRecordRepository.save(authRecord);
+
+            transactionRepository.findById(authRecord.snapshot().transactionId())
+                    .ifPresent(tx -> {
+                        tx.failAuthorization();
+                        historicRepo.save(TrxStateHistoric.of(
+                                tx.snapshot().transactionId(),
+                                com.geekersjoel237.koracore.domain.model.state.TransactionState.AUTHORIZED,
+                                com.geekersjoel237.koracore.domain.model.state.TransactionState.AUTHORIZATION_FAILED,
+                                TriggerSource.SYSTEM_JOB,
+                                null, null, "system-ttl-job", "Authorization TTL expired"));
+                        transactionRepository.save(tx);
+                    });
+        }
+    }
+
     // ── shared helpers ────────────────────────────────────────────────────────
 
     private Transaction executePayment(Transaction tx, Ledger ledger,

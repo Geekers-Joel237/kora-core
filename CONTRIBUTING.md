@@ -233,6 +233,7 @@ threshold — check `build.gradle` for the current gate value.
 
 ```bash
 ./gradlew test --tests "com.geekersjoel237.koracore.e2e.CashInE2ETest"
+./gradlew test --tests "com.geekersjoel237.koracore.e2e.PaymentLifecycleE2ETest"
 ```
 
 ### Test profiles
@@ -453,6 +454,7 @@ All significant architectural decisions are recorded in `docs/adr/`.
 | ADR | Decision | Status |
 |---|---|---|
 | [ADR-001](./docs/adr/ADR-001-immutable-ledger.md) | Immutable double-entry ledger with denormalized balance cache | Accepted |
+| [ADR-002](./docs/adr/ADR-002-payment-lifecycle.md) | Payment lifecycle state machine: INITIATED → AUTHORIZED → CAPTURED → SETTLEMENT_PENDING → SETTLED → COMPLETED | Accepted |
 
 When making a significant architectural decision, create a new ADR following
 the existing format. Link it from this table.
