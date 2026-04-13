@@ -1,6 +1,7 @@
 package com.geekersjoel237.koracore.domain.model;
 
 import com.geekersjoel237.koracore.domain.enums.OperationType;
+import com.geekersjoel237.koracore.domain.enums.ResourceType;
 import com.geekersjoel237.koracore.domain.enums.TransactionType;
 import com.geekersjoel237.koracore.domain.exception.InsufficientFundsException;
 import com.geekersjoel237.koracore.domain.exception.InvalidAccountException;
@@ -142,7 +143,10 @@ public class Ledger {
                                 Amount amount) {
         requireActive(fromAccount, "Source account is not active");
         requirePositive(amount);
-        requireSufficientFunds(fromAccount, amount);
+        // Float accounts represent the provider treasury — no balance constraint
+        if (fromAccount.snapshot().accountType().resourceType() != ResourceType.FLOAT_ACCOUNT) {
+            requireSufficientFunds(fromAccount, amount);
+        }
         return Transaction.create(
                 Id.generate(),
                 fromAccount.snapshot().accountId(),
@@ -151,11 +155,11 @@ public class Ledger {
     }
 
     public void writeEntries(Transaction tx, Account fromAccount,
-                              Account floatAccount, Amount amount) {
+                             Account toAccount, Amount amount) {
         tx.addOperation(Operation.create(Id.generate(), OperationType.DEBIT,
                 amount, fromAccount.snapshot().accountId()));
         tx.addOperation(Operation.create(Id.generate(), OperationType.CREDIT,
-                amount, floatAccount.snapshot().accountId()));
+                amount, toAccount.snapshot().accountId()));
         verifyDoubleEntry(tx);
     }
 

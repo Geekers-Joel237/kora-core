@@ -13,7 +13,15 @@ import java.util.UUID;
 
 public class InMemoryProviderSimulator implements ProviderPort {
 
-    public enum Behavior { SUCCESS, FAIL }
+    public enum Behavior {
+        SUCCESS,
+        /** Fails on authorize() — the default failure mode. Alias: {@link #FAIL}. */
+        FAIL_ON_AUTHORIZE,
+        /** Fails on capture() — authorize() still succeeds. */
+        FAIL_ON_CAPTURE,
+        /** Backward-compatible alias for {@link #FAIL_ON_AUTHORIZE}. */
+        FAIL
+    }
 
     private Behavior behavior;
 
@@ -25,29 +33,32 @@ public class InMemoryProviderSimulator implements ProviderPort {
         this.behavior = behavior;
     }
 
-    private void execute() {
-        if (behavior == Behavior.FAIL)
+    // ── Step 0 legacy methods (credit/debit/send) ─────────────────────────────
+
+    @Override
+    public void credit(Amount amount, String paymentMethod) {
+        if (behavior == Behavior.FAIL || behavior == Behavior.FAIL_ON_AUTHORIZE)
             throw new ProviderException("Provider simulated failure");
     }
 
     @Override
-    public void credit(Amount amount, String paymentMethod) {
-        execute();
-    }
-
-    @Override
     public void debit(Amount amount, String paymentMethod) {
-        execute();
+        if (behavior == Behavior.FAIL || behavior == Behavior.FAIL_ON_AUTHORIZE)
+            throw new ProviderException("Provider simulated failure");
     }
 
     @Override
     public void send(Amount amount, String paymentMethod) {
-        execute();
+        if (behavior == Behavior.FAIL || behavior == Behavior.FAIL_ON_AUTHORIZE)
+            throw new ProviderException("Provider simulated failure");
     }
+
+    // ── Lifecycle methods ─────────────────────────────────────────────────────
 
     @Override
     public AuthorizationResult authorize(Amount amount, String paymentMethod, String correlationId) {
-        execute();
+        if (behavior == Behavior.FAIL || behavior == Behavior.FAIL_ON_AUTHORIZE)
+            throw new ProviderException("Provider simulated authorization failure");
         return new AuthorizationResult(
                 UUID.randomUUID().toString(),
                 Instant.now().plus(15, ChronoUnit.MINUTES),
@@ -56,13 +67,13 @@ public class InMemoryProviderSimulator implements ProviderPort {
 
     @Override
     public CaptureResult capture(String authorizationReference, String correlationId) {
-        execute();
+        if (behavior == Behavior.FAIL_ON_CAPTURE)
+            throw new ProviderException("Provider simulated capture failure");
         return new CaptureResult(UUID.randomUUID().toString(), true);
     }
 
     @Override
     public ReverseResult reverse(String reference, Amount amount, String correlationId) {
-        execute();
         return new ReverseResult(UUID.randomUUID().toString(), true);
     }
 }

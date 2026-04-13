@@ -25,8 +25,8 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.util.List;
 
+import static com.geekersjoel237.koracore.domain.model.state.TransactionState.AUTHORIZATION_FAILED;
 import static com.geekersjoel237.koracore.domain.model.state.TransactionState.COMPLETED;
-import static com.geekersjoel237.koracore.domain.model.state.TransactionState.FAILED;
 import static com.geekersjoel237.koracore.shared.inmemory.InMemoryProviderSimulator.Behavior.FAIL;
 import static com.geekersjoel237.koracore.shared.inmemory.InMemoryProviderSimulator.Behavior.SUCCESS;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -183,19 +183,17 @@ class PaymentUseCaseTest {
         CashInCommand cmd = new CashInCommand(CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD);
         Transaction tx = paymentService.cashIn(cmd);
 
-        assertEquals(FAILED, tx.snapshot().state());
-        assertEquals(4, tx.snapshot().operations().size());
+        assertEquals(AUTHORIZATION_FAILED, tx.snapshot().state());
+        assertEquals(0, tx.snapshot().operations().size());
 
         List<TrxStateHistoric> history =
                 historicRepo.findByTransactionId(tx.snapshot().transactionId());
-        // null→INITIALIZED, INITIALIZED→AUTHORIZED, AUTHORIZED→FAILED
-        assertEquals(3, history.size());
+        // null→INITIALIZED, INITIALIZED→AUTHORIZATION_FAILED
+        assertEquals(2, history.size());
         assertNull(history.get(0).snapshot().oldState());
-        assertEquals("INITIALIZED", history.get(0).snapshot().newState());
-        assertEquals("INITIALIZED", history.get(1).snapshot().oldState());
-        assertEquals("AUTHORIZED",  history.get(1).snapshot().newState());
-        assertEquals("AUTHORIZED",  history.get(2).snapshot().oldState());
-        assertEquals("FAILED",      history.get(2).snapshot().newState());
+        assertEquals("INITIALIZED",          history.get(0).snapshot().newState());
+        assertEquals("INITIALIZED",          history.get(1).snapshot().oldState());
+        assertEquals("AUTHORIZATION_FAILED", history.get(1).snapshot().newState());
 
         Account customerAccount = accountRepo.findByCustomerId(CUST_ID_A).orElseThrow();
         assertTrue(AMOUNT_ZERO.equals(customerAccount.snapshot().balance().solde()));
@@ -258,7 +256,7 @@ class PaymentUseCaseTest {
         Transaction tx = paymentService.cashOut(
                 new CashOutCommand(CUST_ID_A, RAW_PIN, AMOUNT_5K, PAYMENT_METHOD));
 
-        assertEquals(FAILED, tx.snapshot().state());
+        assertEquals(AUTHORIZATION_FAILED, tx.snapshot().state());
         Account account = accountRepo.findByCustomerId(CUST_ID_A).orElseThrow();
         assertTrue(AMOUNT_10K.equals(account.snapshot().balance().solde()));
         assertDoubleEntryInvariant();
@@ -312,7 +310,7 @@ class PaymentUseCaseTest {
         Transaction tx = paymentService.transfer(new TransferCommand(
                 CUST_ID_A, RAW_PIN, AMOUNT_5K, PAYMENT_METHOD, phoneNumberB().fullNumber()));
 
-        assertEquals(FAILED, tx.snapshot().state());
+        assertEquals(AUTHORIZATION_FAILED, tx.snapshot().state());
         Account accountA = accountRepo.findByCustomerId(CUST_ID_A).orElseThrow();
         Account accountB = accountRepo.findByCustomerId(CUST_ID_B).orElseThrow();
         assertTrue(AMOUNT_10K.equals(accountA.snapshot().balance().solde()));

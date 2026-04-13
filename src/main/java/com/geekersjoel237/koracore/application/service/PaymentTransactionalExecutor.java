@@ -6,12 +6,15 @@ import com.geekersjoel237.koracore.application.command.ReversePaymentCommand;
 import com.geekersjoel237.koracore.application.command.TransferCommand;
 import com.geekersjoel237.koracore.application.port.in.AuthUseCase;
 import com.geekersjoel237.koracore.domain.SystemConstants;
+import com.geekersjoel237.koracore.domain.enums.ResourceType;
+import com.geekersjoel237.koracore.domain.enums.TransactionType;
 import com.geekersjoel237.koracore.domain.enums.TriggerSource;
 import com.geekersjoel237.koracore.domain.exception.AccountBlockedException;
 import com.geekersjoel237.koracore.domain.exception.AccountNotFoundException;
 import com.geekersjoel237.koracore.domain.exception.AccountSuspendedException;
 import com.geekersjoel237.koracore.domain.exception.InvalidStateTransitionException;
 import com.geekersjoel237.koracore.domain.exception.ProviderException;
+import com.geekersjoel237.koracore.domain.exception.SelfTransferException;
 import com.geekersjoel237.koracore.domain.model.Account;
 import com.geekersjoel237.koracore.domain.model.AuthorizationRecord;
 import com.geekersjoel237.koracore.domain.model.Customer;
@@ -20,9 +23,14 @@ import com.geekersjoel237.koracore.domain.model.Transaction;
 import com.geekersjoel237.koracore.domain.model.TrxStateHistoric;
 import com.geekersjoel237.koracore.domain.model.state.TransactionState;
 import com.geekersjoel237.koracore.domain.port.*;
+import com.geekersjoel237.koracore.domain.vo.Amount;
+import com.geekersjoel237.koracore.domain.vo.AuthorizationResult;
 import com.geekersjoel237.koracore.domain.vo.Id;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Duration;
+import java.util.UUID;
 
 /**
  * Executes one payment attempt inside a single, self-contained transaction.
@@ -67,50 +75,45 @@ public class PaymentTransactionalExecutor {
     // ── payment flows ─────────────────────────────────────────────────────────
 
     public Transaction executeCashIn(CashInCommand cmd) {
-        var customerAccount = validatePayerAndGetAccount(cmd.customerId(), cmd.rawPin());
-        var floatAccount = getSystemFloatAccountForUpdate();
-        var ledger = ledgerRepository.findFirst();
+        Account customerAccount = validatePayerAndGetAccount(cmd.customerId(), cmd.rawPin());
+        Account floatAccount = getSystemFloatAccountForUpdate();
+        Ledger ledger = ledgerRepository.findFirst();
 
-        var tx = ledger.cashIn(customerAccount, floatAccount, cmd.amount(), cmd.paymentMethod());
+        // fromAccount = float (provider inbound), toAccount = customer
+        Transaction tx = ledger.initiate(floatAccount, customerAccount,
+                TransactionType.CASH_IN, cmd.paymentMethod(), cmd.amount());
 
-        return executePayment(tx, ledger,
-                () -> provider.credit(cmd.amount(), cmd.paymentMethod()),
-                () -> {
-                    customerAccount.credit(cmd.amount());
-                    accountRepository.save(customerAccount);
-                });
+        return executePayment(tx, ledger, floatAccount, customerAccount,
+                cmd.amount(), cmd.paymentMethod(), UUID.randomUUID().toString());
     }
 
     public Transaction executeCashOut(CashOutCommand cmd) {
-        var customerAccount = validatePayerAndGetAccount(cmd.customerId(), cmd.rawPin());
-        var floatAccount = getSystemFloatAccountForUpdate();
-        var ledger = ledgerRepository.findFirst();
+        Account customerAccount = validatePayerAndGetAccount(cmd.customerId(), cmd.rawPin());
+        Account floatAccount = getSystemFloatAccountForUpdate();
+        Ledger ledger = ledgerRepository.findFirst();
 
-        var tx = ledger.cashOut(customerAccount, floatAccount, cmd.amount(), cmd.paymentMethod());
+        // fromAccount = customer (funds leave wallet), toAccount = float (provider outbound)
+        Transaction tx = ledger.initiate(customerAccount, floatAccount,
+                TransactionType.CASH_OUT, cmd.paymentMethod(), cmd.amount());
 
-        return executePayment(tx, ledger,
-                () -> provider.debit(cmd.amount(), cmd.paymentMethod()),
-                () -> {
-                    customerAccount.debit(cmd.amount());
-                    accountRepository.save(customerAccount);
-                });
+        return executePayment(tx, ledger, customerAccount, floatAccount,
+                cmd.amount(), cmd.paymentMethod(), UUID.randomUUID().toString());
     }
 
     public Transaction executeTransfer(TransferCommand cmd) {
-        var fromAccount = validatePayerAndGetAccount(cmd.customerId(), cmd.rawPin());
-        var toAccount = validateRecipientAndGetAccount(cmd.toPhoneNumber());
-        var ledger = ledgerRepository.findFirst();
+        Account fromAccount = validatePayerAndGetAccount(cmd.customerId(), cmd.rawPin());
+        Account toAccount = validateRecipientAndGetAccount(cmd.toPhoneNumber());
+        Ledger ledger = ledgerRepository.findFirst();
 
-        var tx = ledger.transfer(fromAccount, toAccount, cmd.amount(), cmd.paymentMethod());
+        if (fromAccount.snapshot().accountId().equals(toAccount.snapshot().accountId())) {
+            throw new SelfTransferException("Cannot transfer to the same account");
+        }
 
-        return executePayment(tx, ledger,
-                () -> provider.send(cmd.amount(), cmd.paymentMethod()),
-                () -> {
-                    fromAccount.debit(cmd.amount());
-                    toAccount.credit(cmd.amount());
-                    accountRepository.save(fromAccount);
-                    accountRepository.save(toAccount);
-                });
+        Transaction tx = ledger.initiate(fromAccount, toAccount,
+                TransactionType.P2P_TRANSFER, cmd.paymentMethod(), cmd.amount());
+
+        return executePayment(tx, ledger, fromAccount, toAccount,
+                cmd.amount(), cmd.paymentMethod(), UUID.randomUUID().toString());
     }
 
     public Transaction executeReversePayment(ReversePaymentCommand cmd) {
@@ -194,40 +197,88 @@ public class PaymentTransactionalExecutor {
         }
     }
 
-    // ── shared helpers ────────────────────────────────────────────────────────
+    // ── core payment orchestration ────────────────────────────────────────────
 
+    /**
+     * Executes the full payment lifecycle for a single transaction:
+     * INITIALIZED → AUTHORIZED → CAPTURED → SETTLEMENT_PENDING → SETTLED → COMPLETED
+     * <p>
+     * On authorization failure  : INITIALIZED → AUTHORIZATION_FAILED
+     * On capture failure        : AUTHORIZED  → CAPTURE_FAILED
+     */
     private Transaction executePayment(Transaction tx, Ledger ledger,
-                                       Runnable providerAction, Runnable onSuccess) {
-        persistTransactionState(tx);
+                                       Account fromAccount, Account toAccount,
+                                       Amount amount, String paymentMethod,
+                                       String correlationId) {
+        persistTransactionState(tx); // INITIALIZED
 
-        tx.authorize();
-        persistTransactionState(tx);
-
+        // ── Step 1: authorize with provider ──────────────────────────────────
+        AuthorizationResult authResult;
         try {
-            providerAction.run();
-
-            tx.capture();
-            persistTransactionState(tx);
-            onSuccess.run();
-
-            tx.pendSettlement();
-            persistTransactionState(tx);
-
-            tx.settle();
-            persistTransactionState(tx);
-
-            tx.markCompleted();
-            persistTransactionState(tx);
-
+            authResult = provider.authorize(amount, paymentMethod, correlationId);
         } catch (ProviderException e) {
-            tx.markFailed();
-            persistTransactionState(tx);
-            var reverseTx = ledger.reverse(tx);
-            transactionRepository.save(reverseTx);
+            tx.failAuthorization();
+            persistTransactionState(tx); // AUTHORIZATION_FAILED
+            return tx;
         }
+
+        AuthorizationRecord authRecord = AuthorizationRecord.create(
+                tx.snapshot().transactionId(),
+                authResult.providerReference(),
+                amount,
+                Duration.ofMinutes(15));
+        authorizationRecordRepository.save(authRecord);
+        tx.authorize();
+        persistTransactionState(tx); // AUTHORIZED
+
+        // ── Step 2: capture with provider ────────────────────────────────────
+        try {
+            provider.capture(authResult.providerReference(), correlationId);
+        } catch (ProviderException e) {
+            tx.failCapture();
+            authRecord.cancel();
+            authorizationRecordRepository.save(authRecord);
+            persistTransactionState(tx); // CAPTURE_FAILED
+            return tx;
+        }
+
+        // ── Step 3: write ledger entries and update balances ──────────────────
+        ledger.writeEntries(tx, fromAccount, toAccount, amount);
+        applyBalanceUpdate(fromAccount, toAccount, amount);
+        authRecord.consume();
+        authorizationRecordRepository.save(authRecord);
+        tx.capture();
+        persistTransactionState(tx); // CAPTURED
+
+        tx.pendSettlement();
+        persistTransactionState(tx); // SETTLEMENT_PENDING
+
+        tx.settle();
+        persistTransactionState(tx); // SETTLED
+
+        tx.markCompleted();
+        persistTransactionState(tx); // COMPLETED
 
         return tx;
     }
+
+    /**
+     * Updates account balances after a successful capture.
+     * Only CUSTOMER_ACCOUNT balances are stored — FLOAT_ACCOUNT balance is always
+     * audited through ledger operations, never through the stored balance (ADR-001).
+     */
+    private void applyBalanceUpdate(Account fromAccount, Account toAccount, Amount amount) {
+        if (fromAccount.snapshot().accountType().resourceType() == ResourceType.CUSTOMER_ACCOUNT) {
+            fromAccount.debit(amount);
+            accountRepository.save(fromAccount);
+        }
+        if (toAccount.snapshot().accountType().resourceType() == ResourceType.CUSTOMER_ACCOUNT) {
+            toAccount.credit(amount);
+            accountRepository.save(toAccount);
+        }
+    }
+
+    // ── shared helpers ────────────────────────────────────────────────────────
 
     private Account validatePayerAndGetAccount(Id customerId, String pin) {
         authUseCase.validatePin(customerId, pin);

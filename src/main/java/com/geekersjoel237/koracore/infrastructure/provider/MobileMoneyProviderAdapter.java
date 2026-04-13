@@ -20,17 +20,17 @@ public class MobileMoneyProviderAdapter implements ProviderPort {
 
     @Override
     public void credit(Amount amount, String paymentMethod) {
-        // Step 0: stub — always succeeds
+        // Deprecated in Step 1 flow — provider interaction now goes through authorize/capture
     }
 
     @Override
     public void debit(Amount amount, String paymentMethod) {
-        // Step 0: stub — always succeeds
+        // Deprecated in Step 1 flow — provider interaction now goes through authorize/capture
     }
 
     @Override
     public void send(Amount amount, String paymentMethod) {
-        // Step 0: stub — always succeeds
+        // Deprecated in Step 1 flow — provider interaction now goes through authorize/capture
     }
 
     @Override
