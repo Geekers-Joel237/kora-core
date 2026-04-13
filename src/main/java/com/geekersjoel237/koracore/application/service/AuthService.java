@@ -170,6 +170,7 @@ public class AuthService implements AuthUseCase {
                 .subject(user.snapshot().id().value())
                 .id(Id.generate().value())
                 .claim("email", user.snapshot().email())
+                .claim("role", user.snapshot().role().name())
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(accessExpiry))
                 .signWith(key)

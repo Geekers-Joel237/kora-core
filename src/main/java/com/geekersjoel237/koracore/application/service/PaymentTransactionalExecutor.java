@@ -4,6 +4,7 @@ import com.geekersjoel237.koracore.application.command.AuthorizePaymentCommand;
 import com.geekersjoel237.koracore.application.command.CapturePaymentCommand;
 import com.geekersjoel237.koracore.application.command.CashInCommand;
 import com.geekersjoel237.koracore.application.command.CashOutCommand;
+import com.geekersjoel237.koracore.application.command.PaymentSagaCommand;
 import com.geekersjoel237.koracore.application.command.ReversePaymentCommand;
 import com.geekersjoel237.koracore.application.command.TransferCommand;
 import com.geekersjoel237.koracore.application.port.in.AuthUseCase;
@@ -264,6 +265,60 @@ public class PaymentTransactionalExecutor {
         }
 
         throw new InvalidStateTransitionException(currentState, TransactionState.REVERSED);
+    }
+
+    // ── single-call payment saga ──────────────────────────────────────────────
+
+    public Transaction executePaymentSaga(PaymentSagaCommand cmd) {
+        Account customerAccount = validatePayerAndGetAccount(cmd.customerId(), cmd.rawPin());
+        Account floatAccount = getSystemFloatAccount();
+        Ledger ledger = ledgerRepository.findFirst();
+
+        Transaction tx = ledger.initiate(customerAccount, floatAccount,
+                TransactionType.CASH_OUT, cmd.paymentMethod(), cmd.amount());
+        persistTransactionState(tx); // INITIALIZED
+
+        tx.authorize();
+        try {
+            var result = provider.authorize(cmd.amount(), cmd.paymentMethod(), cmd.correlationId());
+            AuthorizationRecord authRecord = AuthorizationRecord.create(
+                    tx.snapshot().transactionId(),
+                    result.providerReference(),
+                    cmd.amount(),
+                    Duration.ofMinutes(15));
+            authorizationRecordRepository.save(authRecord);
+            persistTransactionState(tx); // AUTHORIZED
+
+            try {
+                provider.capture(authRecord.snapshot().providerReference(), cmd.correlationId());
+
+                Account lockedCustomer = accountRepository.findByCustomerIdForUpdate(cmd.customerId())
+                        .orElseThrow(() -> new AccountNotFoundException(
+                                "Account not found for customer: " + cmd.customerId().value()));
+                Account lockedFloat = getSystemFloatAccountForUpdate();
+                ledger.writeEntries(tx, lockedCustomer, lockedFloat, cmd.amount());
+                lockedCustomer.debit(cmd.amount());
+                accountRepository.save(lockedCustomer);
+                authRecord.consume();
+                authorizationRecordRepository.save(authRecord);
+                tx.capture();
+                persistTransactionState(tx); // CAPTURED
+                tx.pendSettlement();
+                persistTransactionState(tx); // SETTLEMENT_PENDING
+
+            } catch (ProviderException e) {
+                tx.failCapture();
+                authRecord.cancel();
+                authorizationRecordRepository.save(authRecord);
+                persistTransactionState(tx); // CAPTURE_FAILED
+            }
+
+        } catch (ProviderException e) {
+            tx.failAuthorization();
+            persistTransactionState(tx); // AUTHORIZATION_FAILED
+        }
+
+        return tx;
     }
 
     // ── TTL expiry ────────────────────────────────────────────────────────────

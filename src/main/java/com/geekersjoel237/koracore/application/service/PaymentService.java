@@ -4,6 +4,7 @@ import com.geekersjoel237.koracore.application.command.AuthorizePaymentCommand;
 import com.geekersjoel237.koracore.application.command.CapturePaymentCommand;
 import com.geekersjoel237.koracore.application.command.CashInCommand;
 import com.geekersjoel237.koracore.application.command.CashOutCommand;
+import com.geekersjoel237.koracore.application.command.PaymentSagaCommand;
 import com.geekersjoel237.koracore.application.command.ReversePaymentCommand;
 import com.geekersjoel237.koracore.application.command.TransferCommand;
 import com.geekersjoel237.koracore.application.port.in.PaymentUseCase;
@@ -77,6 +78,11 @@ public class PaymentService implements PaymentUseCase {
     @Override
     public Transaction reversePayment(ReversePaymentCommand cmd) {
         return withOptimisticRetry(() -> executor.executeReversePayment(cmd));
+    }
+
+    @Override
+    public Transaction executePaymentSaga(PaymentSagaCommand cmd) {
+        return withOptimisticRetry(() -> executor.executePaymentSaga(cmd));
     }
 
     private <T> T withOptimisticRetry(Supplier<T> action) {
