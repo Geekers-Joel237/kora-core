@@ -1,10 +1,7 @@
 package com.geekersjoel237.koracore.application.port.in;
 
-import com.geekersjoel237.koracore.application.command.AuthorizePaymentCommand;
-import com.geekersjoel237.koracore.application.command.CapturePaymentCommand;
 import com.geekersjoel237.koracore.application.command.CashInCommand;
 import com.geekersjoel237.koracore.application.command.CashOutCommand;
-import com.geekersjoel237.koracore.application.command.PaymentSagaCommand;
 import com.geekersjoel237.koracore.application.command.ReversePaymentCommand;
 import com.geekersjoel237.koracore.application.command.TransferCommand;
 import com.geekersjoel237.koracore.domain.model.Account;
@@ -17,8 +14,5 @@ public interface PaymentUseCase {
     Transaction transfer(TransferCommand cmd);
     Account getBalance(Id customerId);
 
-    Transaction authorizePayment(AuthorizePaymentCommand cmd);
-    Transaction capturePayment(CapturePaymentCommand cmd);
     Transaction reversePayment(ReversePaymentCommand cmd);
-    Transaction executePaymentSaga(PaymentSagaCommand cmd);
 }

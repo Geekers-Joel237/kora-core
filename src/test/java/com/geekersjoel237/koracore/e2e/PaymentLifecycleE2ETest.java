@@ -3,7 +3,7 @@ package com.geekersjoel237.koracore.e2e;
 import com.geekersjoel237.koracore.domain.vo.Id;
 import com.geekersjoel237.koracore.infrastructure.config.SecurityProperties;
 import com.geekersjoel237.koracore.web.api.payment.cashIn.CashInRequest;
-import com.geekersjoel237.koracore.web.api.payment.saga.PaymentRequest;
+import com.geekersjoel237.koracore.web.api.payment.cashOut.CashOutRequest;
 import com.geekersjoel237.koracore.web.api.payment.shared.TransactionResponse;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -20,8 +20,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class PaymentLifecycleE2ETest extends AbstractE2ETest {
 
-    private static final String EMAIL     = "saga@example.com";
-    private static final String FULL_NAME = "Saga User";
+    private static final String EMAIL     = "lifecycle@example.com";
+    private static final String FULL_NAME = "Lifecycle User";
     private static final String PREFIX    = "+237";
     private static final String PHONE     = "690000099";
     private static final String PIN       = "4321";
@@ -35,12 +35,12 @@ class PaymentLifecycleE2ETest extends AbstractE2ETest {
     // ── happy path ────────────────────────────────────────────────────────────
 
     @Test
-    void should_return_settlement_pending_on_successful_payment() {
-        SetupData ctx = setupCustomerWithAccountAndBalance(EMAIL, FULL_NAME, PREFIX, PHONE, PIN, AMOUNT);
+    void should_return_completed_on_successful_cash_in() {
+        SetupData ctx = setupCustomerWithAccount(EMAIL, FULL_NAME, PREFIX, PHONE, PIN);
 
         ResponseEntity<TransactionResponse> resp = postWithToken(
-                "/payments",
-                new PaymentRequest(PIN, AMOUNT, CURRENCY, METHOD, "corr-saga-1"),
+                "/payments/cash-in",
+                new CashInRequest(PIN, AMOUNT, CURRENCY, METHOD),
                 ctx.tokens().accessToken(),
                 TransactionResponse.class);
 
@@ -48,12 +48,8 @@ class PaymentLifecycleE2ETest extends AbstractE2ETest {
         TransactionResponse tx = resp.getBody();
         assertThat(tx).isNotNull();
         assertThat(tx.transactionId()).isNotBlank();
-        assertThat(tx.state()).isEqualTo("SETTLEMENT_PENDING");
+        assertThat(tx.state()).isEqualTo("COMPLETED");
         assertThat(tx.amount()).isEqualByComparingTo(AMOUNT);
-
-        var account = accountRepository.findByCustomerId(ctx.customerId()).orElseThrow();
-        assertThat(account.snapshot().balance().solde().value())
-                .isEqualByComparingTo(BigDecimal.ZERO);
     }
 
     // ── error paths ───────────────────────────────────────────────────────────
@@ -64,8 +60,8 @@ class PaymentLifecycleE2ETest extends AbstractE2ETest {
         SetupData ctx = setupCustomerWithAccount(EMAIL, FULL_NAME, PREFIX, PHONE, PIN);
 
         ResponseEntity<String> resp = postWithToken(
-                "/payments",
-                new PaymentRequest(PIN, AMOUNT, CURRENCY, METHOD, "corr-insuf"),
+                "/payments/cash-out",
+                new CashOutRequest(PIN, AMOUNT, CURRENCY, METHOD),
                 ctx.tokens().accessToken(),
                 String.class);
 
@@ -74,11 +70,11 @@ class PaymentLifecycleE2ETest extends AbstractE2ETest {
 
     @Test
     void should_return_401_when_wrong_pin() {
-        SetupData ctx = setupCustomerWithAccountAndBalance(EMAIL, FULL_NAME, PREFIX, PHONE, PIN, AMOUNT);
+        SetupData ctx = setupCustomerWithAccount(EMAIL, FULL_NAME, PREFIX, PHONE, PIN);
 
         ResponseEntity<String> resp = postWithToken(
-                "/payments",
-                new PaymentRequest("0000", AMOUNT, CURRENCY, METHOD, "corr-wrongpin"),
+                "/payments/cash-in",
+                new CashInRequest("0000", AMOUNT, CURRENCY, METHOD),
                 ctx.tokens().accessToken(),
                 String.class);
 
@@ -88,13 +84,13 @@ class PaymentLifecycleE2ETest extends AbstractE2ETest {
     @Test
     void should_return_403_when_admin_token_used_on_payments_endpoint() {
         // Build an ADMIN JWT directly using the same key the JwtAuthenticationFilter
-        // uses — no DB interaction needed.  The JWT carries role=ADMIN; Spring Security
-        // blocks POST /payments (which requires ROLE_CUSTOMER) and returns 403.
+        // uses — no DB interaction needed. The JWT carries role=ADMIN; Spring Security
+        // blocks POST /payments/cash-in (which requires ROLE_CUSTOMER) and returns 403.
         String adminToken = buildJwt(Id.generate().value(), "ADMIN");
 
         ResponseEntity<String> resp = postWithToken(
-                "/payments",
-                new PaymentRequest("irrelevant", AMOUNT, CURRENCY, METHOD, "corr-admin"),
+                "/payments/cash-in",
+                new CashInRequest("irrelevant", AMOUNT, CURRENCY, METHOD),
                 adminToken,
                 String.class);
 
@@ -111,19 +107,5 @@ class PaymentLifecycleE2ETest extends AbstractE2ETest {
                 .expiration(new Date(System.currentTimeMillis() + 900_000L))
                 .signWith(key)
                 .compact();
-    }
-
-    // ── helper ────────────────────────────────────────────────────────────────
-
-    private SetupData setupCustomerWithAccountAndBalance(
-            String email, String fullName, String prefix, String phone, String pin,
-            BigDecimal balance) {
-        SetupData ctx = setupCustomerWithAccount(email, fullName, prefix, phone, pin);
-        postWithToken(
-                "/payments/cash-in",
-                new CashInRequest(pin, balance, CURRENCY, METHOD),
-                ctx.tokens().accessToken(),
-                TransactionResponse.class);
-        return ctx;
     }
 }

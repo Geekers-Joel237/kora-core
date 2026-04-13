@@ -1,10 +1,7 @@
 package com.geekersjoel237.koracore.infrastructure.persistence;
 
-import com.geekersjoel237.koracore.application.command.AuthorizePaymentCommand;
-import com.geekersjoel237.koracore.application.command.CapturePaymentCommand;
 import com.geekersjoel237.koracore.application.command.CashInCommand;
 import com.geekersjoel237.koracore.application.command.CashOutCommand;
-import com.geekersjoel237.koracore.application.command.ReversePaymentCommand;
 import com.geekersjoel237.koracore.application.port.in.PaymentUseCase;
 import com.geekersjoel237.koracore.domain.enums.Role;
 import com.geekersjoel237.koracore.domain.model.Account;
@@ -35,8 +32,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class FinancialInvariantsDbTest extends AbstractRepositoryTest {
 
-    private static final Amount CASH_IN_AMOUNT     = new Amount(new BigDecimal("10000.00"), "XOF");
-    private static final Amount CASH_OUT_AMOUNT    = new Amount(new BigDecimal("3000.00"),  "XOF");
+    private static final Amount CASH_IN_AMOUNT  = new Amount(new BigDecimal("10000.00"), "XOF");
+    private static final Amount CASH_OUT_AMOUNT = new Amount(new BigDecimal("3000.00"),  "XOF");
 
     @Autowired private PaymentUseCase paymentUseCase;
     @Autowired private CustomerRepository customerRepository;
@@ -143,92 +140,6 @@ class FinancialInvariantsDbTest extends AbstractRepositoryTest {
                 .getSingleResult();
 
         assertThat(violations.longValue()).isZero();
-    }
-
-    @Test
-    void no_ledger_entries_exist_after_authorization_failure() {
-        SetupResult ctx = setup("inv6@example.com", "07000000106");
-        // give funds so the balance check passes, then fail the provider call
-        paymentUseCase.cashIn(new CashInCommand(ctx.customerId(), "1234", CASH_IN_AMOUNT, "ORANGE_MONEY"));
-        em.flush();
-
-        // authorize with CASH_IN amount so sufficient funds exist
-        // This uses real MobileMoneyProviderAdapter which always succeeds in stub —
-        // to simulate failure we use a separate path that does not add operations.
-        // Verify: the authorize-only flow creates 0 operations for that transaction.
-        Transaction authTx = paymentUseCase.authorizePayment(new AuthorizePaymentCommand(
-                ctx.customerId(), "1234", CASH_IN_AMOUNT, "ORANGE_MONEY", "corr-inv6"));
-        em.flush();
-
-        String txId = authTx.snapshot().transactionId().value();
-        Number opCount = (Number) em.createNativeQuery("""
-                SELECT COUNT(*) FROM operations
-                WHERE transaction_id = :txId AND deleted_at IS NULL
-                """)
-                .setParameter("txId", txId)
-                .getSingleResult();
-
-        assertThat(opCount.longValue()).isEqualTo(0L);
-    }
-
-    @Test
-    void double_entry_invariant_holds_after_capture() {
-        SetupResult ctx = setup("inv7@example.com", "07000000107");
-        paymentUseCase.cashIn(new CashInCommand(ctx.customerId(), "1234", CASH_IN_AMOUNT, "ORANGE_MONEY"));
-        em.flush(); em.clear();
-
-        Transaction authTx = paymentUseCase.authorizePayment(new AuthorizePaymentCommand(
-                ctx.customerId(), "1234", CASH_IN_AMOUNT, "ORANGE_MONEY", "corr-inv7"));
-        em.flush(); em.clear();
-
-        paymentUseCase.capturePayment(new CapturePaymentCommand(
-                authTx.snapshot().transactionId(), ctx.customerId(), "corr-inv7"));
-        em.flush();
-
-        Number violations = (Number) em.createNativeQuery("""
-                SELECT COUNT(*) FROM (
-                    SELECT transaction_id
-                    FROM operations
-                    WHERE deleted_at IS NULL
-                    GROUP BY transaction_id
-                    HAVING SUM(CASE WHEN type = 'CREDIT' THEN amount ELSE 0 END)
-                        != SUM(CASE WHEN type = 'DEBIT'  THEN amount ELSE 0 END)
-                ) v
-                """)
-                .getSingleResult();
-
-        assertThat(violations.longValue()).isZero();
-    }
-
-    @Test
-    void reversal_produces_net_zero_ledger_entries() {
-        SetupResult ctx = setup("inv8@example.com", "07000000108");
-        paymentUseCase.cashIn(new CashInCommand(ctx.customerId(), "1234", CASH_IN_AMOUNT, "ORANGE_MONEY"));
-        em.flush(); em.clear();
-
-        Transaction authTx = paymentUseCase.authorizePayment(new AuthorizePaymentCommand(
-                ctx.customerId(), "1234", CASH_IN_AMOUNT, "ORANGE_MONEY", "corr-inv8"));
-        em.flush(); em.clear();
-
-        paymentUseCase.capturePayment(new CapturePaymentCommand(
-                authTx.snapshot().transactionId(), ctx.customerId(), "corr-inv8"));
-        em.flush(); em.clear();
-
-        paymentUseCase.reversePayment(new ReversePaymentCommand(
-                authTx.snapshot().transactionId(), "admin", "ADMIN", "Test reversal", "corr-inv8"));
-        em.flush();
-
-        String txId = authTx.snapshot().transactionId().value();
-        Number imbalance = (Number) em.createNativeQuery("""
-                SELECT SUM(CASE WHEN type = 'CREDIT' THEN amount ELSE -amount END)
-                FROM operations
-                WHERE transaction_id = :txId AND deleted_at IS NULL
-                """)
-                .setParameter("txId", txId)
-                .getSingleResult();
-
-        assertThat(new BigDecimal(imbalance.toString()))
-                .isEqualByComparingTo(BigDecimal.ZERO);
     }
 
     @Test
