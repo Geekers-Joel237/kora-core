@@ -1,0 +1,200 @@
+package com.geekersjoel237.koracore.application.service;
+
+import com.geekersjoel237.koracore.application.command.LoginCommand;
+import com.geekersjoel237.koracore.application.command.RegisterCommand;
+import com.geekersjoel237.koracore.application.port.in.AuthUseCase;
+import com.geekersjoel237.koracore.domain.OtpMailContext;
+import com.geekersjoel237.koracore.domain.enums.Role;
+import com.geekersjoel237.koracore.domain.exception.*;
+import com.geekersjoel237.koracore.domain.model.Account;
+import com.geekersjoel237.koracore.domain.model.Customer;
+import com.geekersjoel237.koracore.domain.model.User;
+import com.geekersjoel237.koracore.domain.port.*;
+import com.geekersjoel237.koracore.domain.vo.*;
+import com.geekersjoel237.koracore.infrastructure.config.SecurityProperties;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import javax.crypto.SecretKey;
+import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Date;
+
+@Service
+@Transactional
+public class AuthService implements AuthUseCase {
+
+    private final SecurityProperties securityProperties;
+
+    private static final String DEFAULT_TEST_SECRET =
+            "kora-core-test-secret-key-must-be-at-least-32-chars!";
+
+    private final UserRepository userRepository;
+    private final CustomerRepository customerRepository;
+    private final AccountRepository accountRepository;
+    private final OtpStore otpStore;
+    private final CustomerPinEncoder pinEncoder;
+    private final Clock clock;
+    private final MailPort mailPort;
+    private final SecureRandom secureRandom = new SecureRandom();
+
+    @Autowired
+    public AuthService(UserRepository userRepository,
+                       CustomerRepository customerRepository,
+                       AccountRepository accountRepository,
+                       OtpStore otpStore,
+                       CustomerPinEncoder pinEncoder,
+                       Clock clock,
+                       SecurityProperties securityProperties,
+                       MailPort mailPort) {
+        this.userRepository = userRepository;
+        this.customerRepository = customerRepository;
+        this.accountRepository = accountRepository;
+        this.otpStore = otpStore;
+        this.pinEncoder = pinEncoder;
+        this.clock = clock;
+        this.securityProperties = securityProperties;
+        this.mailPort = mailPort;
+    }
+
+    /**
+     * Test constructor — no mail, no @Value injection.
+     */
+    public AuthService(UserRepository userRepository,
+                       CustomerRepository customerRepository,
+                       AccountRepository accountRepository,
+                       OtpStore otpStore,
+                       CustomerPinEncoder pinEncoder,
+                       Clock clock,
+                       MailPort mailPort) {
+        this(userRepository, customerRepository, accountRepository,
+                otpStore, pinEncoder, clock,
+                new SecurityProperties(
+                        new SecurityProperties.Jwt(DEFAULT_TEST_SECRET, 15, 7),
+                        new SecurityProperties.Otp(5)
+                ), mailPort);
+    }
+
+    @Override
+    public void validatePin(Id customerId, String rawPin) {
+        if (rawPin == null)
+            throw new IllegalArgumentException("Pin cannot be null");
+
+        Customer customer = customerRepository.findById(customerId)
+                .orElseThrow(() -> new CustomerNotFoundException(
+                        "Customer not found: " + customerId.value()));
+
+        if (!customer.matchesPin(rawPin, pinEncoder))
+            throw new PinValidationException("Invalid PIN");
+    }
+
+    @Override
+    public void verifyOtp(String email, String code) {
+        String key = "otp:" + email;
+        Otp otp = otpStore.get(key)
+                .orElseThrow(() -> new OtpExpiredException(
+                        "OTP not found, expired or already consumed for: " + email));
+
+        if (!otp.matches(code))
+            throw new InvalidOtpException("OTP code does not match");
+
+        otpStore.delete(key);
+    }
+
+    @Override
+    public void register(RegisterCommand cmd) {
+        if (customerRepository.existsByEmail(cmd.email()))
+            throw new DuplicateEmailException("Email already registered: " + cmd.email());
+
+        Id id = Id.generate();
+        User user = User.create(id, cmd.fullName(), cmd.email(), Role.CUSTOMER);
+        userRepository.save(user);
+
+        PhoneNumber phone = PhoneNumber.of(cmd.phonePrefix(), cmd.phoneNumber());
+        Customer customer = Customer.create(user, phone, cmd.rawPin(), pinEncoder);
+        customerRepository.save(customer);
+
+        accountRepository.save(Account.createCustomerAccount(Id.generate(), customer.snapshot().customerId()));
+
+        var otp = generateOtp(cmd.email());
+        mailPort.sendOtp(cmd.email(), otp, OtpMailContext.REGISTRATION);
+
+    }
+
+    @Override
+    public void login(LoginCommand cmd) {
+        Customer customer = customerRepository.findByEmail(cmd.email())
+                .orElseThrow(() -> new CustomerNotFoundException("Customer not found: " + cmd.email()));
+
+        validatePin(customer.snapshot().customerId(), cmd.rawPin());
+        var otp = generateOtp(cmd.email());
+        mailPort.sendOtp(cmd.email(), otp, OtpMailContext.LOGIN);
+    }
+
+    @Override
+    public Tokens verifyOtpAndGetTokens(String email, String code) {
+        verifyOtp(email, code);
+        Customer customer = customerRepository.findByEmail(email)
+                .orElseThrow(() -> new CustomerNotFoundException("Customer not found: " + email));
+        User user = User.createFromSnapshot(customer.snapshot().user());
+        return generateTokens(user);
+    }
+
+    @Override
+    public Tokens refresh(String refreshToken) {
+        SecretKey key = Keys.hmacShaKeyFor(securityProperties.jwt().secret().getBytes(StandardCharsets.UTF_8));
+        Claims claims = Jwts.parser().verifyWith(key).build()
+                .parseSignedClaims(refreshToken).getPayload();
+        String userId = claims.getSubject();
+        User user = userRepository.findById(new Id(userId))
+                .orElseThrow(() -> new CustomerNotFoundException("User not found: " + userId));
+        return generateTokens(user);
+    }
+
+    @Override
+    public Tokens generateTokens(User user) {
+        Instant now = Instant.now(clock);
+        Instant accessExpiry = now.plus(Duration.ofMinutes(securityProperties.jwt().accessTokenExpirationMinutes()));
+        Instant refreshExpiry = now.plus(Duration.ofDays(securityProperties.jwt().refreshTokenExpirationDays()));
+
+        SecretKey key = Keys.hmacShaKeyFor(securityProperties.jwt().secret().getBytes(StandardCharsets.UTF_8));
+
+        String accessValue = Jwts.builder()
+                .subject(user.snapshot().id().value())
+                .id(Id.generate().value())
+                .claim("email", user.snapshot().email())
+                .issuedAt(Date.from(now))
+                .expiration(Date.from(accessExpiry))
+                .signWith(key)
+                .compact();
+
+        String refreshValue = Jwts.builder()
+                .subject(user.snapshot().id().value())
+                .id(Id.generate().value())
+                .issuedAt(Date.from(now))
+                .expiration(Date.from(refreshExpiry))
+                .signWith(key)
+                .compact();
+
+        return new Tokens(
+                new Tokens.TokenValue(accessValue, accessExpiry),
+                new Tokens.TokenValue(refreshValue, refreshExpiry)
+        );
+    }
+
+    // ── Internal ─────────────────────────────────────────────────────────────
+
+    public String generateOtp(String email) {
+        String code = String.format("%06d", secureRandom.nextInt(1_000_000));
+        Otp otp = Otp.of(code, Duration.ofMinutes(securityProperties.otp().expirationMinutes()), clock);
+        otpStore.save("otp:" + email, otp);
+        return code;
+    }
+}

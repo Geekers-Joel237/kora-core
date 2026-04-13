@@ -1,0 +1,61 @@
+services:
+  postgres:
+    image: 'postgres:17-alpine'
+    container_name: kora-postgres
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    environment:
+      - 'POSTGRES_DB=${POSTGRES_DB}'
+      - 'POSTGRES_PASSWORD=${POSTGRES_PASSWORD}'
+      - 'POSTGRES_USER=${POSTGRES_USER}'
+    ports:
+      - '${DB_PORT}:5432'
+    volumes:
+      - 'postgres-data:/var/lib/postgresql/data'
+
+  redis:
+    image: 'redis:8-alpine'
+    container_name: kora-redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    ports:
+      - '${CACHE_PORT}:6379'
+    volumes:
+      - 'redis-data:/data'
+
+  pgadmin:
+    image: 'dpage/pgadmin4:latest'
+    container_name: kora-db-admin
+    restart: unless-stopped
+    environment:
+      - 'PGADMIN_DEFAULT_EMAIL=admin@kora.com'
+      - 'PGADMIN_DEFAULT_PASSWORD=root'
+    ports:
+      - '${DB_ADMIN_PORT}:80'
+    depends_on:
+      - postgres
+
+  maildev:
+    image: 'maildev/maildev:latest'
+    container_name: kora-maildev
+    restart: unless-stopped
+    ports:
+      - '${MAIL_SMTP_PORT:-1025}:1025'   # SMTP — used by Spring Boot mail
+      - '${MAIL_UI_PORT:-1080}:1080'     # Web UI — http://localhost:1080
+    environment:
+      - MAILDEV_SMTP_PORT=1025
+      - MAILDEV_WEB_PORT=1080
+
+volumes:
+  postgres-data:
+  redis-data:
