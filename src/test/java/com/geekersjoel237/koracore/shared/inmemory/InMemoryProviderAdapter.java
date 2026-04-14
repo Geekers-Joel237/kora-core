@@ -11,7 +11,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
-public class InMemoryProviderSimulator implements ProviderPort {
+public class InMemoryProviderAdapter implements ProviderPort {
 
     public enum Behavior {
         SUCCESS,
@@ -25,7 +25,7 @@ public class InMemoryProviderSimulator implements ProviderPort {
 
     private Behavior behavior;
 
-    public InMemoryProviderSimulator(Behavior behavior) {
+    public InMemoryProviderAdapter(Behavior behavior) {
         this.behavior = behavior;
     }
 

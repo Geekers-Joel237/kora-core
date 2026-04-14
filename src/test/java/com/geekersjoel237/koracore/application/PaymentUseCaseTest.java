@@ -27,8 +27,8 @@ import java.util.List;
 
 import static com.geekersjoel237.koracore.domain.model.state.TransactionState.AUTHORIZATION_FAILED;
 import static com.geekersjoel237.koracore.domain.model.state.TransactionState.COMPLETED;
-import static com.geekersjoel237.koracore.shared.inmemory.InMemoryProviderSimulator.Behavior.FAIL;
-import static com.geekersjoel237.koracore.shared.inmemory.InMemoryProviderSimulator.Behavior.SUCCESS;
+import static com.geekersjoel237.koracore.shared.inmemory.InMemoryProviderAdapter.Behavior.FAIL;
+import static com.geekersjoel237.koracore.shared.inmemory.InMemoryProviderAdapter.Behavior.SUCCESS;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -54,7 +54,7 @@ class PaymentUseCaseTest {
     private InMemoryTransactionRepository transactionRepo;
     private InMemoryTrxHistoricStatesRepository historicRepo;
     private InMemoryOtpStore otpStore;
-    private InMemoryProviderSimulator provider;
+    private InMemoryProviderAdapter provider;
     private InMemoryMailPort mailPort;
     private AuthService authService;
     private PaymentService paymentService;
@@ -77,7 +77,7 @@ class PaymentUseCaseTest {
         transactionRepo = new InMemoryTransactionRepository();
         historicRepo = new InMemoryTrxHistoricStatesRepository();
         otpStore = new InMemoryOtpStore(Clock.systemUTC());
-        provider = new InMemoryProviderSimulator(SUCCESS);
+        provider = new InMemoryProviderAdapter(SUCCESS);
         ledgerRepository = new InMemoryLedgerRepository(Ledger.create(Id.generate()));
         mailPort = new InMemoryMailPort();
         authService = new AuthService(

@@ -29,7 +29,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 
-import static com.geekersjoel237.koracore.shared.inmemory.InMemoryProviderSimulator.Behavior.SUCCESS;
+import static com.geekersjoel237.koracore.shared.inmemory.InMemoryProviderAdapter.Behavior.SUCCESS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -69,7 +69,7 @@ class TransactionHistoryServiceTest {
                 Clock.systemUTC(), mailPort);
         PaymentTransactionalExecutor executor = new PaymentTransactionalExecutor(
                 authService, accountRepo, customerRepo,
-                transactionRepo, historicRepo, new InMemoryProviderSimulator(SUCCESS), ledgerRepo,
+                transactionRepo, historicRepo, new InMemoryProviderAdapter(SUCCESS), ledgerRepo,
                 new InMemoryAuthorizationRecordRepository());
         paymentService = new PaymentService(executor, accountRepo);
 
