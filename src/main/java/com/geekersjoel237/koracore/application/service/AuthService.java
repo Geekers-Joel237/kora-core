@@ -101,7 +101,10 @@ public class AuthService implements AuthUseCase {
         String key = "otp:" + email;
         Otp otp = otpStore.get(key)
                 .orElseThrow(() -> new OtpExpiredException(
-                        "OTP not found, expired or already consumed for: " + email));
+                        "OTP not found for: " + email));
+        if (otp.isExpired(clock)) {
+            throw new OtpExpiredException("OTP expired or already consumed for: " + email);
+        }
 
         if (!otp.matches(code))
             throw new InvalidOtpException("OTP code does not match");
