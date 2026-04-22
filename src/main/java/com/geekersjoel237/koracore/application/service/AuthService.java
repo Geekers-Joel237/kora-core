@@ -10,7 +10,10 @@ import com.geekersjoel237.koracore.domain.model.Account;
 import com.geekersjoel237.koracore.domain.model.Customer;
 import com.geekersjoel237.koracore.domain.model.User;
 import com.geekersjoel237.koracore.domain.port.*;
-import com.geekersjoel237.koracore.domain.vo.*;
+import com.geekersjoel237.koracore.domain.vo.Id;
+import com.geekersjoel237.koracore.domain.vo.Otp;
+import com.geekersjoel237.koracore.domain.vo.PhoneNumber;
+import com.geekersjoel237.koracore.domain.vo.Tokens;
 import com.geekersjoel237.koracore.infrastructure.config.SecurityProperties;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
@@ -31,11 +34,9 @@ import java.util.Date;
 @Transactional
 public class AuthService implements AuthUseCase {
 
-    private final SecurityProperties securityProperties;
-
     private static final String DEFAULT_TEST_SECRET =
             "kora-core-test-secret-key-must-be-at-least-32-chars!";
-
+    private final SecurityProperties securityProperties;
     private final UserRepository userRepository;
     private final CustomerRepository customerRepository;
     private final AccountRepository accountRepository;
@@ -112,19 +113,22 @@ public class AuthService implements AuthUseCase {
     public void register(RegisterCommand cmd) {
         if (customerRepository.existsByEmail(cmd.email()))
             throw new DuplicateEmailException("Email already registered: " + cmd.email());
+        PhoneNumber phone = PhoneNumber.of(cmd.phonePrefix(), cmd.phoneNumber());
 
-        Id id = Id.generate();
-        User user = User.create(id, cmd.fullName(), cmd.email(), Role.CUSTOMER);
+        User user = User.create(Id.generate(), cmd.fullName(), cmd.email(), Role.CUSTOMER);
         userRepository.save(user);
 
-        PhoneNumber phone = PhoneNumber.of(cmd.phonePrefix(), cmd.phoneNumber());
         Customer customer = Customer.create(user, phone, cmd.rawPin(), pinEncoder);
         customerRepository.save(customer);
 
         accountRepository.save(Account.createCustomerAccount(Id.generate(), customer.snapshot().customerId()));
 
         var otp = generateOtp(cmd.email());
-        mailPort.sendOtp(cmd.email(), otp, OtpMailContext.REGISTRATION);
+        try {
+            mailPort.sendOtp(cmd.email(), otp, OtpMailContext.REGISTRATION);
+        } catch (MailProviderException e) {
+            //TODO: manage mail provider failure
+        }
 
     }
 
@@ -135,7 +139,11 @@ public class AuthService implements AuthUseCase {
 
         validatePin(customer.snapshot().customerId(), cmd.rawPin());
         var otp = generateOtp(cmd.email());
-        mailPort.sendOtp(cmd.email(), otp, OtpMailContext.LOGIN);
+        try {
+            mailPort.sendOtp(cmd.email(), otp, OtpMailContext.LOGIN);
+        } catch (MailProviderException e) {
+            //TODO: manage mail provider failure
+        }
     }
 
     @Override
