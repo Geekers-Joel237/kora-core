@@ -9,18 +9,8 @@ import com.geekersjoel237.koracore.domain.SystemConstants;
 import com.geekersjoel237.koracore.domain.enums.ResourceType;
 import com.geekersjoel237.koracore.domain.enums.TransactionType;
 import com.geekersjoel237.koracore.domain.enums.TriggerSource;
-import com.geekersjoel237.koracore.domain.exception.AccountBlockedException;
-import com.geekersjoel237.koracore.domain.exception.AccountNotFoundException;
-import com.geekersjoel237.koracore.domain.exception.AccountSuspendedException;
-import com.geekersjoel237.koracore.domain.exception.InvalidStateTransitionException;
-import com.geekersjoel237.koracore.domain.exception.ProviderException;
-import com.geekersjoel237.koracore.domain.exception.SelfTransferException;
-import com.geekersjoel237.koracore.domain.model.Account;
-import com.geekersjoel237.koracore.domain.model.AuthorizationRecord;
-import com.geekersjoel237.koracore.domain.model.Customer;
-import com.geekersjoel237.koracore.domain.model.Ledger;
-import com.geekersjoel237.koracore.domain.model.Transaction;
-import com.geekersjoel237.koracore.domain.model.TrxStateHistoric;
+import com.geekersjoel237.koracore.domain.exception.*;
+import com.geekersjoel237.koracore.domain.model.*;
 import com.geekersjoel237.koracore.domain.model.state.TransactionState;
 import com.geekersjoel237.koracore.domain.port.*;
 import com.geekersjoel237.koracore.domain.vo.Amount;
@@ -30,7 +20,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
-import java.util.UUID;
 
 /**
  * Executes one payment attempt inside a single, self-contained transaction.
@@ -84,7 +73,7 @@ public class PaymentTransactionalExecutor {
                 TransactionType.CASH_IN, cmd.paymentMethod(), cmd.amount());
 
         return executePayment(tx, ledger, floatAccount, customerAccount,
-                cmd.amount(), cmd.paymentMethod(), UUID.randomUUID().toString());
+                cmd.amount(), cmd.paymentMethod(), Id.generate().value());
     }
 
     public Transaction executeCashOut(CashOutCommand cmd) {
@@ -97,7 +86,7 @@ public class PaymentTransactionalExecutor {
                 TransactionType.CASH_OUT, cmd.paymentMethod(), cmd.amount());
 
         return executePayment(tx, ledger, customerAccount, floatAccount,
-                cmd.amount(), cmd.paymentMethod(), UUID.randomUUID().toString());
+                cmd.amount(), cmd.paymentMethod(), Id.generate().value());
     }
 
     public Transaction executeTransfer(TransferCommand cmd) {
@@ -113,7 +102,7 @@ public class PaymentTransactionalExecutor {
                 TransactionType.P2P_TRANSFER, cmd.paymentMethod(), cmd.amount());
 
         return executePayment(tx, ledger, fromAccount, toAccount,
-                cmd.amount(), cmd.paymentMethod(), UUID.randomUUID().toString());
+                cmd.amount(), cmd.paymentMethod(), Id.generate().value());
     }
 
     public Transaction executeReversePayment(ReversePaymentCommand cmd) {
@@ -151,7 +140,7 @@ public class PaymentTransactionalExecutor {
         }
 
         if (currentState == TransactionState.CAPTURED
-                || currentState == TransactionState.SETTLEMENT_PENDING) {
+            || currentState == TransactionState.SETTLEMENT_PENDING) {
             Account customerAccount = accountRepository.findById(tx.snapshot().fromId())
                     .orElseThrow(() -> new AccountNotFoundException(
                             "Account not found: " + tx.snapshot().fromId().value()));

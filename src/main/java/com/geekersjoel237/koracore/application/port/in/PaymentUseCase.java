@@ -13,6 +13,5 @@ public interface PaymentUseCase {
     Transaction cashOut(CashOutCommand cmd);
     Transaction transfer(TransferCommand cmd);
     Account getBalance(Id customerId);
-
     Transaction reversePayment(ReversePaymentCommand cmd);
 }

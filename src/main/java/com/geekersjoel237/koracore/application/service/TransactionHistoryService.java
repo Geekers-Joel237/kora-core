@@ -89,7 +89,6 @@ public class TransactionHistoryService implements TransactionHistoryUseCase {
     /**
      * Resolves the masked phone number of the counterpart for P2P transfers.
      * Returns null for CASH_IN and CASH_OUT (counterpart is the float account, not a customer).
-     *
      * Masking rule: prefix + first 3 digits of local number + "***" + last 3 digits.
      * Example: "+225" + "070" + "***" + "001" → "+225070***001"
      */
