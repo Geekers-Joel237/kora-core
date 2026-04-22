@@ -94,10 +94,7 @@ public class PaymentTransactionalExecutor {
         Account toAccount = validateRecipientAndGetAccount(cmd.toPhoneNumber());
         Ledger ledger = ledgerRepository.findFirst();
 
-        if (fromAccount.snapshot().accountId().equals(toAccount.snapshot().accountId())) {
-            throw new SelfTransferException("Cannot transfer to the same account");
-        }
-
+        // SelfTransferException is enforced in Transaction.create() via ledger.initiate()
         Transaction tx = ledger.initiate(fromAccount, toAccount,
                 TransactionType.P2P_TRANSFER, cmd.paymentMethod(), cmd.amount());
 

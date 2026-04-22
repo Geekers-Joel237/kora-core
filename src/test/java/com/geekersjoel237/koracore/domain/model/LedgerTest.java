@@ -5,7 +5,6 @@ import com.geekersjoel237.koracore.domain.enums.TransactionType;
 import com.geekersjoel237.koracore.domain.exception.CurrencyMismatchException;
 import com.geekersjoel237.koracore.domain.exception.InsufficientFundsException;
 import com.geekersjoel237.koracore.domain.exception.InvalidAccountException;
-import com.geekersjoel237.koracore.domain.exception.SelfTransferException;
 import com.geekersjoel237.koracore.domain.vo.Amount;
 import com.geekersjoel237.koracore.domain.vo.Id;
 import org.junit.jupiter.api.BeforeEach;
@@ -239,13 +238,6 @@ class LedgerTest {
         Transaction tx = ledger.transfer(accountA, accountB,
                 Amount.of(BigDecimal.valueOf(100), "XOF"), "MOBILE");
         assertTrue(isDoubleEntryBalanced(tx));
-    }
-
-    @Test
-    void should_throw_when_self_transfer() {
-        assertThrows(SelfTransferException.class,
-                () -> ledger.transfer(accountA, accountA,
-                        Amount.of(BigDecimal.valueOf(100), "XOF"), "MOBILE"));
     }
 
     @Test

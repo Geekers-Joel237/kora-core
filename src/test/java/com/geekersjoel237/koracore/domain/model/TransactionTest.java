@@ -3,6 +3,7 @@ package com.geekersjoel237.koracore.domain.model;
 import com.geekersjoel237.koracore.domain.enums.OperationType;
 import com.geekersjoel237.koracore.domain.enums.TransactionType;
 import com.geekersjoel237.koracore.domain.exception.InvalidStateTransitionException;
+import com.geekersjoel237.koracore.domain.exception.SelfTransferException;
 import com.geekersjoel237.koracore.domain.model.state.TransactionState;
 import com.geekersjoel237.koracore.domain.vo.Amount;
 import com.geekersjoel237.koracore.domain.vo.Id;
@@ -57,6 +58,16 @@ class TransactionTest {
         assertEquals(new Id("to-001"), tx.snapshot().toId());
     }
 
+    // ── SelfTransfer invariant ────────────────────────────────────────────────
+
+    @Test
+    void should_throw_self_transfer_exception_when_from_and_to_are_identical() {
+        Id sameId = Id.generate();
+        assertThrows(SelfTransferException.class, () ->
+                Transaction.create(Id.generate(), sameId, sameId,
+                        TransactionType.P2P_TRANSFER, "MOBILE", AMT));
+    }
+
     // ── addOperation ──────────────────────────────────────────────────────────
 
     @Test
@@ -71,6 +82,36 @@ class TransactionTest {
         Transaction tx = createTestTransaction();
         assertThrows(UnsupportedOperationException.class,
                 () -> tx.operations().add(testOperation()));
+    }
+
+    // ── recordDoubleEntry ─────────────────────────────────────────────────────
+
+    @Test
+    void should_add_two_operations_on_record_double_entry() {
+        Transaction tx = createTestTransaction();
+        tx.recordDoubleEntry(AMT, new Id("debit-acc"), new Id("credit-acc"));
+        assertEquals(2, tx.operations().size());
+    }
+
+    @Test
+    void should_have_one_debit_and_one_credit_after_record_double_entry() {
+        Transaction tx = createTestTransaction();
+        tx.recordDoubleEntry(AMT, new Id("debit-acc"), new Id("credit-acc"));
+
+        long debits  = tx.operations().stream()
+                .filter(op -> op.snapshot().type() == OperationType.DEBIT).count();
+        long credits = tx.operations().stream()
+                .filter(op -> op.snapshot().type() == OperationType.CREDIT).count();
+
+        assertEquals(1, debits);
+        assertEquals(1, credits);
+    }
+
+    @Test
+    void should_not_throw_when_double_entry_is_balanced() {
+        Transaction tx = createTestTransaction();
+        assertDoesNotThrow(() ->
+                tx.recordDoubleEntry(AMT, new Id("from"), new Id("to")));
     }
 
     // ── transitionTo ──────────────────────────────────────────────────────────

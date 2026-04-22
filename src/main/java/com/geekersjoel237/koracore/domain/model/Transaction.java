@@ -1,10 +1,13 @@
 package com.geekersjoel237.koracore.domain.model;
 
+import com.geekersjoel237.koracore.domain.enums.OperationType;
 import com.geekersjoel237.koracore.domain.enums.TransactionType;
+import com.geekersjoel237.koracore.domain.exception.SelfTransferException;
 import com.geekersjoel237.koracore.domain.model.state.TransactionState;
 import com.geekersjoel237.koracore.domain.vo.Amount;
 import com.geekersjoel237.koracore.domain.vo.Id;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -50,6 +53,9 @@ public class Transaction {
         if (toId == null) throw new IllegalArgumentException("Transaction toId cannot be null");
         if (amount == null) throw new IllegalArgumentException("Transaction amount cannot be null");
 
+        if (fromId.equals(toId))
+            throw new SelfTransferException("Cannot transfer to the same account");
+
         var transactionNumber = generateTransactionNumber(transactionId);
         return new Transaction(transactionId, transactionNumber, fromId, toId,
                 type, paymentMethod, amount);
@@ -79,6 +85,30 @@ public class Transaction {
 
     public void addOperation(Operation op) {
         this.operations.add(op);
+    }
+
+    public void recordDoubleEntry(Amount amount, Id debitAccountId, Id creditAccountId) {
+        this.operations.add(
+                Operation.create(Id.generate(), OperationType.DEBIT, amount, debitAccountId));
+        this.operations.add(
+                Operation.create(Id.generate(), OperationType.CREDIT, amount, creditAccountId));
+        verifyDoubleEntry();
+    }
+
+    private void verifyDoubleEntry() {
+        Amount debit  = sumByType(OperationType.DEBIT);
+        Amount credit = sumByType(OperationType.CREDIT);
+        if (!debit.equals(credit))
+            throw new IllegalStateException(
+                    "Double-entry invariant violated: debit=" + debit.value()
+                    + " credit=" + credit.value());
+    }
+
+    private Amount sumByType(OperationType type) {
+        return this.operations.stream()
+                .filter(op -> op.snapshot().type() == type)
+                .map(op -> op.snapshot().amount())
+                .reduce(Amount.of(BigDecimal.ZERO, this.amount.currency()), Amount::add);
     }
 
     private void transitionTo(TransactionState newState) {
