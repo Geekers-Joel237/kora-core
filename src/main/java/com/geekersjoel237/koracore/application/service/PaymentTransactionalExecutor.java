@@ -137,7 +137,7 @@ public class PaymentTransactionalExecutor {
         }
 
         if (currentState == TransactionState.CAPTURED
-            || currentState == TransactionState.SETTLEMENT_PENDING) {
+                || currentState == TransactionState.SETTLEMENT_PENDING) {
             Account customerAccount = accountRepository.findById(tx.snapshot().fromId())
                     .orElseThrow(() -> new AccountNotFoundException(
                             "Account not found: " + tx.snapshot().fromId().value()));

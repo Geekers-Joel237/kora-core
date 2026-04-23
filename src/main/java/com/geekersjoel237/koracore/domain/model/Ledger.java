@@ -38,6 +38,10 @@ public class Ledger {
                             + ", required " + amount.value());
     }
 
+    // ── Legacy full-cycle methods (used by LedgerTest) ────────────────────────
+    // These create a Transaction WITH operations in one shot.
+    // Not used by the authorize/capture payment flow.
+
     public Transaction cashIn(Account customerAccount, Account floatAccount,
                               Amount amount, String paymentMethod) {
         requireActive(customerAccount, "Customer account is not active");
@@ -100,20 +104,38 @@ public class Ledger {
         return tx;
     }
 
+    // ── Two-phase payment flow ─────────────────────────────────────────────────
+
+    /**
+     * Creates a Transaction shell WITHOUT ledger operations.
+     * Operations are written later, at capture time, via {@link #writeEntries}.
+     *
+     * <p>Invariant priority:
+     * <ol>
+     *   <li>{@code Transaction.create()} fires first → {@code SelfTransferException}
+     *       is the aggregate's invariant and has absolute priority.</li>
+     *   <li>{@code requireSufficientFunds} fires after → operational constraint.</li>
+     * </ol>
+     */
     public Transaction initiate(Account fromAccount, Account toAccount,
                                 TransactionType type, String paymentMethod,
                                 Amount amount) {
         requireActive(fromAccount, "Source account is not active");
         requirePositive(amount);
-        // Float accounts represent the provider treasury — no balance constraint
-        if (fromAccount.snapshot().accountType().resourceType() != ResourceType.FLOAT_ACCOUNT) {
-            requireSufficientFunds(fromAccount, amount);
-        }
-        return Transaction.create(
+
+        // Transaction.create() FIRST — SelfTransferException wins over all other checks
+        Transaction tx = Transaction.create(
                 Id.generate(),
                 fromAccount.snapshot().accountId(),
                 toAccount.snapshot().accountId(),
                 type, paymentMethod, amount);
+
+        // requireSufficientFunds AFTER — float accounts are unbounded (ADR-001)
+        if (fromAccount.snapshot().accountType().resourceType() != ResourceType.FLOAT_ACCOUNT) {
+            requireSufficientFunds(fromAccount, amount);
+        }
+
+        return tx; // NO recordDoubleEntry() — written at capture via writeEntries()
     }
 
     public void writeEntries(Transaction tx, Account fromAccount,

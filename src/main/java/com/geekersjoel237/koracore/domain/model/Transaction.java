@@ -83,6 +83,12 @@ public class Transaction {
         return "TRX-" + datePart + "-" + lastFour;
     }
 
+    /**
+     * @deprecated Use {@link #recordDoubleEntry(Amount, Id, Id)} instead.
+     * Direct operation injection bypasses the double-entry invariant check.
+     * Kept for infrastructure test bootstrapping only (TransactionRepositoryTest).
+     */
+    @Deprecated
     public void addOperation(Operation op) {
         this.operations.add(op);
     }
