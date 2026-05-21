@@ -226,13 +226,33 @@ class TransactionTest {
     }
 
     @Test
-    void should_throw_when_reversing_from_completed() {
+    void should_transition_to_reversed_from_settled() {
+        Transaction tx = createTestTransaction();
+        tx.authorize();
+        tx.capture();
+        tx.pendSettlement();
+        tx.settle();
+        assertDoesNotThrow(tx::reverse);
+        assertEquals(TransactionState.REVERSED, tx.snapshot().state());
+    }
+
+    @Test
+    void should_transition_to_reversed_from_completed() {
         Transaction tx = createTestTransaction();
         tx.authorize();
         tx.capture();
         tx.pendSettlement();
         tx.settle();
         tx.markCompleted();
+        assertDoesNotThrow(tx::reverse);
+        assertEquals(TransactionState.REVERSED, tx.snapshot().state());
+    }
+
+    @Test
+    void should_throw_when_reversing_already_reversed_transaction() {
+        Transaction tx = createTestTransaction();
+        tx.authorize();
+        tx.reverse();
         assertThrows(InvalidStateTransitionException.class, tx::reverse);
     }
 
