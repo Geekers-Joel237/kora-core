@@ -1,10 +1,12 @@
 package com.geekersjoel237.koracore.shared.inmemory;
 
+import com.geekersjoel237.koracore.domain.enums.ProviderOperationType;
 import com.geekersjoel237.koracore.domain.exception.ProviderException;
 import com.geekersjoel237.koracore.domain.port.ProviderPort;
 import com.geekersjoel237.koracore.domain.vo.Amount;
 import com.geekersjoel237.koracore.domain.vo.AuthorizationResult;
 import com.geekersjoel237.koracore.domain.vo.CaptureResult;
+import com.geekersjoel237.koracore.domain.vo.PhoneNumber;
 import com.geekersjoel237.koracore.domain.vo.ReverseResult;
 
 import java.time.Instant;
@@ -14,6 +16,8 @@ import java.util.UUID;
 public class InMemoryProviderAdapter implements ProviderPort {
 
     private Behavior behavior;
+    private ProviderOperationType lastOperationType = null;
+    private PhoneNumber lastCustomerPhone = null;
 
     public InMemoryProviderAdapter(Behavior behavior) {
         this.behavior = behavior;
@@ -23,17 +27,31 @@ public class InMemoryProviderAdapter implements ProviderPort {
         this.behavior = behavior;
     }
 
+    public ProviderOperationType getLastOperationType() { return lastOperationType; }
+    public PhoneNumber getLastCustomerPhone()           { return lastCustomerPhone; }
+
+    public void reset() {
+        this.lastOperationType = null;
+        this.lastCustomerPhone = null;
+    }
+
     @Override
-    public AuthorizationResult authorize(Amount amount, String paymentMethod, String correlationId) {
+    public AuthorizationResult authorize(Amount amount,
+                                          String paymentMethod,
+                                          String correlationId,
+                                          ProviderOperationType operationType,
+                                          PhoneNumber customerPhone) {
+        this.lastOperationType = operationType;
+        this.lastCustomerPhone = customerPhone;
+
         if (behavior == Behavior.FAIL || behavior == Behavior.FAIL_ON_AUTHORIZE)
             throw new ProviderException("Provider simulated authorization failure");
+
         return new AuthorizationResult(
                 UUID.randomUUID().toString(),
                 Instant.now().plus(15, ChronoUnit.MINUTES),
                 true);
     }
-
-    // ── Lifecycle methods ─────────────────────────────────────────────────────
 
     @Override
     public CaptureResult capture(String authorizationReference, String correlationId) {
@@ -49,17 +67,11 @@ public class InMemoryProviderAdapter implements ProviderPort {
 
     public enum Behavior {
         SUCCESS,
-        /**
-         * Fails on authorize() — the default failure mode. Alias: {@link #FAIL}.
-         */
+        /** Fails on authorize() — the default failure mode. Alias: {@link #FAIL}. */
         FAIL_ON_AUTHORIZE,
-        /**
-         * Fails on capture() — authorize() still succeeds.
-         */
+        /** Fails on capture() — authorize() still succeeds. */
         FAIL_ON_CAPTURE,
-        /**
-         * Backward-compatible alias for {@link #FAIL_ON_AUTHORIZE}.
-         */
+        /** Backward-compatible alias for {@link #FAIL_ON_AUTHORIZE}. */
         FAIL
     }
 }

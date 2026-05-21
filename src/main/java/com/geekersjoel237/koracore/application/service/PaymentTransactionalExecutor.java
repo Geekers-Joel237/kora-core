@@ -6,6 +6,7 @@ import com.geekersjoel237.koracore.application.command.ReversePaymentCommand;
 import com.geekersjoel237.koracore.application.command.TransferCommand;
 import com.geekersjoel237.koracore.application.port.in.AuthUseCase;
 import com.geekersjoel237.koracore.domain.SystemConstants;
+import com.geekersjoel237.koracore.domain.enums.ProviderOperationType;
 import com.geekersjoel237.koracore.domain.enums.ResourceType;
 import com.geekersjoel237.koracore.domain.enums.TransactionType;
 import com.geekersjoel237.koracore.domain.enums.TriggerSource;
@@ -16,10 +17,12 @@ import com.geekersjoel237.koracore.domain.port.*;
 import com.geekersjoel237.koracore.domain.vo.Amount;
 import com.geekersjoel237.koracore.domain.vo.AuthorizationResult;
 import com.geekersjoel237.koracore.domain.vo.Id;
+import com.geekersjoel237.koracore.domain.vo.PhoneNumber;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
+import java.util.function.Supplier;
 
 /**
  * Executes one payment attempt inside a single, self-contained transaction.
@@ -64,40 +67,50 @@ public class PaymentTransactionalExecutor {
     // ── payment flows ─────────────────────────────────────────────────────────
 
     public Transaction executeCashIn(CashInCommand cmd) {
-        Account customerAccount = validatePayerAndGetAccount(cmd.customerId(), cmd.rawPin());
-        Account floatAccount = getSystemFloatAccountForUpdate();
-        Ledger ledger = ledgerRepository.findFirst();
+        ValidatedPayer payer  = validatePayerAndGetAccount(cmd.customerId(), cmd.rawPin());
+        Account floatAccount  = getSystemFloatAccountForUpdate();
+        Ledger ledger         = ledgerRepository.findFirst();
+        PhoneNumber phone     = payer.customer().snapshot().phoneNumber();
+        String correlationId  = Id.generate().value();
 
         // fromAccount = float (provider inbound), toAccount = customer
-        Transaction tx = ledger.initiate(floatAccount, customerAccount,
+        Transaction tx = ledger.initiate(floatAccount, payer.account(),
                 TransactionType.CASH_IN, cmd.paymentMethod(), cmd.amount());
 
-        return executePayment(tx, ledger, floatAccount, customerAccount,
-                cmd.amount(), cmd.paymentMethod(), Id.generate().value());
+        return executePayment(tx, ledger, floatAccount, payer.account(),
+                cmd.amount(), correlationId,
+                () -> provider.authorize(
+                        cmd.amount(), cmd.paymentMethod(), correlationId,
+                        ProviderOperationType.COLLECTION, phone));
     }
 
     public Transaction executeCashOut(CashOutCommand cmd) {
-        Account customerAccount = validatePayerAndGetAccount(cmd.customerId(), cmd.rawPin());
-        Account floatAccount = getSystemFloatAccountForUpdate();
-        Ledger ledger = ledgerRepository.findFirst();
+        ValidatedPayer payer  = validatePayerAndGetAccount(cmd.customerId(), cmd.rawPin());
+        Account floatAccount  = getSystemFloatAccountForUpdate();
+        Ledger ledger         = ledgerRepository.findFirst();
+        PhoneNumber phone     = payer.customer().snapshot().phoneNumber();
+        String correlationId  = Id.generate().value();
 
         // fromAccount = customer (funds leave wallet), toAccount = float (provider outbound)
-        Transaction tx = ledger.initiate(customerAccount, floatAccount,
+        Transaction tx = ledger.initiate(payer.account(), floatAccount,
                 TransactionType.CASH_OUT, cmd.paymentMethod(), cmd.amount());
 
-        return executePayment(tx, ledger, customerAccount, floatAccount,
-                cmd.amount(), cmd.paymentMethod(), Id.generate().value());
+        return executePayment(tx, ledger, payer.account(), floatAccount,
+                cmd.amount(), correlationId,
+                () -> provider.authorize(
+                        cmd.amount(), cmd.paymentMethod(), correlationId,
+                        ProviderOperationType.DISBURSEMENT, phone));
     }
 
     public Transaction executeTransfer(TransferCommand cmd) {
-        Account fromAccount = validatePayerAndGetAccount(cmd.customerId(), cmd.rawPin());
-        Account toAccount   = validateRecipientAndGetAccount(cmd.toPhoneNumber());
-        Ledger  ledger      = ledgerRepository.findFirst();
+        ValidatedPayer payer = validatePayerAndGetAccount(cmd.customerId(), cmd.rawPin());
+        Account toAccount    = validateRecipientAndGetAccount(cmd.toPhoneNumber());
+        Ledger  ledger       = ledgerRepository.findFirst();
 
-        Transaction tx = ledger.initiate(fromAccount, toAccount,
+        Transaction tx = ledger.initiate(payer.account(), toAccount,
                 TransactionType.P2P_TRANSFER, "WALLET", cmd.amount());
 
-        return executeInternalTransfer(tx, ledger, fromAccount, toAccount, cmd.amount());
+        return executeInternalTransfer(tx, ledger, payer.account(), toAccount, cmd.amount());
     }
 
     public Transaction executeReversePayment(ReversePaymentCommand cmd) {
@@ -192,14 +205,15 @@ public class PaymentTransactionalExecutor {
      */
     private Transaction executePayment(Transaction tx, Ledger ledger,
                                        Account fromAccount, Account toAccount,
-                                       Amount amount, String paymentMethod,
-                                       String correlationId) {
+                                       Amount amount,
+                                       String correlationId,
+                                       Supplier<AuthorizationResult> providerAuthorize) {
         persistTransactionState(tx); // INITIALIZED
 
         // ── Step 1: authorize with provider ──────────────────────────────────
         AuthorizationResult authResult;
         try {
-            authResult = provider.authorize(amount, paymentMethod, correlationId);
+            authResult = providerAuthorize.get();
         } catch (ProviderException e) {
             tx.failAuthorization();
             persistTransactionState(tx); // AUTHORIZATION_FAILED
@@ -287,18 +301,22 @@ public class PaymentTransactionalExecutor {
 
     // ── shared helpers ────────────────────────────────────────────────────────
 
-    private Account validatePayerAndGetAccount(Id customerId, String pin) {
+    private ValidatedPayer validatePayerAndGetAccount(Id customerId, String pin) {
         authUseCase.validatePin(customerId, pin);
 
         Customer customer = customerRepository.findById(customerId)
-                .orElseThrow(() -> new AccountNotFoundException("Customer not found: " + customerId.value()));
+                .orElseThrow(() -> new AccountNotFoundException(
+                        "Customer not found: " + customerId.value()));
 
-        if (customer.isSuspended()) {
-            throw new AccountSuspendedException("Account suspended for customer: " + customerId.value());
-        }
+        if (customer.isSuspended())
+            throw new AccountSuspendedException(
+                    "Account suspended for customer: " + customerId.value());
 
-        return accountRepository.findByCustomerIdForUpdate(customerId)
-                .orElseThrow(() -> new AccountNotFoundException("Account not found for customer: " + customerId.value()));
+        Account account = accountRepository.findByCustomerIdForUpdate(customerId)
+                .orElseThrow(() -> new AccountNotFoundException(
+                        "Account not found for customer: " + customerId.value()));
+
+        return new ValidatedPayer(customer, account);
     }
 
     private Account validateRecipientAndGetAccount(String toPhoneNumber) {
@@ -328,4 +346,6 @@ public class PaymentTransactionalExecutor {
         transactionRepository.save(tx);
         historicRepo.save(tx.history().getLast());
     }
+
+    private record ValidatedPayer(Customer customer, Account account) {}
 }

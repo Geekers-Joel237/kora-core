@@ -1,10 +1,12 @@
 package com.geekersjoel237.koracore.infrastructure.provider;
 
+import com.geekersjoel237.koracore.domain.enums.ProviderOperationType;
 import com.geekersjoel237.koracore.domain.exception.ProviderException;
 import com.geekersjoel237.koracore.domain.port.ProviderPort;
 import com.geekersjoel237.koracore.domain.vo.Amount;
 import com.geekersjoel237.koracore.domain.vo.AuthorizationResult;
 import com.geekersjoel237.koracore.domain.vo.CaptureResult;
+import com.geekersjoel237.koracore.domain.vo.PhoneNumber;
 import com.geekersjoel237.koracore.domain.vo.ReverseResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,11 +58,26 @@ public class MobileMoneyProviderAdapter implements ProviderPort {
     }
 
     @Override
-    public AuthorizationResult authorize(Amount amount, String paymentMethod, String correlationId) {
-        log.debug("authorize — amount={} method={} correlationId={}",
-                amount.value(), paymentMethod, correlationId);
+    public AuthorizationResult authorize(Amount amount,
+                                          String paymentMethod,
+                                          String correlationId,
+                                          ProviderOperationType operationType,
+                                          PhoneNumber customerPhone) {
+        log.debug("authorize — operationType={} amount={} currency={} method={} correlationId={}",
+                operationType, amount.value(), amount.currency(), paymentMethod, correlationId);
+        // customerPhone intentionally excluded from logs — PII
+
         checkBehavior(Checkpoint.AUTHORIZE);
         simulateLatency(authorizeMs);
+
+        // TODO Step 3: branch on operationType + customerPhone to call real provider endpoint
+        // COLLECTION   → POST /collection/v1_0/requesttopay
+        //                body: { payerParty: { partyIdType: "MSISDN",
+        //                                     partyId: customerPhone.fullNumber() } }
+        // DISBURSEMENT → POST /disbursement/v1_0/transfer
+        //                body: { payeeParty: { partyIdType: "MSISDN",
+        //                                     partyId: customerPhone.fullNumber() } }
+
         return new AuthorizationResult(
                 UUID.randomUUID().toString(),
                 Instant.now().plus(15, ChronoUnit.MINUTES),
@@ -91,10 +108,7 @@ public class MobileMoneyProviderAdapter implements ProviderPort {
     private void checkBehavior(Checkpoint checkpoint) {
         switch (behavior) {
             case FAIL_ON_AUTHORIZE -> {
-                if (checkpoint == Checkpoint.AUTHORIZE
-                        || checkpoint == Checkpoint.CREDIT
-                        || checkpoint == Checkpoint.DEBIT
-                        || checkpoint == Checkpoint.SEND) {
+                if (checkpoint == Checkpoint.AUTHORIZE) {
                     log.warn("Provider simulation: FAIL_ON_AUTHORIZE — checkpoint={}", checkpoint);
                     throw new ProviderException(
                             "Provider refused operation — account blocked or regulatory limit exceeded");
@@ -141,5 +155,5 @@ public class MobileMoneyProviderAdapter implements ProviderPort {
         TIMEOUT
     }
 
-    private enum Checkpoint {AUTHORIZE, CAPTURE, REVERSE, CREDIT, DEBIT, SEND}
+    private enum Checkpoint {AUTHORIZE, CAPTURE, REVERSE}
 }

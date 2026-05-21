@@ -7,6 +7,7 @@ import com.geekersjoel237.koracore.application.service.AuthService;
 import com.geekersjoel237.koracore.application.service.PaymentService;
 import com.geekersjoel237.koracore.application.service.PaymentTransactionalExecutor;
 import com.geekersjoel237.koracore.domain.enums.OperationType;
+import com.geekersjoel237.koracore.domain.enums.ProviderOperationType;
 import com.geekersjoel237.koracore.domain.enums.Role;
 import com.geekersjoel237.koracore.domain.enums.UserStatus;
 import com.geekersjoel237.koracore.domain.exception.*;
@@ -30,6 +31,7 @@ import static com.geekersjoel237.koracore.domain.model.state.TransactionState.AU
 import static com.geekersjoel237.koracore.domain.model.state.TransactionState.COMPLETED;
 import static com.geekersjoel237.koracore.shared.inmemory.InMemoryProviderAdapter.Behavior.FAIL;
 import static com.geekersjoel237.koracore.shared.inmemory.InMemoryProviderAdapter.Behavior.SUCCESS;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -85,6 +87,7 @@ class PaymentUseCaseTest {
         historicRepo = new InMemoryTrxHistoricStatesRepository();
         otpStore = new InMemoryOtpStore(Clock.systemUTC());
         provider = new InMemoryProviderAdapter(SUCCESS);
+        provider.reset();
         ledgerRepository = new InMemoryLedgerRepository(Ledger.create(Id.generate()));
         mailPort = new InMemoryMailPort();
         authorizationRecordRepo = new InMemoryAuthorizationRecordRepository();
@@ -183,6 +186,9 @@ class PaymentUseCaseTest {
 
         Account customerAccount = accountRepo.findByCustomerId(CUST_ID_A).orElseThrow();
         assertTrue(AMOUNT_10K.equals(customerAccount.snapshot().balance().solde()));
+
+        assertThat(provider.getLastOperationType()).isEqualTo(ProviderOperationType.COLLECTION);
+        assertThat(provider.getLastCustomerPhone()).isEqualTo(phoneNumberA());
     }
 
     @Test
@@ -254,6 +260,8 @@ class PaymentUseCaseTest {
         assertEquals(COMPLETED, tx.snapshot().state());
         Account account = accountRepo.findByCustomerId(CUST_ID_A).orElseThrow();
         assertTrue(AMOUNT_5K.equals(account.snapshot().balance().solde()));
+
+        assertThat(provider.getLastOperationType()).isEqualTo(ProviderOperationType.DISBURSEMENT);
     }
 
     @Test
@@ -293,6 +301,7 @@ class PaymentUseCaseTest {
     void should_complete_transfer_and_update_both_balances_when_provider_succeeds() {
         preloadCustomerB();
         paymentService.cashIn(new CashInCommand(CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
+        provider.reset(); // isolate transfer — verify it makes no provider call
 
         Transaction tx = paymentService.transfer(new TransferCommand(
                 CUST_ID_A, RAW_PIN, AMOUNT_5K, phoneNumberB().fullNumber()));
@@ -307,6 +316,8 @@ class PaymentUseCaseTest {
         Amount sumAB = accountA.snapshot().balance().solde()
                 .add(accountB.snapshot().balance().solde());
         assertTrue(AMOUNT_10K.equals(sumAB));
+
+        assertThat(provider.getLastOperationType()).isNull();
     }
 
     @Test
