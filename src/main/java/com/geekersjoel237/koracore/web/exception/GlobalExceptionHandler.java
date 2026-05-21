@@ -33,6 +33,11 @@ public class GlobalExceptionHandler {
         return problem(HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());
     }
 
+    @ExceptionHandler(MailDeliveryException.class)
+    ProblemDetail onMailDelivery(MailDeliveryException ex) {
+        return problem(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
+    }
+
     @ExceptionHandler(TransientPaymentException.class)
     ProblemDetail onTransient(TransientPaymentException ex) {
         return problem(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());

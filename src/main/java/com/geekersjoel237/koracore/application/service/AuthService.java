@@ -108,12 +108,7 @@ public class AuthService implements AuthUseCase {
         accountRepository.save(Account.createCustomerAccount(Id.generate(), customer.snapshot().customerId()));
 
         var otp = generateOtp(cmd.email());
-        try {
-            mailPort.sendOtp(cmd.email(), otp, OtpMailContext.REGISTRATION);
-        } catch (MailProviderException e) {
-            //TODO: manage mail provider failure
-        }
-
+        sendOtpWithRetry(cmd.email(), otp, OtpMailContext.REGISTRATION);
     }
 
     @Override
@@ -123,11 +118,7 @@ public class AuthService implements AuthUseCase {
 
         validatePin(customer.snapshot().customerId(), cmd.rawPin());
         var otp = generateOtp(cmd.email());
-        try {
-            mailPort.sendOtp(cmd.email(), otp, OtpMailContext.LOGIN);
-        } catch (MailProviderException e) {
-            //TODO: manage mail provider failure
-        }
+        sendOtpWithRetry(cmd.email(), otp, OtpMailContext.LOGIN);
     }
 
     @Override
@@ -189,5 +180,29 @@ public class AuthService implements AuthUseCase {
         Otp otp = Otp.of(code, Duration.ofMinutes(securityProperties.otp().expirationMinutes()), clock);
         otpStore.save("otp:" + email, otp);
         return code;
+    }
+
+    private void sendOtpWithRetry(String email, String code, OtpMailContext context) {
+        int maxAttempts = 3;
+        MailProviderException lastException = null;
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                mailPort.sendOtp(email, code, context);
+                return;
+            } catch (MailProviderException e) {
+                lastException = e;
+                if (attempt < maxAttempts) {
+                    try {
+                        Thread.sleep(100L * attempt);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new MailDeliveryException(
+                                "OTP delivery failed after 3 attempts. Please try again in a few moments.", ie);
+                    }
+                }
+            }
+        }
+        throw new MailDeliveryException(
+                "OTP delivery failed after 3 attempts. Please try again in a few moments.", lastException);
     }
 }
