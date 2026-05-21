@@ -148,15 +148,21 @@ public class PaymentTransactionalExecutor {
         }
 
         if (currentState == TransactionState.CAPTURED
-                || currentState == TransactionState.SETTLEMENT_PENDING) {
-            Account customerAccount = accountRepository.findById(tx.snapshot().fromId())
+                || currentState == TransactionState.SETTLEMENT_PENDING
+                || currentState == TransactionState.SETTLED
+                || currentState == TransactionState.COMPLETED) {
+
+            Account fromAccount = accountRepository.findById(tx.snapshot().fromId())
                     .orElseThrow(() -> new AccountNotFoundException(
                             "Account not found: " + tx.snapshot().fromId().value()));
+            Account toAccount = accountRepository.findById(tx.snapshot().toId())
+                    .orElseThrow(() -> new AccountNotFoundException(
+                            "Account not found: " + tx.snapshot().toId().value()));
+
             Ledger ledger = ledgerRepository.findFirst();
 
             ledger.reverse(tx);
-            customerAccount.credit(tx.snapshot().amount());
-            accountRepository.save(customerAccount);
+            reverseBalanceUpdate(fromAccount, toAccount, tx.snapshot().amount());
 
             tx.reverse();
             historicRepo.save(TrxStateHistoric.of(
@@ -295,6 +301,27 @@ public class PaymentTransactionalExecutor {
         }
         if (toAccount.snapshot().accountType().resourceType() == ResourceType.CUSTOMER_ACCOUNT) {
             toAccount.credit(amount);
+            accountRepository.save(toAccount);
+        }
+    }
+
+    /**
+     * Reverses the denormalized balance update applied during payment capture.
+     * Symmetric counterpart of applyBalanceUpdate() — applies the inverse
+     * movement using the same ResourceType filter logic.
+     *
+     * Correct for all three operation types:
+     *   Cash-in  (float→customer) : skip float, DEBIT  customer        ✓
+     *   Cash-out (customer→float) : CREDIT customer, skip float        ✓
+     *   P2P      (sender→receiver): CREDIT sender,   DEBIT  receiver   ✓
+     */
+    private void reverseBalanceUpdate(Account fromAccount, Account toAccount, Amount amount) {
+        if (fromAccount.snapshot().accountType().resourceType() == ResourceType.CUSTOMER_ACCOUNT) {
+            fromAccount.credit(amount);
+            accountRepository.save(fromAccount);
+        }
+        if (toAccount.snapshot().accountType().resourceType() == ResourceType.CUSTOMER_ACCOUNT) {
+            toAccount.debit(amount);
             accountRepository.save(toAccount);
         }
     }

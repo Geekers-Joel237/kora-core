@@ -6,6 +6,7 @@ class CompletedState implements TransactionState {
 
     @Override
     public TransactionState transitionTo(TransactionState next) {
+        if (next instanceof ReversedState) return next;
         throw new InvalidStateTransitionException(this, next);
     }
 

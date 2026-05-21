@@ -2,6 +2,7 @@ package com.geekersjoel237.koracore.application;
 
 import com.geekersjoel237.koracore.application.command.CashInCommand;
 import com.geekersjoel237.koracore.application.command.CashOutCommand;
+import com.geekersjoel237.koracore.application.command.ReversePaymentCommand;
 import com.geekersjoel237.koracore.application.command.TransferCommand;
 import com.geekersjoel237.koracore.application.service.AuthService;
 import com.geekersjoel237.koracore.application.service.PaymentService;
@@ -21,6 +22,7 @@ import com.geekersjoel237.koracore.infrastructure.config.SecurityProperties;
 import com.geekersjoel237.koracore.infrastructure.security.BCryptCustomerPinEncoder;
 import com.geekersjoel237.koracore.shared.inmemory.*;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -29,6 +31,7 @@ import java.util.List;
 
 import static com.geekersjoel237.koracore.domain.model.state.TransactionState.AUTHORIZATION_FAILED;
 import static com.geekersjoel237.koracore.domain.model.state.TransactionState.COMPLETED;
+import static com.geekersjoel237.koracore.domain.model.state.TransactionState.REVERSED;
 import static com.geekersjoel237.koracore.shared.inmemory.InMemoryProviderAdapter.Behavior.FAIL;
 import static com.geekersjoel237.koracore.shared.inmemory.InMemoryProviderAdapter.Behavior.SUCCESS;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -430,5 +433,87 @@ class PaymentUseCaseTest {
     void should_throw_account_not_found_when_customer_has_no_account() {
         assertThatThrownBy(() -> paymentService.getBalance(new Id("ghost-customer")))
                 .isInstanceOf(AccountNotFoundException.class);
+    }
+
+    // ── Groupe 5 — reversal ───────────────────────────────────────────────────
+
+    @Nested
+    class ReversalTests {
+
+        @Test
+        void should_debit_customer_and_restore_zero_balance_when_cash_in_reversed() {
+            Transaction tx = paymentService.cashIn(
+                    new CashInCommand(CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
+
+            Account before = accountRepo.findByCustomerId(CUST_ID_A).orElseThrow();
+            assertTrue(AMOUNT_10K.equals(before.snapshot().balance().solde()));
+
+            paymentService.reversePayment(new ReversePaymentCommand(
+                    tx.snapshot().transactionId(), "op-001", "OPERATOR", "chargeback", "corr-001"));
+
+            Account after = accountRepo.findByCustomerId(CUST_ID_A).orElseThrow();
+            assertTrue(AMOUNT_ZERO.equals(after.snapshot().balance().solde()));
+        }
+
+        @Test
+        void should_credit_customer_and_restore_original_balance_when_cash_out_reversed() {
+            paymentService.cashIn(new CashInCommand(CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
+            Transaction cashOut = paymentService.cashOut(
+                    new CashOutCommand(CUST_ID_A, RAW_PIN, AMOUNT_5K, PAYMENT_METHOD));
+
+            Account midway = accountRepo.findByCustomerId(CUST_ID_A).orElseThrow();
+            assertTrue(AMOUNT_5K.equals(midway.snapshot().balance().solde()));
+
+            paymentService.reversePayment(new ReversePaymentCommand(
+                    cashOut.snapshot().transactionId(), "op-001", "OPERATOR", "dispute", "corr-002"));
+
+            Account after = accountRepo.findByCustomerId(CUST_ID_A).orElseThrow();
+            assertTrue(AMOUNT_10K.equals(after.snapshot().balance().solde()));
+        }
+
+        @Test
+        void should_credit_sender_and_debit_receiver_when_p2p_reversed() {
+            preloadCustomerB();
+            paymentService.cashIn(new CashInCommand(CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
+            Transaction transfer = paymentService.transfer(new TransferCommand(
+                    CUST_ID_A, RAW_PIN, AMOUNT_5K, phoneNumberB().fullNumber()));
+
+            paymentService.reversePayment(new ReversePaymentCommand(
+                    transfer.snapshot().transactionId(), "op-001", "OPERATOR", "fraud", "corr-003"));
+
+            Account accountA = accountRepo.findByCustomerId(CUST_ID_A).orElseThrow();
+            Account accountB = accountRepo.findByCustomerId(CUST_ID_B).orElseThrow();
+            assertTrue(AMOUNT_10K.equals(accountA.snapshot().balance().solde()),
+                    "Sender should be back to 10K after reversal");
+            assertTrue(AMOUNT_ZERO.equals(accountB.snapshot().balance().solde()),
+                    "Receiver should be back to 0 after reversal");
+        }
+
+        @Test
+        void double_entry_invariant_holds_across_cash_in_and_reversal() {
+            Transaction tx = paymentService.cashIn(
+                    new CashInCommand(CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
+
+            paymentService.reversePayment(new ReversePaymentCommand(
+                    tx.snapshot().transactionId(), "op-001", "OPERATOR", "test", "corr-004"));
+
+            assertDoubleEntryInvariant();
+        }
+
+        @Test
+        void should_throw_invalid_state_transition_when_reversing_already_reversed_transaction() {
+            Transaction tx = paymentService.cashIn(
+                    new CashInCommand(CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
+
+            paymentService.reversePayment(new ReversePaymentCommand(
+                    tx.snapshot().transactionId(), "op-001", "OPERATOR", "first", "corr-005"));
+
+            Transaction reversed = transactionRepo.findById(tx.snapshot().transactionId()).orElseThrow();
+            assertEquals(REVERSED, reversed.snapshot().state());
+
+            assertThatThrownBy(() -> paymentService.reversePayment(new ReversePaymentCommand(
+                    tx.snapshot().transactionId(), "op-001", "OPERATOR", "second", "corr-006")))
+                    .isInstanceOf(InvalidStateTransitionException.class);
+        }
     }
 }

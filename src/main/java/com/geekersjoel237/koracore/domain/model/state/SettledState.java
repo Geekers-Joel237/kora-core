@@ -6,7 +6,7 @@ class SettledState implements TransactionState {
 
     @Override
     public TransactionState transitionTo(TransactionState next) {
-        if (next instanceof CompletedState) return next;
+        if (next instanceof CompletedState || next instanceof ReversedState) return next;
         throw new InvalidStateTransitionException(this, next);
     }
 
