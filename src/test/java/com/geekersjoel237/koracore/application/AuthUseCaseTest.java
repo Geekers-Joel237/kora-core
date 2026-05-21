@@ -12,6 +12,7 @@ import com.geekersjoel237.koracore.domain.port.CustomerPinEncoder;
 import com.geekersjoel237.koracore.domain.vo.Id;
 import com.geekersjoel237.koracore.domain.vo.PhoneNumber;
 import com.geekersjoel237.koracore.domain.vo.Tokens;
+import com.geekersjoel237.koracore.infrastructure.config.SecurityProperties;
 import com.geekersjoel237.koracore.infrastructure.security.BCryptCustomerPinEncoder;
 import com.geekersjoel237.koracore.shared.inmemory.*;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,8 +35,12 @@ class AuthUseCaseTest {
     private static final String EMAIL = "test@koracore.com";
     private static final String RAW_PIN = "123456";
 
-    private final CustomerPinEncoder pinEncoder = new BCryptCustomerPinEncoder();
+    private static final SecurityProperties TEST_SECURITY = new SecurityProperties(
+            new SecurityProperties.Jwt("test-secret-key-must-be-at-least-32-chars!!", 15, 7),
+            new SecurityProperties.Otp(5)
+    );
 
+    private final CustomerPinEncoder pinEncoder = new BCryptCustomerPinEncoder();
     private InMemoryUserRepository userRepo;
     private InMemoryCustomerRepository customerRepo;
     private InMemoryAccountRepository accountRepo;
@@ -50,7 +55,7 @@ class AuthUseCaseTest {
         accountRepo = new InMemoryAccountRepository();
         otpStore = new InMemoryOtpStore(Clock.systemUTC());
         mailPort = new InMemoryMailPort();
-        authService = new AuthService(userRepo, customerRepo, accountRepo, otpStore, pinEncoder, Clock.systemUTC(), mailPort);
+        authService = new AuthService(userRepo, customerRepo, accountRepo, otpStore, pinEncoder, Clock.systemUTC(), TEST_SECURITY, mailPort);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -138,7 +143,7 @@ class AuthUseCaseTest {
         Clock pastClock = Clock.fixed(Instant.now().minus(10, MINUTES), ZoneOffset.UTC);
         InMemoryOtpStore expiredStore = new InMemoryOtpStore(pastClock);
         AuthService expiredService = new AuthService(
-                userRepo, customerRepo, accountRepo, expiredStore, pinEncoder, pastClock, mailPort
+                userRepo, customerRepo, accountRepo, expiredStore, pinEncoder, pastClock, TEST_SECURITY, mailPort
         );
         String code = expiredService.generateOtp(EMAIL);
         assertThatThrownBy(() -> expiredService.verifyOtp(EMAIL, code))

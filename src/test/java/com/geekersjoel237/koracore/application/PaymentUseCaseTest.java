@@ -16,6 +16,7 @@ import com.geekersjoel237.koracore.domain.port.LedgerRepository;
 import com.geekersjoel237.koracore.domain.vo.Amount;
 import com.geekersjoel237.koracore.domain.vo.Id;
 import com.geekersjoel237.koracore.domain.vo.PhoneNumber;
+import com.geekersjoel237.koracore.infrastructure.config.SecurityProperties;
 import com.geekersjoel237.koracore.infrastructure.security.BCryptCustomerPinEncoder;
 import com.geekersjoel237.koracore.shared.inmemory.*;
 import org.junit.jupiter.api.BeforeEach;
@@ -46,6 +47,11 @@ class PaymentUseCaseTest {
     private static final Amount AMOUNT_10K = Amount.of(BigDecimal.valueOf(10_000), "XOF");
     private static final Amount AMOUNT_5K = Amount.of(BigDecimal.valueOf(5_000), "XOF");
     private static final Amount AMOUNT_ZERO = Amount.of(BigDecimal.ZERO, "XOF");
+
+    private static final SecurityProperties TEST_SECURITY = new SecurityProperties(
+            new SecurityProperties.Jwt("test-secret-key-must-be-at-least-32-chars!!", 15, 7),
+            new SecurityProperties.Otp(5)
+    );
 
     private final CustomerPinEncoder pinEncoder = new BCryptCustomerPinEncoder();
 
@@ -81,7 +87,7 @@ class PaymentUseCaseTest {
         ledgerRepository = new InMemoryLedgerRepository(Ledger.create(Id.generate()));
         mailPort = new InMemoryMailPort();
         authService = new AuthService(
-                new InMemoryUserRepository(), customerRepo, accountRepo, otpStore, pinEncoder, Clock.systemUTC(), mailPort);
+                new InMemoryUserRepository(), customerRepo, accountRepo, otpStore, pinEncoder, Clock.systemUTC(), TEST_SECURITY, mailPort);
         PaymentTransactionalExecutor executor = new PaymentTransactionalExecutor(
                 authService, accountRepo, customerRepo,
                 transactionRepo, historicRepo, provider, ledgerRepository,

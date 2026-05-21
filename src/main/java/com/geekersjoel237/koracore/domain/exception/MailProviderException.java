@@ -5,7 +5,4 @@ public class MailProviderException extends Throwable {
         super(e);
     }
 
-    public MailProviderException(String message) {
-        super(message);
-    }
 }

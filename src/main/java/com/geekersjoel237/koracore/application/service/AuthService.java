@@ -34,8 +34,6 @@ import java.util.Date;
 @Transactional
 public class AuthService implements AuthUseCase {
 
-    private static final String DEFAULT_TEST_SECRET =
-            "kora-core-test-secret-key-must-be-at-least-32-chars!";
     private final SecurityProperties securityProperties;
     private final UserRepository userRepository;
     private final CustomerRepository customerRepository;
@@ -65,23 +63,6 @@ public class AuthService implements AuthUseCase {
         this.mailPort = mailPort;
     }
 
-    /**
-     * Test constructor — no mail, no @Value injection.
-     */
-    public AuthService(UserRepository userRepository,
-                       CustomerRepository customerRepository,
-                       AccountRepository accountRepository,
-                       OtpStore otpStore,
-                       CustomerPinEncoder pinEncoder,
-                       Clock clock,
-                       MailPort mailPort) {
-        this(userRepository, customerRepository, accountRepository,
-                otpStore, pinEncoder, clock,
-                new SecurityProperties(
-                        new SecurityProperties.Jwt(DEFAULT_TEST_SECRET, 15, 7),
-                        new SecurityProperties.Otp(5)
-                ), mailPort);
-    }
 
     @Override
     public void validatePin(Id customerId, String rawPin) {
