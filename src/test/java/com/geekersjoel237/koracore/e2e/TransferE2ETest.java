@@ -30,7 +30,7 @@ class TransferE2ETest extends AbstractE2ETest {
         String receiverPhone = "+22507000003002";
         ResponseEntity<TransactionResponse> response = postWithToken(
                 "/payments/transfer",
-                new TransferRequest("1234", TRANSFER_AMOUNT, "XOF", "ORANGE_MONEY", receiverPhone),
+                new TransferRequest("1234", TRANSFER_AMOUNT, "XOF", receiverPhone),
                 sender.tokens().accessToken(),
                 TransactionResponse.class);
 
@@ -49,7 +49,7 @@ class TransferE2ETest extends AbstractE2ETest {
                 sender.tokens().accessToken(), TransactionResponse.class);
 
         postWithToken("/payments/transfer",
-                new TransferRequest("1234", TRANSFER_AMOUNT, "XOF", "ORANGE_MONEY", "+22507000003004"),
+                new TransferRequest("1234", TRANSFER_AMOUNT, "XOF", "+22507000003004"),
                 sender.tokens().accessToken(), TransactionResponse.class);
 
         var senderAccount   = accountRepository.findByCustomerId(sender.customerId()).orElseThrow();
@@ -69,7 +69,7 @@ class TransferE2ETest extends AbstractE2ETest {
         // No cash-in → balance is 0
         ResponseEntity<String> response = postWithToken(
                 "/payments/transfer",
-                new TransferRequest("1234", TRANSFER_AMOUNT, "XOF", "ORANGE_MONEY", "+22507000003006"),
+                new TransferRequest("1234", TRANSFER_AMOUNT, "XOF", "+22507000003006"),
                 sender.tokens().accessToken(),
                 String.class);
 
@@ -86,7 +86,7 @@ class TransferE2ETest extends AbstractE2ETest {
 
         ResponseEntity<String> response = postWithToken(
                 "/payments/transfer",
-                new TransferRequest("1234", TRANSFER_AMOUNT, "XOF", "ORANGE_MONEY", "+22500000000001"),
+                new TransferRequest("1234", TRANSFER_AMOUNT, "XOF", "+22500000000001"),
                 sender.tokens().accessToken(),
                 String.class);
 
@@ -103,7 +103,7 @@ class TransferE2ETest extends AbstractE2ETest {
 
         ResponseEntity<String> response = postWithToken(
                 "/payments/transfer",
-                new TransferRequest("1234", TRANSFER_AMOUNT, "XOF", "ORANGE_MONEY", "+22507000003009"),
+                new TransferRequest("1234", TRANSFER_AMOUNT, "XOF", "+22507000003009"),
                 sender.tokens().accessToken(),
                 String.class);
 
@@ -121,7 +121,7 @@ class TransferE2ETest extends AbstractE2ETest {
 
         ResponseEntity<String> response = postWithToken(
                 "/payments/transfer",
-                new TransferRequest("0000", TRANSFER_AMOUNT, "XOF", "ORANGE_MONEY", "+22507000003011"),
+                new TransferRequest("0000", TRANSFER_AMOUNT, "XOF", "+22507000003011"),
                 sender.tokens().accessToken(),
                 String.class);
 

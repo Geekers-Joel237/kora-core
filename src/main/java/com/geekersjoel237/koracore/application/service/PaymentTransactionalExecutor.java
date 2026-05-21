@@ -91,15 +91,13 @@ public class PaymentTransactionalExecutor {
 
     public Transaction executeTransfer(TransferCommand cmd) {
         Account fromAccount = validatePayerAndGetAccount(cmd.customerId(), cmd.rawPin());
-        Account toAccount = validateRecipientAndGetAccount(cmd.toPhoneNumber());
-        Ledger ledger = ledgerRepository.findFirst();
+        Account toAccount   = validateRecipientAndGetAccount(cmd.toPhoneNumber());
+        Ledger  ledger      = ledgerRepository.findFirst();
 
-        // SelfTransferException is enforced in Transaction.create() via ledger.initiate()
         Transaction tx = ledger.initiate(fromAccount, toAccount,
-                TransactionType.P2P_TRANSFER, cmd.paymentMethod(), cmd.amount());
+                TransactionType.P2P_TRANSFER, "WALLET", cmd.amount());
 
-        return executePayment(tx, ledger, fromAccount, toAccount,
-                cmd.amount(), cmd.paymentMethod(), Id.generate().value());
+        return executeInternalTransfer(tx, ledger, fromAccount, toAccount, cmd.amount());
     }
 
     public Transaction executeReversePayment(ReversePaymentCommand cmd) {
@@ -245,6 +243,29 @@ public class PaymentTransactionalExecutor {
         tx.markCompleted();
         persistTransactionState(tx); // COMPLETED
 
+        return tx;
+    }
+
+    /**
+     * Executes a P2P wallet-to-wallet transfer without any external provider call.
+     * Money is already inside KORA; the flow is purely internal.
+     */
+    private Transaction executeInternalTransfer(Transaction tx, Ledger ledger,
+                                                Account fromAccount, Account toAccount,
+                                                Amount amount) {
+        persistTransactionState(tx); // INITIALIZED
+        tx.authorize();
+        persistTransactionState(tx); // AUTHORIZED
+        ledger.writeEntries(tx, fromAccount, toAccount, amount);
+        applyBalanceUpdate(fromAccount, toAccount, amount);
+        tx.capture();
+        persistTransactionState(tx); // CAPTURED
+        tx.pendSettlement();
+        persistTransactionState(tx); // SETTLEMENT_PENDING
+        tx.settle();
+        persistTransactionState(tx); // SETTLED
+        tx.markCompleted();
+        persistTransactionState(tx); // COMPLETED
         return tx;
     }
 

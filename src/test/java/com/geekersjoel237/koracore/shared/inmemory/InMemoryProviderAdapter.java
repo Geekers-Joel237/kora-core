@@ -13,16 +13,6 @@ import java.util.UUID;
 
 public class InMemoryProviderAdapter implements ProviderPort {
 
-    public enum Behavior {
-        SUCCESS,
-        /** Fails on authorize() — the default failure mode. Alias: {@link #FAIL}. */
-        FAIL_ON_AUTHORIZE,
-        /** Fails on capture() — authorize() still succeeds. */
-        FAIL_ON_CAPTURE,
-        /** Backward-compatible alias for {@link #FAIL_ON_AUTHORIZE}. */
-        FAIL
-    }
-
     private Behavior behavior;
 
     public InMemoryProviderAdapter(Behavior behavior) {
@@ -32,28 +22,6 @@ public class InMemoryProviderAdapter implements ProviderPort {
     public void setBehavior(Behavior behavior) {
         this.behavior = behavior;
     }
-
-    // ── Step 0 legacy methods (credit/debit/send) ─────────────────────────────
-
-    @Override
-    public void credit(Amount amount, String paymentMethod) {
-        if (behavior == Behavior.FAIL || behavior == Behavior.FAIL_ON_AUTHORIZE)
-            throw new ProviderException("Provider simulated failure");
-    }
-
-    @Override
-    public void debit(Amount amount, String paymentMethod) {
-        if (behavior == Behavior.FAIL || behavior == Behavior.FAIL_ON_AUTHORIZE)
-            throw new ProviderException("Provider simulated failure");
-    }
-
-    @Override
-    public void send(Amount amount, String paymentMethod) {
-        if (behavior == Behavior.FAIL || behavior == Behavior.FAIL_ON_AUTHORIZE)
-            throw new ProviderException("Provider simulated failure");
-    }
-
-    // ── Lifecycle methods ─────────────────────────────────────────────────────
 
     @Override
     public AuthorizationResult authorize(Amount amount, String paymentMethod, String correlationId) {
@@ -65,6 +33,8 @@ public class InMemoryProviderAdapter implements ProviderPort {
                 true);
     }
 
+    // ── Lifecycle methods ─────────────────────────────────────────────────────
+
     @Override
     public CaptureResult capture(String authorizationReference, String correlationId) {
         if (behavior == Behavior.FAIL_ON_CAPTURE)
@@ -75,5 +45,21 @@ public class InMemoryProviderAdapter implements ProviderPort {
     @Override
     public ReverseResult reverse(String reference, Amount amount, String correlationId) {
         return new ReverseResult(UUID.randomUUID().toString(), true);
+    }
+
+    public enum Behavior {
+        SUCCESS,
+        /**
+         * Fails on authorize() — the default failure mode. Alias: {@link #FAIL}.
+         */
+        FAIL_ON_AUTHORIZE,
+        /**
+         * Fails on capture() — authorize() still succeeds.
+         */
+        FAIL_ON_CAPTURE,
+        /**
+         * Backward-compatible alias for {@link #FAIL_ON_AUTHORIZE}.
+         */
+        FAIL
     }
 }

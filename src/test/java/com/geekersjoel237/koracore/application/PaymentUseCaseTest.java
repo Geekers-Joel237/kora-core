@@ -59,6 +59,7 @@ class PaymentUseCaseTest {
     private InMemoryCustomerRepository customerRepo;
     private InMemoryTransactionRepository transactionRepo;
     private InMemoryTrxHistoricStatesRepository historicRepo;
+    private InMemoryAuthorizationRecordRepository authorizationRecordRepo;
     private InMemoryOtpStore otpStore;
     private InMemoryProviderAdapter provider;
     private InMemoryMailPort mailPort;
@@ -86,12 +87,13 @@ class PaymentUseCaseTest {
         provider = new InMemoryProviderAdapter(SUCCESS);
         ledgerRepository = new InMemoryLedgerRepository(Ledger.create(Id.generate()));
         mailPort = new InMemoryMailPort();
+        authorizationRecordRepo = new InMemoryAuthorizationRecordRepository();
         authService = new AuthService(
                 new InMemoryUserRepository(), customerRepo, accountRepo, otpStore, pinEncoder, Clock.systemUTC(), TEST_SECURITY, mailPort);
         PaymentTransactionalExecutor executor = new PaymentTransactionalExecutor(
                 authService, accountRepo, customerRepo,
                 transactionRepo, historicRepo, provider, ledgerRepository,
-                new InMemoryAuthorizationRecordRepository());
+                authorizationRecordRepo);
         paymentService = new PaymentService(executor, accountRepo);
 
         preloadCustomerA();
@@ -293,7 +295,7 @@ class PaymentUseCaseTest {
         paymentService.cashIn(new CashInCommand(CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
 
         Transaction tx = paymentService.transfer(new TransferCommand(
-                CUST_ID_A, RAW_PIN, AMOUNT_5K, PAYMENT_METHOD, phoneNumberB().fullNumber()));
+                CUST_ID_A, RAW_PIN, AMOUNT_5K, phoneNumberB().fullNumber()));
 
         assertEquals(COMPLETED, tx.snapshot().state());
 
@@ -308,26 +310,56 @@ class PaymentUseCaseTest {
     }
 
     @Test
-    void should_fail_transfer_and_restore_balances_when_provider_fails() {
+    void should_restore_balances_when_transfer_fails_due_to_insufficient_funds() {
         preloadCustomerB();
-        paymentService.cashIn(new CashInCommand(CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
-        provider.setBehavior(FAIL);
+        paymentService.cashIn(new CashInCommand(CUST_ID_A, RAW_PIN, AMOUNT_5K, PAYMENT_METHOD));
 
-        Transaction tx = paymentService.transfer(new TransferCommand(
-                CUST_ID_A, RAW_PIN, AMOUNT_5K, PAYMENT_METHOD, phoneNumberB().fullNumber()));
+        assertThatThrownBy(() -> paymentService.transfer(new TransferCommand(
+                CUST_ID_A, RAW_PIN, AMOUNT_10K, phoneNumberB().fullNumber())))
+                .isInstanceOf(InsufficientFundsException.class);
 
-        assertEquals(AUTHORIZATION_FAILED, tx.snapshot().state());
+        assertEquals(1, transactionRepo.count()); // only the cashIn
         Account accountA = accountRepo.findByCustomerId(CUST_ID_A).orElseThrow();
         Account accountB = accountRepo.findByCustomerId(CUST_ID_B).orElseThrow();
-        assertTrue(AMOUNT_10K.equals(accountA.snapshot().balance().solde()));
+        assertTrue(AMOUNT_5K.equals(accountA.snapshot().balance().solde()));
         assertTrue(AMOUNT_ZERO.equals(accountB.snapshot().balance().solde()));
         assertDoubleEntryInvariant();
     }
 
     @Test
+    void should_complete_transfer_and_record_correct_history() {
+        preloadCustomerB();
+        paymentService.cashIn(new CashInCommand(CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
+
+        Transaction tx = paymentService.transfer(new TransferCommand(
+                CUST_ID_A, RAW_PIN, AMOUNT_5K, phoneNumberB().fullNumber()));
+
+        assertEquals(COMPLETED, tx.snapshot().state());
+
+        List<TrxStateHistoric> history =
+                historicRepo.findByTransactionId(tx.snapshot().transactionId());
+        assertEquals(6, history.size());
+        assertNull(                         history.get(0).snapshot().oldState());
+        assertEquals("INITIALIZED",         history.get(0).snapshot().newState());
+        assertEquals("INITIALIZED",         history.get(1).snapshot().oldState());
+        assertEquals("AUTHORIZED",          history.get(1).snapshot().newState());
+        assertEquals("AUTHORIZED",          history.get(2).snapshot().oldState());
+        assertEquals("CAPTURED",            history.get(2).snapshot().newState());
+        assertEquals("CAPTURED",            history.get(3).snapshot().oldState());
+        assertEquals("SETTLEMENT_PENDING",  history.get(3).snapshot().newState());
+        assertEquals("SETTLEMENT_PENDING",  history.get(4).snapshot().oldState());
+        assertEquals("SETTLED",             history.get(4).snapshot().newState());
+        assertEquals("SETTLED",             history.get(5).snapshot().oldState());
+        assertEquals("COMPLETED",           history.get(5).snapshot().newState());
+
+        assertTrue(authorizationRecordRepo
+                .findActiveByTransactionId(tx.snapshot().transactionId()).isEmpty());
+    }
+
+    @Test
     void should_throw_account_not_found_when_recipient_phone_unknown() {
         assertThatThrownBy(() -> paymentService.transfer(new TransferCommand(
-                CUST_ID_A, RAW_PIN, AMOUNT_5K, PAYMENT_METHOD, "+2250000000000")))
+                CUST_ID_A, RAW_PIN, AMOUNT_5K, "+2250000000000")))
                 .isInstanceOf(AccountNotFoundException.class);
     }
 
@@ -336,14 +368,14 @@ class PaymentUseCaseTest {
         preloadCustomerB();
         suspendCustomerB();
         assertThatThrownBy(() -> paymentService.transfer(new TransferCommand(
-                CUST_ID_A, RAW_PIN, AMOUNT_5K, PAYMENT_METHOD, phoneNumberB().fullNumber())))
+                CUST_ID_A, RAW_PIN, AMOUNT_5K, phoneNumberB().fullNumber())))
                 .isInstanceOf(AccountSuspendedException.class);
     }
 
     @Test
     void should_throw_self_transfer_exception_when_sender_equals_recipient() {
         assertThatThrownBy(() -> paymentService.transfer(new TransferCommand(
-                CUST_ID_A, RAW_PIN, AMOUNT_5K, PAYMENT_METHOD, phoneNumberA().fullNumber())))
+                CUST_ID_A, RAW_PIN, AMOUNT_5K, phoneNumberA().fullNumber())))
                 .isInstanceOf(SelfTransferException.class);
     }
 
@@ -351,7 +383,7 @@ class PaymentUseCaseTest {
     void should_throw_insufficient_funds_exception_when_balance_too_low_for_transfer() {
         preloadCustomerB();
         assertThatThrownBy(() -> paymentService.transfer(new TransferCommand(
-                CUST_ID_A, RAW_PIN, AMOUNT_5K, PAYMENT_METHOD, phoneNumberB().fullNumber())))
+                CUST_ID_A, RAW_PIN, AMOUNT_5K, phoneNumberB().fullNumber())))
                 .isInstanceOf(InsufficientFundsException.class);
     }
 

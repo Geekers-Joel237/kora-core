@@ -107,7 +107,7 @@ class TransactionHistoryServiceTest {
     }
 
     private void transfer(Id from, String toFullPhone, Amount amount) {
-        paymentService.transfer(new TransferCommand(from, RAW_PIN, amount, PAYMENT_METHOD, toFullPhone));
+        paymentService.transfer(new TransferCommand(from, RAW_PIN, amount, toFullPhone));
     }
 
     // ── Groupe 1 — empty history ──────────────────────────────────────────────

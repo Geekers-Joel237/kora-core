@@ -35,23 +35,11 @@ import java.util.UUID;
 public class MobileMoneyProviderAdapter implements ProviderPort {
 
     private static final Logger log = LoggerFactory.getLogger(MobileMoneyProviderAdapter.class);
-
-    public enum ProviderBehavior {
-        SUCCESS,
-        SLOW,
-        FAIL_ON_AUTHORIZE,
-        FAIL_ON_CAPTURE,
-        TIMEOUT
-    }
-
-    private enum Checkpoint { AUTHORIZE, CAPTURE, REVERSE, CREDIT, DEBIT, SEND }
-
     private final ProviderBehavior behavior;
     private final boolean simulateLatency;
     private final long authorizeMs;
     private final long captureMs;
     private final long timeoutThresholdMs;
-
     public MobileMoneyProviderAdapter(
             @Value("${kora.provider.behavior:SUCCESS}") String behavior,
             @Value("${kora.provider.simulate-latency:true}") boolean simulateLatency,
@@ -67,37 +55,6 @@ public class MobileMoneyProviderAdapter implements ProviderPort {
                 this.behavior, simulateLatency);
     }
 
-    // ── Direct provider operations ────────────────────────────────────────────
-
-    @Override
-    public void credit(Amount amount, String paymentMethod) {
-        log.info("Calling provider credit — amount={} {} method={}",
-                amount.value(), amount.currency(), paymentMethod);
-        simulateLatency(captureMs);
-        checkBehavior(Checkpoint.CREDIT);
-        log.info("Provider credit OK — amount={} {}", amount.value(), amount.currency());
-    }
-
-    @Override
-    public void debit(Amount amount, String paymentMethod) {
-        log.info("Calling provider debit — amount={} {} method={}",
-                amount.value(), amount.currency(), paymentMethod);
-        simulateLatency(captureMs);
-        checkBehavior(Checkpoint.DEBIT);
-        log.info("Provider debit OK — amount={} {}", amount.value(), amount.currency());
-    }
-
-    @Override
-    public void send(Amount amount, String paymentMethod) {
-        log.info("Calling provider send — amount={} {} method={}",
-                amount.value(), amount.currency(), paymentMethod);
-        simulateLatency(captureMs);
-        checkBehavior(Checkpoint.SEND);
-        log.info("Provider send OK — amount={} {}", amount.value(), amount.currency());
-    }
-
-    // ── Authorize ─────────────────────────────────────────────────────────────
-
     @Override
     public AuthorizationResult authorize(Amount amount, String paymentMethod, String correlationId) {
         log.debug("authorize — amount={} method={} correlationId={}",
@@ -110,8 +67,6 @@ public class MobileMoneyProviderAdapter implements ProviderPort {
                 true);
     }
 
-    // ── Capture ───────────────────────────────────────────────────────────────
-
     @Override
     public CaptureResult capture(String authorizationReference, String correlationId) {
         log.debug("capture — authRef={} correlationId={}", authorizationReference, correlationId);
@@ -120,7 +75,8 @@ public class MobileMoneyProviderAdapter implements ProviderPort {
         return new CaptureResult(UUID.randomUUID().toString(), true);
     }
 
-    // ── Reverse ───────────────────────────────────────────────────────────────
+
+    // ── Authorize ─────────────────────────────────────────────────────────────
 
     @Override
     public ReverseResult reverse(String reference, Amount amount, String correlationId) {
@@ -130,7 +86,7 @@ public class MobileMoneyProviderAdapter implements ProviderPort {
         return new ReverseResult(UUID.randomUUID().toString(), true);
     }
 
-    // ── Internal helpers ──────────────────────────────────────────────────────
+    // ── Capture ───────────────────────────────────────────────────────────────
 
     private void checkBehavior(Checkpoint checkpoint) {
         switch (behavior) {
@@ -161,6 +117,8 @@ public class MobileMoneyProviderAdapter implements ProviderPort {
         }
     }
 
+    // ── Reverse ───────────────────────────────────────────────────────────────
+
     private void simulateLatency(long baseMs) {
         if (!simulateLatency) return;
         long jitter = (long) (baseMs * 0.4 * Math.random());
@@ -172,4 +130,16 @@ public class MobileMoneyProviderAdapter implements ProviderPort {
             Thread.currentThread().interrupt();
         }
     }
+
+    // ── Internal helpers ──────────────────────────────────────────────────────
+
+    public enum ProviderBehavior {
+        SUCCESS,
+        SLOW,
+        FAIL_ON_AUTHORIZE,
+        FAIL_ON_CAPTURE,
+        TIMEOUT
+    }
+
+    private enum Checkpoint {AUTHORIZE, CAPTURE, REVERSE, CREDIT, DEBIT, SEND}
 }
