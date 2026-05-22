@@ -1,18 +1,6 @@
 package com.geekersjoel237.koracore.web.exception;
 
-import com.geekersjoel237.koracore.domain.exception.AccountBlockedException;
-import com.geekersjoel237.koracore.domain.exception.AccountNotFoundException;
-import com.geekersjoel237.koracore.domain.exception.AccountSuspendedException;
-import com.geekersjoel237.koracore.domain.exception.CurrencyMismatchException;
-import com.geekersjoel237.koracore.domain.exception.CustomerNotFoundException;
-import com.geekersjoel237.koracore.domain.exception.DuplicateEmailException;
-import com.geekersjoel237.koracore.domain.exception.InsufficientFundsException;
-import com.geekersjoel237.koracore.domain.exception.InvalidAccountException;
-import com.geekersjoel237.koracore.domain.exception.InvalidOtpException;
-import com.geekersjoel237.koracore.domain.exception.InvalidStateTransitionException;
-import com.geekersjoel237.koracore.domain.exception.OtpExpiredException;
-import com.geekersjoel237.koracore.domain.exception.PinValidationException;
-import com.geekersjoel237.koracore.domain.exception.SelfTransferException;
+import com.geekersjoel237.koracore.domain.exception.*;
 import io.jsonwebtoken.JwtException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -41,8 +29,18 @@ public class GlobalExceptionHandler {
             AccountSuspendedException.class, SelfTransferException.class,
             CurrencyMismatchException.class, InvalidAccountException.class,
             InvalidStateTransitionException.class})
-    ProblemDetail onUnprocessable(RuntimeException ex) {
+    ProblemDetail onUnprocessable(BusinessException ex) {
         return problem(HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());
+    }
+
+    @ExceptionHandler(MailDeliveryException.class)
+    ProblemDetail onMailDelivery(MailDeliveryException ex) {
+        return problem(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
+    }
+
+    @ExceptionHandler(TransientPaymentException.class)
+    ProblemDetail onTransient(TransientPaymentException ex) {
+        return problem(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

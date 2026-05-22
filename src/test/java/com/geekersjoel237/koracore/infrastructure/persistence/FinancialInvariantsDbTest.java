@@ -32,8 +32,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class FinancialInvariantsDbTest extends AbstractRepositoryTest {
 
-    private static final Amount CASH_IN_AMOUNT     = new Amount(new BigDecimal("10000.00"), "XOF");
-    private static final Amount CASH_OUT_AMOUNT    = new Amount(new BigDecimal("3000.00"),  "XOF");
+    private static final Amount CASH_IN_AMOUNT  = new Amount(new BigDecimal("10000.00"), "XOF");
+    private static final Amount CASH_OUT_AMOUNT = new Amount(new BigDecimal("3000.00"),  "XOF");
 
     @Autowired private PaymentUseCase paymentUseCase;
     @Autowired private CustomerRepository customerRepository;

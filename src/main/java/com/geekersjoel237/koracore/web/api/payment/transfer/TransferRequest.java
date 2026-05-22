@@ -10,10 +10,9 @@ public record TransferRequest(
         String rawPin,
         BigDecimal amount,
         String currency,
-        String paymentMethod,
         String toPhoneNumber
 ) {
     public TransferCommand toCommand(Id customerId) {
-        return new TransferCommand(customerId, rawPin, new Amount(amount, currency), paymentMethod, toPhoneNumber);
+        return new TransferCommand(customerId, rawPin, new Amount(amount, currency), toPhoneNumber);
     }
 }

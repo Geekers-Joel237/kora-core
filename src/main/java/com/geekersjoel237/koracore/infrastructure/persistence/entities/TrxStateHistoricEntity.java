@@ -30,4 +30,19 @@ public class TrxStateHistoricEntity extends BaseEntity {
 
     @Column(name = "occurred_at", nullable = false)
     private Instant occurredAt;
+
+    @Column(name = "triggered_by")
+    private String triggeredBy;
+
+    @Column(name = "correlation_id")
+    private String correlationId;
+
+    @Column(name = "provider_ref")
+    private String providerRef;
+
+    @Column(name = "actor_id")
+    private String actorId;
+
+    @Column(name = "notes")
+    private String notes;
 }

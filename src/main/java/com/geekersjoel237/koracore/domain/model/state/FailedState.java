@@ -13,4 +13,9 @@ class FailedState implements TransactionState {
     public String name() {
         return "FAILED";
     }
+
+    @Override
+    public boolean isTerminal() {
+        return true;
+    }
 }

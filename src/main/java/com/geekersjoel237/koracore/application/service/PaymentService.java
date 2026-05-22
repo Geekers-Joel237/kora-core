@@ -2,153 +2,56 @@ package com.geekersjoel237.koracore.application.service;
 
 import com.geekersjoel237.koracore.application.command.CashInCommand;
 import com.geekersjoel237.koracore.application.command.CashOutCommand;
+import com.geekersjoel237.koracore.application.command.ReversePaymentCommand;
 import com.geekersjoel237.koracore.application.command.TransferCommand;
-import com.geekersjoel237.koracore.application.port.in.AuthUseCase;
 import com.geekersjoel237.koracore.application.port.in.PaymentUseCase;
-import com.geekersjoel237.koracore.domain.SystemConstants;
-import com.geekersjoel237.koracore.domain.exception.AccountBlockedException;
 import com.geekersjoel237.koracore.domain.exception.AccountNotFoundException;
-import com.geekersjoel237.koracore.domain.exception.AccountSuspendedException;
-import com.geekersjoel237.koracore.domain.exception.ProviderException;
+import com.geekersjoel237.koracore.domain.exception.TransientPaymentException;
 import com.geekersjoel237.koracore.domain.model.Account;
-import com.geekersjoel237.koracore.domain.model.Customer;
-import com.geekersjoel237.koracore.domain.model.Ledger;
 import com.geekersjoel237.koracore.domain.model.Transaction;
-import com.geekersjoel237.koracore.domain.port.*;
+import com.geekersjoel237.koracore.domain.port.AccountRepository;
 import com.geekersjoel237.koracore.domain.vo.Id;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.function.Supplier;
+
+/**
+ * Orchestrates payment use cases with optimistic-lock retry.
+ * <p>
+ * This class is intentionally <em>non-transactional</em> so that the
+ * {@link #withOptimisticRetry} loop can restart a fresh transaction on each
+ * attempt. The actual transactional work is delegated to
+ * {@link PaymentTransactionalExecutor}, which is a Spring-proxied bean with
+ * {@code @Transactional}.
+ */
 @Service
-@Transactional
 public class PaymentService implements PaymentUseCase {
 
-    private final AuthUseCase authUsecase;
+    public static final int MAX_RETRY_ATTEMPTS = 3;
+    private final PaymentTransactionalExecutor executor;
     private final AccountRepository accountRepository;
-    private final CustomerRepository customerRepository;
-    private final TransactionRepository transactionRepository;
-    private final TrxHistoricStatesRepository historicRepo;
-    private final ProviderPort provider;
-    private final LedgerRepository ledgerRepository;
 
-    public PaymentService(AuthUseCase authUsecase,
-                          AccountRepository accountRepository,
-                          CustomerRepository customerRepository,
-                          TransactionRepository transactionRepository,
-                          TrxHistoricStatesRepository historicRepo,
-                          ProviderPort provider,
-                          LedgerRepository ledgerRepository) {
-        this.authUsecase = authUsecase;
+    public PaymentService(PaymentTransactionalExecutor executor,
+                          AccountRepository accountRepository) {
+        this.executor = executor;
         this.accountRepository = accountRepository;
-        this.customerRepository = customerRepository;
-        this.transactionRepository = transactionRepository;
-        this.historicRepo = historicRepo;
-        this.provider = provider;
-        this.ledgerRepository = ledgerRepository;
     }
 
     @Override
     public Transaction cashIn(CashInCommand cmd) {
-        var customerAccount = validatePayerAndGetAccount(cmd.customerId(), cmd.rawPin());
-        var floatAccount = getSystemFloatAccount();
-        var ledger = ledgerRepository.findFirst();
-
-        var tx = ledger.cashIn(customerAccount, floatAccount, cmd.amount(), cmd.paymentMethod());
-
-        return executePayment(tx, ledger,
-                () -> provider.credit(cmd.amount(), cmd.paymentMethod()),
-                () -> {
-                    customerAccount.credit(cmd.amount());
-                    accountRepository.save(customerAccount);
-                });
+        return withOptimisticRetry(() -> executor.executeCashIn(cmd));
     }
 
     @Override
     public Transaction cashOut(CashOutCommand cmd) {
-        var customerAccount = validatePayerAndGetAccount(cmd.customerId(), cmd.rawPin());
-        var floatAccount = getSystemFloatAccount();
-        var ledger = ledgerRepository.findFirst();
-
-        var tx = ledger.cashOut(customerAccount, floatAccount, cmd.amount(), cmd.paymentMethod());
-
-        return executePayment(tx, ledger,
-                () -> provider.debit(cmd.amount(), cmd.paymentMethod()),
-                () -> {
-                    customerAccount.debit(cmd.amount());
-                    accountRepository.save(customerAccount);
-                });
+        return withOptimisticRetry(() -> executor.executeCashOut(cmd));
     }
 
     @Override
     public Transaction transfer(TransferCommand cmd) {
-        var fromAccount = validatePayerAndGetAccount(cmd.customerId(), cmd.rawPin());
-        var toAccount = validateRecipientAndGetAccount(cmd.toPhoneNumber());
-        var ledger = ledgerRepository.findFirst();
-
-        var tx = ledger.transfer(fromAccount, toAccount, cmd.amount(), cmd.paymentMethod());
-
-        return executePayment(tx, ledger,
-                () -> provider.send(cmd.amount(), cmd.paymentMethod()),
-                () -> {
-                    fromAccount.debit(cmd.amount());
-                    toAccount.credit(cmd.amount());
-                    accountRepository.save(fromAccount);
-                    accountRepository.save(toAccount);
-                });
-    }
-
-
-    private Transaction executePayment(Transaction tx, Ledger ledger, Runnable providerAction, Runnable onSuccess) {
-        tx.markPending();
-        persistTransactionState(tx);
-
-        try {
-            providerAction.run();
-
-            tx.markCompleted();
-            persistTransactionState(tx);
-            onSuccess.run();
-
-        } catch (ProviderException e) {
-            tx.markFailed();
-            persistTransactionState(tx);
-            var reverseTx = ledger.reverse(tx);
-            transactionRepository.save(reverseTx);
-        }
-
-        return tx;
-    }
-
-    private Account validatePayerAndGetAccount(Id customerId, String pin) {
-        authUsecase.validatePin(customerId, pin);
-
-        Customer customer = customerRepository.findById(customerId)
-                .orElseThrow(() -> new AccountNotFoundException("Customer not found: " + customerId.value()));
-
-        if (customer.isSuspended()) {
-            throw new AccountSuspendedException("Account suspended for customer: " + customerId.value());
-        }
-
-        return accountRepository.findByCustomerId(customerId)
-                .orElseThrow(() -> new AccountNotFoundException("Account not found for customer: " + customerId.value()));
-    }
-
-    private Account validateRecipientAndGetAccount(String toPhoneNumber) {
-        Customer customerTo = customerRepository.findByPhoneNumber(toPhoneNumber)
-                .orElseThrow(() -> new AccountNotFoundException("No account found for phone: " + toPhoneNumber));
-
-        if (customerTo.isSuspended()) {
-            throw new AccountSuspendedException("Recipient account is suspended: " + toPhoneNumber);
-        }
-
-        Account accountTo = accountRepository.findByCustomerId(customerTo.snapshot().customerId())
-                .orElseThrow(() -> new AccountNotFoundException("Account not found for recipient: " + customerTo.snapshot().customerId().value()));
-
-        if (accountTo.snapshot().isBlocked()) {
-            throw new AccountBlockedException("Recipient account is blocked: " + accountTo.snapshot().accountId().value());
-        }
-
-        return accountTo;
+        return withOptimisticRetry(() -> executor.executeTransfer(cmd));
     }
 
     @Override
@@ -159,13 +62,26 @@ public class PaymentService implements PaymentUseCase {
                         "Account not found for customer: " + customerId.value()));
     }
 
-    private Account getSystemFloatAccount() {
-        return accountRepository.findFloatByProviderId(SystemConstants.PROVIDER_ID)
-                .orElseThrow(() -> new AccountNotFoundException("Float account not found for provider: " + SystemConstants.PROVIDER_ID.value()));
+    @Override
+    public Transaction reversePayment(ReversePaymentCommand cmd) {
+        return withOptimisticRetry(() -> executor.executeReversePayment(cmd));
     }
 
-    private void persistTransactionState(Transaction tx) {
-        transactionRepository.save(tx);
-        historicRepo.save(tx.history().getLast());
+    private <T> T withOptimisticRetry(Supplier<T> action) {
+        for (int attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
+            try {
+                return action.get();
+            } catch (ObjectOptimisticLockingFailureException e) {
+                if (attempt == MAX_RETRY_ATTEMPTS)
+                    throw new TransientPaymentException("Concurrent update failed after 3 attempts", e);
+                try {
+                    Thread.sleep(50L * attempt);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new TransientPaymentException("Interrupted during retry", ie);
+                }
+            }
+        }
+        throw new IllegalStateException("unreachable");
     }
 }

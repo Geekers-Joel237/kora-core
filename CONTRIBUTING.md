@@ -233,6 +233,7 @@ threshold — check `build.gradle` for the current gate value.
 
 ```bash
 ./gradlew test --tests "com.geekersjoel237.koracore.e2e.CashInE2ETest"
+./gradlew test --tests "com.geekersjoel237.koracore.e2e.PaymentLifecycleE2ETest"
 ```
 
 ### Test profiles
@@ -453,6 +454,8 @@ All significant architectural decisions are recorded in `docs/adr/`.
 | ADR | Decision | Status |
 |---|---|---|
 | [ADR-001](./docs/adr/ADR-001-immutable-ledger.md) | Immutable double-entry ledger with denormalized balance cache | Accepted |
+| [ADR-002](./docs/adr/ADR-002-payment-lifecycle.md) | Payment lifecycle state machine: INITIATED → AUTHORIZED → CAPTURED → SETTLEMENT_PENDING → SETTLED → COMPLETED | Accepted |
+| [ADR-003](./docs/adr/ADR-003-payment-api-design.md) | Payment lifecycle fully orchestrated inside cashIn/cashOut/transfer — no separate authorize/capture API | Accepted |
 
 When making a significant architectural decision, create a new ADR following
 the existing format. Link it from this table.
@@ -462,6 +465,37 @@ A decision is "significant" if it affects:
 - The boundary between domain, application, or infrastructure layers
 - Concurrency or transaction isolation strategy
 - A trade-off between performance and correctness
+
+---
+
+## 10. Client vs admin surface separation
+
+KORA Core exposes two distinct API surfaces with separate role requirements.
+
+### Customer surface (`ROLE_CUSTOMER`)
+
+```
+POST /payments/cash-in   — wallet top-up
+POST /payments/cash-out  — wallet withdrawal
+POST /payments/transfer  — peer-to-peer transfer
+GET  /payments/balance   — account balance
+GET  /payments/history   — transaction history
+```
+
+Each operation orchestrates the full lifecycle internally (INITIALIZED → AUTHORIZED
+→ CAPTURED → SETTLEMENT_PENDING → SETTLED → COMPLETED). Intermediate states are
+not exposed to the client — only the final state is returned.
+
+### Operator surface (`ROLE_ADMIN` / `ROLE_OPERATOR`) — Step 5+
+
+```
+POST /payments/{id}/reverse        — reverse an authorized or captured transaction
+POST /admin/payments/{id}/reverse  — reverse an authorized or captured transaction
+GET  /admin/payments               — list transactions by state (e.g. stuck in AUTHORIZED)
+```
+
+RBAC is enforced in `SecurityConfig`. Never add business logic to the security
+layer — role checks are a routing concern, not a domain concern.
 
 ---
 

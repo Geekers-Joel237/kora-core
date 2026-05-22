@@ -6,7 +6,12 @@ package com.geekersjoel237.koracore.domain.exception;
  * @author Geekers_Joel237
  **/
 public class BusinessException extends RuntimeException {
+
     public BusinessException(String message) {
         super(message);
+    }
+
+    public BusinessException(String message, Throwable cause) {
+        super(message, cause);
     }
 }
