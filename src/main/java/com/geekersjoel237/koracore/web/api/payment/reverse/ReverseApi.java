@@ -5,6 +5,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -22,5 +23,5 @@ public interface ReverseApi {
     @PostMapping("/{txId}/reverse")
     ResponseEntity<TransactionResponse> reverse(
             @PathVariable("txId") String txId,
-            @RequestBody ReverseRequest request);
+            @RequestBody @Valid ReverseRequest request);
 }

@@ -3,6 +3,7 @@ package com.geekersjoel237.koracore.e2e;
 import com.geekersjoel237.koracore.web.api.auth.shared.OtpResponse;
 import com.geekersjoel237.koracore.web.api.auth.shared.TokensResponse;
 import com.geekersjoel237.koracore.web.api.auth.register.RegisterRequest;
+import com.geekersjoel237.koracore.web.api.auth.verifyOtp.VerifyOtpRequest;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -107,5 +108,38 @@ class AuthE2ETest extends AbstractE2ETest {
         Assertions.assertNotNull(newTokens);
         assertThat(newTokens.accessToken()).isNotBlank();
         assertThat(newTokens.refreshToken()).isNotBlank();
+    }
+
+    // ── Validation tests ──────────────────────────────────────────────────────
+
+    @Test
+    void should_return_400_when_email_is_invalid() {
+        ResponseEntity<String> response = http.postForEntity(
+                url("/auth/register"),
+                new RegisterRequest("Joel", "not-an-email", "+225", "07000001001", "1234"),
+                String.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody()).contains("email");
+    }
+
+    @Test
+    void should_return_400_when_otp_code_is_not_six_digits() {
+        ResponseEntity<String> response = http.postForEntity(
+                url("/auth/verify-otp"),
+                new VerifyOtpRequest("valid@example.com", "12"),
+                String.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody()).contains("code");
+    }
+
+    @Test
+    void should_return_400_when_from_date_is_invalid_format() {
+        SetupData ctx = setupCustomerWithAccount(
+                "hist@example.com", "Hist", "+225", "07000009999", "1234");
+        ResponseEntity<String> response = getWithToken(
+                "/payments/history?from=not-a-date",
+                ctx.tokens().accessToken(), String.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody()).contains("from");
     }
 }

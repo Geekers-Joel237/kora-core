@@ -4,6 +4,7 @@ import com.geekersjoel237.koracore.web.api.auth.shared.TokensResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -17,5 +18,5 @@ public interface VerifyOtpApi {
     @ApiResponse(responseCode = "200", description = "OTP verified, tokens issued")
     @ApiResponse(responseCode = "401", description = "Invalid or expired OTP")
     @PostMapping("/verify-otp")
-    ResponseEntity<TokensResponse> verifyOtp(@RequestBody VerifyOtpRequest request);
+    ResponseEntity<TokensResponse> verifyOtp(@RequestBody @Valid VerifyOtpRequest request);
 }
