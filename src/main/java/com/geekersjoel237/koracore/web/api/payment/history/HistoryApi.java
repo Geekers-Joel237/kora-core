@@ -28,9 +28,9 @@ public interface HistoryApi {
             @RequestParam(required = false) String type,
             @Parameter(description = "Filter by state: INITIATED, COMPLETED, FAILED, …")
             @RequestParam(required = false) String state,
-            @Parameter(description = "ISO-8601 start date (inclusive)")
+            @Parameter(description = "ISO-8601 UTC instant (e.g. 2026-01-15T00:00:00Z)")
             @RequestParam(required = false) String from,
-            @Parameter(description = "ISO-8601 end date (inclusive)")
+            @Parameter(description = "ISO-8601 UTC instant (e.g. 2026-01-15T00:00:00Z)")
             @RequestParam(required = false) String to,
             @Parameter(description = "INBOUND or OUTBOUND")
             @RequestParam(required = false) String direction,
