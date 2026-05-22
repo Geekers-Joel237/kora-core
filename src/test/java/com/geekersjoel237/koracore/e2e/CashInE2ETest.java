@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
 import java.math.BigDecimal;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -75,5 +76,38 @@ class CashInE2ETest extends AbstractE2ETest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
+    // ── Validation tests ──────────────────────────────────────────────────────
 
+    @Test
+    void should_return_400_when_amount_is_null() {
+        SetupData ctx = setupCustomerWithAccount(EMAIL, FULL_NAME, PREFIX, PHONE, PIN);
+        ResponseEntity<String> response = postWithToken(
+                "/payments/cash-in",
+                Map.of("rawPin", PIN, "currency", "XOF", "paymentMethod", "ORANGE_MONEY"),
+                ctx.tokens().accessToken(), String.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody()).contains("amount");
+    }
+
+    @Test
+    void should_return_400_when_amount_is_zero() {
+        SetupData ctx = setupCustomerWithAccount(EMAIL, FULL_NAME, PREFIX, PHONE, PIN);
+        ResponseEntity<String> response = postWithToken(
+                "/payments/cash-in",
+                new CashInRequest(PIN, BigDecimal.ZERO, "XOF", "ORANGE_MONEY"),
+                ctx.tokens().accessToken(), String.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody()).contains("amount");
+    }
+
+    @Test
+    void should_return_400_when_currency_is_blank() {
+        SetupData ctx = setupCustomerWithAccount(EMAIL, FULL_NAME, PREFIX, PHONE, PIN);
+        ResponseEntity<String> response = postWithToken(
+                "/payments/cash-in",
+                new CashInRequest(PIN, BigDecimal.valueOf(5000), "", "ORANGE_MONEY"),
+                ctx.tokens().accessToken(), String.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody()).contains("currency");
+    }
 }

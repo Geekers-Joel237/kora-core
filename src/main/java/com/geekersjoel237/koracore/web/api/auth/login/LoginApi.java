@@ -4,6 +4,7 @@ import com.geekersjoel237.koracore.web.api.auth.shared.OtpResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -17,5 +18,5 @@ public interface LoginApi {
     @ApiResponse(responseCode = "200", description = "PIN valid, OTP sent")
     @ApiResponse(responseCode = "401", description = "Invalid PIN or customer not found")
     @PostMapping("/login")
-    ResponseEntity<OtpResponse> login(@RequestBody LoginRequest request);
+    ResponseEntity<OtpResponse> login(@RequestBody @Valid LoginRequest request);
 }
