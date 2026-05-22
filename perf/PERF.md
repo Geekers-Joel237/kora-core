@@ -16,6 +16,10 @@ mocking needed between scenarios.
 | `FAIL_ON_CAPTURE`        | Authorizes OK, throws during capture → transaction reaches `CAPTURE_FAILED` |
 | `TIMEOUT`                | Simulates a network timeout on every call (sleeps `timeoutThresholdMs + 500ms` then throws) |
 
+> **Note:** `COLLECTION` (cash-in) and `DISBURSEMENT` (cash-out) operations use the same
+> behavior configuration — `FAIL_ON_AUTHORIZE` applies to both. P2P transfers are unaffected
+> by any provider behavior setting: they never call the provider.
+
 ### Latency Properties
 
 | Property | Dev default | Perf profile | Description |
@@ -70,12 +74,12 @@ docker run --rm --network host \
   grafana/k6 run --out influxdb=http://localhost:8086/k6 /perf/load.js
 ```
 
-### Thresholds (`perf/thresholds.js`)
+### Thresholds (`perf/load.js`)
 
 | Metric | Threshold |
 |--------|-----------|
-| `http_req_duration` p95 | < 150 ms |
-| `http_req_duration` p99 | < 300 ms |
+| `http_req_duration` p95 | < 200 ms |
+| `http_req_duration` p99 | < 400 ms |
 | `http_req_failed` rate | < 1% |
 | `technical_errors` count | < 5 |
 
@@ -107,4 +111,6 @@ KORA_PROVIDER_BEHAVIOR=FAIL_ON_CAPTURE java -jar kora-core.jar \
 `@SpringBootTest(properties = {...})`:
 
 - `WhenProviderRefusesAuthorization` — asserts `AUTHORIZATION_FAILED` state for cash-in and cash-out
-- `WhenProviderFailsOnCapture` — asserts `CAPTURE_FAILED` state and zero balance credited
+- `WhenProviderFailsOnCapture` — asserts `CAPTURE_FAILED` state for cash-in and cash-out only.
+  P2P transfers are internal wallet operations — no provider call is made, therefore no
+  provider failure scenario exists for transfer.

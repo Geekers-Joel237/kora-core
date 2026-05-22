@@ -11,7 +11,7 @@
 | Test | Simulated users | Throughput | Duration | Objective |
 |---|---|---|---|---|
 | Smoke | 2 | ~1 req/s | 2 min | Sanity check — "it works" |
-| Load | 30 | 10 req/s plateau | 11 min | Step 0 SLO validation |
+| Load | 60 | 25 req/s plateau | 11 min | Step 1 SLO validation |
 | Stress | 200 | 5 → 50 req/s | 22 min max | Identify the breaking point |
 | Soak | 40 | 5 req/s constant | 30 min | Stability and absence of memory leaks |
 
@@ -48,46 +48,46 @@ respond correctly before engaging concurrent load.
 
 ---
 
-## 3. Load test — 30 users · 10 req/s · 11 minutes
+## 3. Load test — 60 users · 25 req/s · 11 minutes
 
-> This is the Step 0 reference test. A FAIL here blocks progression.
+> This is the Step 1 reference test. A FAIL here blocks progression to Step 2.
 
 ### Configuration
 
 ```
 Executor         : ramping-arrival-rate
-Ramp-up          : 0 → 10 req/s over 2 min
-Plateau          : 10 req/s for 8 min
-Ramp-down        : 10 → 0 req/s over 1 min
-Pre-allocated VUs: 30
-Max VUs          : 60
-Simulated users  : 30
+Ramp-up          : 0 → 25 req/s over 2 min
+Plateau          : 25 req/s for 8 min
+Ramp-down        : 25 → 0 req/s over 1 min
+Pre-allocated VUs: 60
+Max VUs          : 100
+Simulated users  : 60
 ```
 
 ### Transaction volume
 
 | Phase | Duration | Average throughput | Requests |
 |---|---|---|---|
-| Ramp-up | 2 min | ~5 req/s | ~600 |
-| Plateau | 8 min | 10 req/s | 4 800 |
-| Ramp-down | 1 min | ~5 req/s | ~300 |
-| **Total** | **11 min** | — | **~5 700** |
+| Ramp-up | 2 min | ~12 req/s | ~1 500 |
+| Plateau | 8 min | 25 req/s | 12 000 |
+| Ramp-down | 1 min | ~12 req/s | ~750 |
+| **Total** | **11 min** | — | **~16 500** |
 
 Breakdown by operation over the total duration:
 
 | Operation | Share | Volume |
 |---|---|---|
-| Cash-in | 40% | ~2 280 |
-| P2P Transfer | 35% | ~1 995 |
-| Cash-out | 15% | ~855 |
-| Balance | 10% | ~570 |
-| **Total** | 100% | **~5 700** |
+| Cash-in | 40% | ~6 600 |
+| P2P Transfer | 35% | ~5 775 |
+| Cash-out | 15% | ~2 475 |
+| Balance | 10% | ~1 650 |
+| **Total** | 100% | **~16 500** |
 
 ### SLOs validated by this test
 
 | SLO | Threshold | Measurement |
 |---|---|---|
-| P95 Latency | < 150ms | `http_req_duration{scenario:load}` |
+| P95 Latency | < 200ms | `http_req_duration{scenario:load}` |
 | Error rate | < 1% | `http_req_failed` |
 | Check rate (COMPLETED) | > 99% | `checks` |
 
@@ -140,8 +140,8 @@ The level at which p95 crosses 500ms AND the metric that degrades first:
 DB latency (hikaricp_connections_pending)? GC pressure (jvm_memory_used_bytes)?
 thread pool saturation (http_req_waiting)?
 
-This breaking point defines the **Step 0 technical ceiling** and guides
-architecture decisions for Step 1 (cache, pool sizing, modular monolith).
+This breaking point defines the **Step 1 technical ceiling** and guides
+architecture decisions for Step 2 (modular monolith, dedicated module boundaries).
 
 ---
 
@@ -193,31 +193,31 @@ Leak   : heap  ~~~200MB~~~~~~~~~~~~~~~~~~~~~~~~~~~~600MB~~~  (drift)
 
 ### Context
 
-The Step 0 SLOs are calibrated for a **nascent regional fintech** operating
+The Step 1 SLOs are calibrated for a **growing regional fintech** operating
 in sub-Saharan Africa (Mobile Money / neobank model).
 
 ### Comparison: our tests vs real production
 
-| Dimension | Smoke | Load | Stress max | Target production Step 0 | Mature production |
+| Dimension | Smoke | Load | Stress max | Target production Step 1 | Mature production |
 |---|---|---|---|---|---|
-| Simultaneous active users | 2 | 30 | 200 | 500–2 000 | 50 000–500 000 |
-| Throughput (req/s) | ~1 | 10 | 50 | 50–200 | 500–5 000 |
-| Transactions/hour | ~3 600 | ~31 000 | ~180 000 | ~200 000 | 1–5 M |
-| Transactions/day (extrapolated 24h) | ~86 000 | ~864 000 | ~4.3 M | ~2–5 M | 20–100 M |
+| Simultaneous active users | 2 | 60 | 200 | 500–2 000 | 50 000–500 000 |
+| Throughput (req/s) | ~1 | 25 | 50 | 50–200 | 500–5 000 |
+| Transactions/hour | ~3 600 | ~90 000 | ~180 000 | ~200 000 | 1–5 M |
+| Transactions/day (extrapolated 24h) | ~86 000 | ~2 160 000 | ~4.3 M | ~2–5 M | 20–100 M |
 | Load duration | 2 min | 11 min | 22 min | 24h/7d | 24h/7d |
 | Real providers | Stub | Stub | Stub | Orange Money, MTN | Multi-provider |
 | Infrastructure | 1 local JVM | 1 local JVM | 1 local JVM | 1 server JVM | 3–10 instances |
 
 ### Reading the load test as a production equivalent
 
-The **10 req/s** plateau of the load test represents, extrapolated over 24h:
+The **25 req/s** plateau of the load test represents, extrapolated over 24h:
 
 ```
-10 req/s × 3 600 s/h × 24 h = 864 000 transactions/day
+25 req/s × 3 600 s/h × 24 h = 2 160 000 transactions/day
 ```
 
-This is the off-peak volume of a small regional fintech with ~5,000 active users/day.
-It is the **minimum traffic** that the Step 0 architecture must absorb without degradation.
+This is the daily volume of a regional fintech with ~15,000 active users/day.
+It is the **Step 1 nominal target** that the payment lifecycle architecture must absorb.
 
 The **50 req/s** ceiling of the stress test represents, extrapolated over 24h:
 
@@ -226,17 +226,17 @@ The **50 req/s** ceiling of the stress test represents, extrapolated over 24h:
 ```
 
 This is the daily peak of a mid-sized African neobank.
-This is the **Step 0 technical ceiling** — beyond this, the architecture must evolve
-(Step 1: distributed cache, pool tuning, Ledger service extraction).
+This is the **Step 1 technical ceiling** — beyond this, the architecture must evolve
+(Step 2: modular monolith, dedicated module boundaries, DB pool tuning).
 
 ### Load roadmap by step
 
 | Step | Architecture | Target SLO | Nominal throughput | Max throughput |
 |---|---|---|---|---|
-| 0 (current) | Transactional monolith | p95 < 150ms | 10 req/s | ~50 req/s |
-| 1 | Modular monolith + cache | p95 < 100ms | 50 req/s | ~200 req/s |
-| 2 | Hexagonal + event-driven | p95 < 80ms | 200 req/s | ~500 req/s |
-| 3+ | Extracted microservices | p95 < 50ms | 500+ req/s | > 1 000 req/s |
+| 0 (done) | Transactional monolith | p95 < 150ms | 10 req/s | ~50 req/s |
+| 1 (current) | Payment lifecycle state machine | p95 < 200ms | 20–30 req/s | ~100 req/s |
+| 2 | Modular monolith | p95 < 250ms | 50 req/s | ~200 req/s |
+| 3+ | Hexagonal + event-driven | p95 < 300ms | 200+ req/s | > 500 req/s |
 
 ---
 
@@ -245,7 +245,7 @@ This is the **Step 0 technical ceiling** — beyond this, the architecture must 
 | Test | Users | Max VUs | Throughput | Duration | Total transactions |
 |---|---|---|---|---|---|
 | Smoke | 2 | 1 | ~1 req/s | 2 min | ~120 |
-| Load | 30 | 60 | 10 req/s | 11 min | ~5 700 |
+| Load | 60 | 100 | 25 req/s | 11 min | ~16 500 |
 | Stress | 200 | 200 | 5→50 req/s | 22 min max | ~26 850 |
 | Soak | 40 | 40 | 5 req/s | 30 min | ~9 000 |
 

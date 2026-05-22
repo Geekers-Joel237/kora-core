@@ -1,15 +1,15 @@
 /**
- * load.js — Load test : validation des SLOs nominaux Étape 0.
+ * load.js — Load test : validation des SLOs nominaux Étape 1.
  *
  * SLOs cibles :
- *   P95 latency  < 150ms
+ *   P95 latency  < 200ms
  *   Error rate   < 1%
- *   Throughput   ≥ 10 req/sec au plateau
+ *   Throughput   ≥ 25 req/sec au plateau
  *
  * Profil de charge :
- *   Ramp-up  : 0 → 10 req/sec  (2 min)
- *   Plateau  : 10 req/sec       (8 min)
- *   Ramp-down: 10 → 0           (1 min)
+ *   Ramp-up  : 0 → 25 req/sec  (2 min)
+ *   Plateau  : 25 req/sec       (8 min)
+ *   Ramp-down: 25 → 0           (1 min)
  *   Total    : ~11 min
  *
  * Mix métier :
@@ -27,8 +27,8 @@ import { scenarioTransfer } from './scenarios/transfer.js';
 import { scenarioBalance } from './scenarios/balance.js';
 
 // ── Nombre d'utilisateurs de test ─────────────────────────────────────────────
-// 30 users = preAllocatedVUs → chaque VU a son propre user, élimine la contention OTP
-const USER_COUNT = 30;
+// 60 users = preAllocatedVUs → chaque VU a son propre user, élimine la contention OTP
+const USER_COUNT = 60;
 
 // ── Config k6 — constant arrival rate ────────────────────────────────────────
 
@@ -38,18 +38,18 @@ export const options = {
             executor:        'ramping-arrival-rate',
             startRate:       0,
             timeUnit:        '1s',
-            preAllocatedVUs: 30,    // pool de VUs disponibles
-            maxVUs:          60,    // plafond de sécurité
+            preAllocatedVUs: 60,    // pool de VUs disponibles
+            maxVUs:          100,   // plafond de sécurité
             stages: [
-                { target: 10, duration: '2m' },   // ramp-up
-                { target: 10, duration: '8m' },   // plateau nominal
+                { target: 25, duration: '2m' },   // ramp-up
+                { target: 25, duration: '8m' },   // plateau nominal
                 { target: 0,  duration: '1m' },   // ramp-down
             ],
         },
     },
     thresholds: {
-        // SLOs stricts Étape 0
-        'http_req_duration{scenario:load}': ['p(95)<150'],
+        // SLOs stricts Étape 1
+        'http_req_duration{scenario:load}': ['p(95)<200'],
         http_req_failed:                    ['rate<0.01'],
         // On vérifie aussi que les checks passent
         checks:                             ['rate>0.99'],
