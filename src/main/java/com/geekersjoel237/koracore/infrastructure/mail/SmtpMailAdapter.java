@@ -1,7 +1,8 @@
 package com.geekersjoel237.koracore.infrastructure.mail;
 
-import com.geekersjoel237.koracore.domain.port.MailPort;
 import com.geekersjoel237.koracore.domain.OtpMailContext;
+import com.geekersjoel237.koracore.domain.exception.MailProviderException;
+import com.geekersjoel237.koracore.domain.port.MailPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -26,15 +27,21 @@ public class SmtpMailAdapter implements MailPort {
     }
 
     @Override
-    public void sendOtp(String toEmail, String otpCode, OtpMailContext context) {
-        SimpleMailMessage message = new SimpleMailMessage();
-        message.setFrom(fromAddress);
-        message.setTo(toEmail);
-        message.setSubject(subject(context));
-        message.setText("Your one-time code is valid for 5 minutes.\n\nDo not share it with anyone.");
-        // otpCode intentionally excluded from logs
-        log.info("Sending OTP mail to {} [context={}]", toEmail, context);
-        mailSender.send(message);
+    public void sendOtp(String toEmail, String otpCode, OtpMailContext context) throws MailProviderException {
+        try {
+            SimpleMailMessage message = new SimpleMailMessage();
+            message.setFrom(fromAddress);
+            message.setTo(toEmail);
+            message.setSubject(subject(context));
+            message.setText("Your one-time code is valid for 5 minutes.\n\nDo not share it with anyone.");
+
+            mailSender.send(message);
+        } catch (Throwable e) {
+            throw new MailProviderException(e);
+        } finally {
+            // otpCode intentionally excluded from logs
+            log.info("Sending OTP mail to {} [context={}]", toEmail, context);
+        }
     }
 
     private String subject(OtpMailContext context) {

@@ -5,8 +5,9 @@ import com.geekersjoel237.koracore.application.command.CashOutCommand;
 import com.geekersjoel237.koracore.application.command.TransferCommand;
 import com.geekersjoel237.koracore.application.query.TransactionSummary;
 import com.geekersjoel237.koracore.application.service.AuthService;
-import com.geekersjoel237.koracore.application.service.TransactionHistoryService;
 import com.geekersjoel237.koracore.application.service.PaymentService;
+import com.geekersjoel237.koracore.application.service.PaymentTransactionalExecutor;
+import com.geekersjoel237.koracore.application.service.TransactionHistoryService;
 import com.geekersjoel237.koracore.domain.enums.Direction;
 import com.geekersjoel237.koracore.domain.enums.Role;
 import com.geekersjoel237.koracore.domain.enums.TransactionType;
@@ -19,6 +20,7 @@ import com.geekersjoel237.koracore.domain.query.TransactionFilter;
 import com.geekersjoel237.koracore.domain.vo.Amount;
 import com.geekersjoel237.koracore.domain.vo.Id;
 import com.geekersjoel237.koracore.domain.vo.PhoneNumber;
+import com.geekersjoel237.koracore.infrastructure.config.SecurityProperties;
 import com.geekersjoel237.koracore.infrastructure.security.BCryptCustomerPinEncoder;
 import com.geekersjoel237.koracore.shared.inmemory.*;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,7 +30,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 
-import static com.geekersjoel237.koracore.shared.inmemory.InMemoryProviderSimulator.Behavior.SUCCESS;
+import static com.geekersjoel237.koracore.shared.inmemory.InMemoryProviderAdapter.Behavior.SUCCESS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -43,6 +45,11 @@ class TransactionHistoryServiceTest {
     private static final String PAYMENT_METHOD = "ORANGE_MONEY";
     private static final Amount AMOUNT_10K = Amount.of(BigDecimal.valueOf(10_000), "XOF");
     private static final Amount AMOUNT_5K  = Amount.of(BigDecimal.valueOf(5_000), "XOF");
+
+    private static final SecurityProperties TEST_SECURITY = new SecurityProperties(
+            new SecurityProperties.Jwt("test-secret-key-must-be-at-least-32-chars!!", 15, 7),
+            new SecurityProperties.Otp(5)
+    );
 
     private final CustomerPinEncoder pinEncoder = new BCryptCustomerPinEncoder();
 
@@ -65,10 +72,12 @@ class TransactionHistoryServiceTest {
         InMemoryMailPort mailPort    = new InMemoryMailPort();
         AuthService authService = new AuthService(
                 new InMemoryUserRepository(), customerRepo, accountRepo, otpStore, pinEncoder,
-                Clock.systemUTC(), mailPort);
-        paymentService = new PaymentService(
+                Clock.systemUTC(), TEST_SECURITY, mailPort);
+        PaymentTransactionalExecutor executor = new PaymentTransactionalExecutor(
                 authService, accountRepo, customerRepo,
-                transactionRepo, historicRepo, new InMemoryProviderSimulator(SUCCESS), ledgerRepo);
+                transactionRepo, historicRepo, new InMemoryProviderAdapter(SUCCESS), ledgerRepo,
+                new InMemoryAuthorizationRecordRepository());
+        paymentService = new PaymentService(executor, accountRepo);
 
         historyService = new TransactionHistoryService(transactionRepo, accountRepo, customerRepo);
 
@@ -98,7 +107,7 @@ class TransactionHistoryServiceTest {
     }
 
     private void transfer(Id from, String toFullPhone, Amount amount) {
-        paymentService.transfer(new TransferCommand(from, RAW_PIN, amount, PAYMENT_METHOD, toFullPhone));
+        paymentService.transfer(new TransferCommand(from, RAW_PIN, amount, toFullPhone));
     }
 
     // ── Groupe 1 — empty history ──────────────────────────────────────────────

@@ -9,5 +9,7 @@ public interface AccountRepository {
     void save(Account account);
     Optional<Account> findById(Id accountId);
     Optional<Account> findByCustomerId(Id customerId);
+    Optional<Account> findByCustomerIdForUpdate(Id customerId);
     Optional<Account> findFloatByProviderId(Id providerId);
+    Optional<Account> findFloatByProviderIdForUpdate(Id providerId);
 }

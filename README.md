@@ -199,3 +199,11 @@ Architecture evolves alongside simulated scale and operational constraints.
 ## 📌 License
 
 MIT (for learning, experimentation, and transparency).
+
+## 🚀 Getting Started
+
+| Document | Purpose |
+|---|---|
+| [CONTRIBUTING.md](./CONTRIBUTING.md) | Local setup, running the app, running tests |
+| [perf/PERF.md](./perf/PERF.md) | Load testing runbook (k6 + Grafana) |
+| [docs/adr/ADR-001](./docs/adr/ADR-001-immutable-ledger.md) | Ledger architecture decision |

@@ -18,7 +18,7 @@ import lombok.ToString;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class UserEntity extends BaseEntity {
+public class UserEntity extends VersionedEntity {
 
     @Column(name = "full_name", nullable = false)
     private String fullName;

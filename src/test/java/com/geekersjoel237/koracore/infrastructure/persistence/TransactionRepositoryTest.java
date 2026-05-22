@@ -177,24 +177,27 @@ class TransactionRepositoryTest extends AbstractRepositoryTest {
         Transaction tx = buildTransaction(fromId, toId);
         txRepository.save(tx);
 
-        // Record INITIALIZED → PENDING → COMPLETED in history
+        // Record INITIALIZED → AUTHORIZED → COMPLETED in history
         historicRepository.save(tx.history().getFirst()); // INITIALIZED (null → INITIALIZED)
-        tx.markPending();
+        tx.authorize();
         txRepository.save(tx);
-        historicRepository.save(tx.history().get(1)); // INITIALIZED → PENDING
+        historicRepository.save(tx.history().get(1)); // INITIALIZED → AUTHORIZED
+        tx.capture();
+        tx.pendSettlement();
+        tx.settle();
         tx.markCompleted();
         txRepository.save(tx);
-        historicRepository.save(tx.history().get(2)); // PENDING → COMPLETED
+        historicRepository.save(tx.history().getLast()); // SETTLED → COMPLETED
 
         List<TrxStateHistoric> history =
                 historicRepository.findByTransactionId(tx.snapshot().transactionId());
 
         assertThat(history).hasSize(3);
         assertThat(history.get(0).newState()).isEqualTo(TransactionState.INITIALIZED);
-        assertThat(history.get(1).newState()).isEqualTo(TransactionState.PENDING);
+        assertThat(history.get(1).newState()).isEqualTo(TransactionState.AUTHORIZED);
         assertThat(history.get(2).newState()).isEqualTo(TransactionState.COMPLETED);
         assertThat(history.get(0).oldState()).isNull();
         assertThat(history.get(1).oldState()).isEqualTo(TransactionState.INITIALIZED);
-        assertThat(history.get(2).oldState()).isEqualTo(TransactionState.PENDING);
+        assertThat(history.get(2).oldState()).isEqualTo(TransactionState.SETTLED);
     }
 }

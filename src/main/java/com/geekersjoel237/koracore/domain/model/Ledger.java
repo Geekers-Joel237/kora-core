@@ -1,14 +1,11 @@
 package com.geekersjoel237.koracore.domain.model;
 
-import com.geekersjoel237.koracore.domain.enums.OperationType;
+import com.geekersjoel237.koracore.domain.enums.ResourceType;
 import com.geekersjoel237.koracore.domain.enums.TransactionType;
 import com.geekersjoel237.koracore.domain.exception.InsufficientFundsException;
 import com.geekersjoel237.koracore.domain.exception.InvalidAccountException;
-import com.geekersjoel237.koracore.domain.exception.SelfTransferException;
 import com.geekersjoel237.koracore.domain.vo.Amount;
 import com.geekersjoel237.koracore.domain.vo.Id;
-
-import java.math.BigDecimal;
 
 public class Ledger {
 
@@ -41,22 +38,9 @@ public class Ledger {
                             + ", required " + amount.value());
     }
 
-    private static void verifyDoubleEntry(Transaction tx) {
-        Amount debit = sumByType(tx, OperationType.DEBIT);
-        Amount credit = sumByType(tx, OperationType.CREDIT);
-        if (!debit.equals(credit))
-            throw new IllegalStateException(
-                    "Double-entry invariant violated: debit=" + debit.value()
-                            + " credit=" + credit.value());
-    }
-
-    private static Amount sumByType(Transaction tx, OperationType type) {
-        return tx.operations().stream()
-                .filter(op -> op.snapshot().type() == type)
-                .map(op -> op.snapshot().amount())
-                .reduce(Amount.of(BigDecimal.ZERO, "XOF"), Amount::add);
-    }
-
+    // ── Legacy full-cycle methods (used by LedgerTest) ────────────────────────
+    // These create a Transaction WITH operations in one shot.
+    // Not used by the authorize/capture payment flow.
 
     public Transaction cashIn(Account customerAccount, Account floatAccount,
                               Amount amount, String paymentMethod) {
@@ -64,22 +48,17 @@ public class Ledger {
         requireActive(floatAccount, "Float account is not active");
         requirePositive(amount);
 
-        Id txId = Id.generate();
         Transaction tx = Transaction.create(
-                txId,
+                Id.generate(),
                 floatAccount.snapshot().accountId(),
                 customerAccount.snapshot().accountId(),
                 TransactionType.CASH_IN,
                 paymentMethod,
-                amount
-        );
+                amount);
 
-        tx.addOperation(Operation.create(Id.generate(), OperationType.DEBIT,
-                amount, floatAccount.snapshot().accountId()));
-        tx.addOperation(Operation.create(Id.generate(), OperationType.CREDIT,
-                amount, customerAccount.snapshot().accountId()));
-
-        verifyDoubleEntry(tx);
+        tx.recordDoubleEntry(amount,
+                floatAccount.snapshot().accountId(),
+                customerAccount.snapshot().accountId());
         return tx;
     }
 
@@ -90,63 +69,86 @@ public class Ledger {
         requirePositive(amount);
         requireSufficientFunds(customerAccount, amount);
 
-        Id txId = Id.generate();
         Transaction tx = Transaction.create(
-                txId,
+                Id.generate(),
                 customerAccount.snapshot().accountId(),
                 floatAccount.snapshot().accountId(),
                 TransactionType.CASH_OUT,
                 paymentMethod,
-                amount
-        );
+                amount);
 
-        tx.addOperation(Operation.create(Id.generate(), OperationType.DEBIT,
-                amount, customerAccount.snapshot().accountId()));
-        tx.addOperation(Operation.create(Id.generate(), OperationType.CREDIT,
-                amount, floatAccount.snapshot().accountId()));
-
-        verifyDoubleEntry(tx);
+        tx.recordDoubleEntry(amount,
+                customerAccount.snapshot().accountId(),
+                floatAccount.snapshot().accountId());
         return tx;
     }
 
     public Transaction transfer(Account accountFrom, Account accountTo,
                                 Amount amount, String paymentMethod) {
-        if (accountFrom.snapshot().accountId().equals(accountTo.snapshot().accountId()))
-            throw new SelfTransferException("Cannot transfer to the same account");
-
+        // SelfTransferException is now enforced in Transaction.create()
         requireActive(accountFrom, "Sender account is not active");
         requireActive(accountTo, "Receiver account is not active");
         requireSufficientFunds(accountFrom, amount);
 
-        Id txId = Id.generate();
         Transaction tx = Transaction.create(
-                txId,
+                Id.generate(),
                 accountFrom.snapshot().accountId(),
                 accountTo.snapshot().accountId(),
                 TransactionType.P2P_TRANSFER,
                 paymentMethod,
-                amount
-        );
+                amount);
 
-        tx.addOperation(Operation.create(Id.generate(), OperationType.DEBIT,
-                amount, accountFrom.snapshot().accountId()));
-        tx.addOperation(Operation.create(Id.generate(), OperationType.CREDIT,
-                amount, accountTo.snapshot().accountId()));
-
-        verifyDoubleEntry(tx);
+        tx.recordDoubleEntry(amount,
+                accountFrom.snapshot().accountId(),
+                accountTo.snapshot().accountId());
         return tx;
+    }
+
+    // ── Two-phase payment flow ─────────────────────────────────────────────────
+
+    /**
+     * Creates a Transaction shell WITHOUT ledger operations.
+     * Operations are written later, at capture time, via {@link #writeEntries}.
+     *
+     * <p>Invariant priority:
+     * <ol>
+     *   <li>{@code Transaction.create()} fires first → {@code SelfTransferException}
+     *       is the aggregate's invariant and has absolute priority.</li>
+     *   <li>{@code requireSufficientFunds} fires after → operational constraint.</li>
+     * </ol>
+     */
+    public Transaction initiate(Account fromAccount, Account toAccount,
+                                TransactionType type, String paymentMethod,
+                                Amount amount) {
+        requireActive(fromAccount, "Source account is not active");
+        requirePositive(amount);
+
+        // Transaction.create() FIRST — SelfTransferException wins over all other checks
+        Transaction tx = Transaction.create(
+                Id.generate(),
+                fromAccount.snapshot().accountId(),
+                toAccount.snapshot().accountId(),
+                type, paymentMethod, amount);
+
+        // requireSufficientFunds AFTER — float accounts are unbounded (ADR-001)
+        if (fromAccount.snapshot().accountType().resourceType() != ResourceType.FLOAT_ACCOUNT) {
+            requireSufficientFunds(fromAccount, amount);
+        }
+
+        return tx; // NO recordDoubleEntry() — written at capture via writeEntries()
+    }
+
+    public void writeEntries(Transaction tx, Account fromAccount,
+                             Account toAccount, Amount amount) {
+        tx.recordDoubleEntry(amount,
+                fromAccount.snapshot().accountId(),
+                toAccount.snapshot().accountId());
     }
 
     public Transaction reverse(Transaction tx) {
         Amount amount = tx.snapshot().amount();
-
-        tx.addOperation(Operation.create(
-                Id.generate(), OperationType.DEBIT, amount, tx.snapshot().toId()));
-
-        tx.addOperation(Operation.create(
-                Id.generate(), OperationType.CREDIT, amount, tx.snapshot().fromId()));
-
-        verifyDoubleEntry(tx);
+        // Reverse: DEBIT the original recipient, CREDIT the original sender
+        tx.recordDoubleEntry(amount, tx.snapshot().toId(), tx.snapshot().fromId());
         return tx;
     }
 

@@ -46,7 +46,7 @@ class TransactionHistoryE2ETest extends AbstractE2ETest {
 
     private void transfer(SetupData sender, String toPhone, int amount) {
         postWithToken("/payments/transfer",
-                new TransferRequest(PIN, java.math.BigDecimal.valueOf(amount), "XOF", PM, toPhone),
+                new TransferRequest(PIN, java.math.BigDecimal.valueOf(amount), "XOF", toPhone),
                 sender.tokens().accessToken(),
                 Object.class);
     }

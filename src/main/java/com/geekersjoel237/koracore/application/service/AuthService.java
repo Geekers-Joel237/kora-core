@@ -10,7 +10,10 @@ import com.geekersjoel237.koracore.domain.model.Account;
 import com.geekersjoel237.koracore.domain.model.Customer;
 import com.geekersjoel237.koracore.domain.model.User;
 import com.geekersjoel237.koracore.domain.port.*;
-import com.geekersjoel237.koracore.domain.vo.*;
+import com.geekersjoel237.koracore.domain.vo.Id;
+import com.geekersjoel237.koracore.domain.vo.Otp;
+import com.geekersjoel237.koracore.domain.vo.PhoneNumber;
+import com.geekersjoel237.koracore.domain.vo.Tokens;
 import com.geekersjoel237.koracore.infrastructure.config.SecurityProperties;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
@@ -32,10 +35,6 @@ import java.util.Date;
 public class AuthService implements AuthUseCase {
 
     private final SecurityProperties securityProperties;
-
-    private static final String DEFAULT_TEST_SECRET =
-            "kora-core-test-secret-key-must-be-at-least-32-chars!";
-
     private final UserRepository userRepository;
     private final CustomerRepository customerRepository;
     private final AccountRepository accountRepository;
@@ -64,23 +63,6 @@ public class AuthService implements AuthUseCase {
         this.mailPort = mailPort;
     }
 
-    /**
-     * Test constructor — no mail, no @Value injection.
-     */
-    public AuthService(UserRepository userRepository,
-                       CustomerRepository customerRepository,
-                       AccountRepository accountRepository,
-                       OtpStore otpStore,
-                       CustomerPinEncoder pinEncoder,
-                       Clock clock,
-                       MailPort mailPort) {
-        this(userRepository, customerRepository, accountRepository,
-                otpStore, pinEncoder, clock,
-                new SecurityProperties(
-                        new SecurityProperties.Jwt(DEFAULT_TEST_SECRET, 15, 7),
-                        new SecurityProperties.Otp(5)
-                ), mailPort);
-    }
 
     @Override
     public void validatePin(Id customerId, String rawPin) {
@@ -100,7 +82,10 @@ public class AuthService implements AuthUseCase {
         String key = "otp:" + email;
         Otp otp = otpStore.get(key)
                 .orElseThrow(() -> new OtpExpiredException(
-                        "OTP not found, expired or already consumed for: " + email));
+                        "OTP not found for: " + email));
+        if (otp.isExpired(clock)) {
+            throw new OtpExpiredException("OTP expired or already consumed for: " + email);
+        }
 
         if (!otp.matches(code))
             throw new InvalidOtpException("OTP code does not match");
@@ -112,20 +97,18 @@ public class AuthService implements AuthUseCase {
     public void register(RegisterCommand cmd) {
         if (customerRepository.existsByEmail(cmd.email()))
             throw new DuplicateEmailException("Email already registered: " + cmd.email());
+        PhoneNumber phone = PhoneNumber.of(cmd.phonePrefix(), cmd.phoneNumber());
 
-        Id id = Id.generate();
-        User user = User.create(id, cmd.fullName(), cmd.email(), Role.CUSTOMER);
+        User user = User.create(Id.generate(), cmd.fullName(), cmd.email(), Role.CUSTOMER);
         userRepository.save(user);
 
-        PhoneNumber phone = PhoneNumber.of(cmd.phonePrefix(), cmd.phoneNumber());
         Customer customer = Customer.create(user, phone, cmd.rawPin(), pinEncoder);
         customerRepository.save(customer);
 
         accountRepository.save(Account.createCustomerAccount(Id.generate(), customer.snapshot().customerId()));
 
         var otp = generateOtp(cmd.email());
-        mailPort.sendOtp(cmd.email(), otp, OtpMailContext.REGISTRATION);
-
+        sendOtpWithRetry(cmd.email(), otp, OtpMailContext.REGISTRATION);
     }
 
     @Override
@@ -135,7 +118,7 @@ public class AuthService implements AuthUseCase {
 
         validatePin(customer.snapshot().customerId(), cmd.rawPin());
         var otp = generateOtp(cmd.email());
-        mailPort.sendOtp(cmd.email(), otp, OtpMailContext.LOGIN);
+        sendOtpWithRetry(cmd.email(), otp, OtpMailContext.LOGIN);
     }
 
     @Override
@@ -170,6 +153,7 @@ public class AuthService implements AuthUseCase {
                 .subject(user.snapshot().id().value())
                 .id(Id.generate().value())
                 .claim("email", user.snapshot().email())
+                .claim("role", user.snapshot().role().name())
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(accessExpiry))
                 .signWith(key)
@@ -196,5 +180,29 @@ public class AuthService implements AuthUseCase {
         Otp otp = Otp.of(code, Duration.ofMinutes(securityProperties.otp().expirationMinutes()), clock);
         otpStore.save("otp:" + email, otp);
         return code;
+    }
+
+    private void sendOtpWithRetry(String email, String code, OtpMailContext context) {
+        int maxAttempts = 3;
+        MailProviderException lastException = null;
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                mailPort.sendOtp(email, code, context);
+                return;
+            } catch (MailProviderException e) {
+                lastException = e;
+                if (attempt < maxAttempts) {
+                    try {
+                        Thread.sleep(100L * attempt);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new MailDeliveryException(
+                                "OTP delivery failed after 3 attempts. Please try again in a few moments.", ie);
+                    }
+                }
+            }
+        }
+        throw new MailDeliveryException(
+                "OTP delivery failed after 3 attempts. Please try again in a few moments.", lastException);
     }
 }
