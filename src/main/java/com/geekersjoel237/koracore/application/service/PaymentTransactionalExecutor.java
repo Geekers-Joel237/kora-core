@@ -446,11 +446,6 @@ public class PaymentTransactionalExecutor {
         tx.history().subList(fromIndex, tx.history().size()).forEach(historicRepo::save);
     }
 
-    private void persistTransactionState(Transaction tx) {
-        transactionRepository.save(tx);
-        historicRepo.save(tx.history().getLast());
-    }
-
     // ── Validation helpers ────────────────────────────────────────────────────
 
     /**
