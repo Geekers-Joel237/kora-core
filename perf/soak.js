@@ -39,6 +39,8 @@ const latencyTrend = new Trend('soak_latency_trend', true);
 // ── Config k6 ─────────────────────────────────────────────────────────────────
 
 export const options = {
+    // 40 users × ~2.7s (register + OTP + verify + seed cashIn) ≈ 1m48s.
+    setupTimeout: '4m',
     scenarios: {
         soak: {
             executor:        'constant-arrival-rate',
@@ -50,10 +52,13 @@ export const options = {
         },
     },
     thresholds: {
-        // Tolérance plus large que load — on cherche la dégradation sur la durée
-        http_req_duration:   ['p(95)<300'],
+        // Provider ceiling: ~2 100ms max. 2 500ms catch les catastrophes (pool exhaustion,
+        // fuite mémoire tardive) sans échouer sur la latence provider normale.
+        // La détection de drift progressif repose sur Grafana (tendance du p95 dans le temps),
+        // pas sur ce threshold agrégé sur la totalité du run.
+        http_req_duration:   ['p(95)<2500'],
         http_req_failed:     ['rate<0.01'],
-        soak_latency_trend:  ['p(95)<300'],
+        soak_latency_trend:  ['p(95)<2500'],
     },
 };
 

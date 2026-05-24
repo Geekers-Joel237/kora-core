@@ -40,7 +40,7 @@ class AuthUseCaseTest {
             new SecurityProperties.Otp(5)
     );
 
-    private final CustomerPinEncoder pinEncoder = new BCryptCustomerPinEncoder();
+    private final CustomerPinEncoder pinEncoder = new BCryptCustomerPinEncoder(4);
     private InMemoryUserRepository userRepo;
     private InMemoryCustomerRepository customerRepo;
     private InMemoryAccountRepository accountRepo;

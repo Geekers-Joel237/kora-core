@@ -19,7 +19,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 BASE_URL="${1:-http://localhost:8081}"
-INFLUX_URL="http://localhost:8086/k6"
 GRAFANA_URL="http://localhost:3000"
 GRAFANA_DASHBOARD="${GRAFANA_URL}/d/kora-load/kora-load-test"
 MAILDEV_URL="http://localhost:1080"
@@ -44,11 +43,13 @@ banner() {
 }
 
 print_slos() {
-  echo -e "${YELLOW}  SLOs validés par ce test (Étape 0)${NC}"
+  echo -e "${YELLOW}  SLOs validés par ce test (Étape 1)${NC}"
   echo "  ┌─────────────────────────────────────────────────"
-  echo "  │  P95 latency   < 150ms"
+  echo "  │  balance   p95 < 100ms"
+  echo "  │  transfer  p95 < 200ms"
+  echo "  │  cash      p95 < 2 500ms"
   echo "  │  Error rate    < 1%"
-  echo "  │  Throughput    ≥ 10 req/sec au plateau"
+  echo "  │  Throughput    25 req/sec au plateau"
   echo "  │  Durée         ~11 min (ramp 2m + plateau 8m + down 1m)"
   echo "  └─────────────────────────────────────────────────"
   echo ""
@@ -119,9 +120,23 @@ check_app() {
   fi
 }
 
-# ── 3. Run k6 load ─────────────────────────────────────────────────────────────
+# ── 3. Reset DB — état propre avant chaque run ────────────────────────────────
+reset_db() {
+  info "Reset de la base de données (POST /test/reset)…"
+  local http_code
+  http_code=$(curl -sf --max-time 10 -o /dev/null -w "%{http_code}" \
+    -X POST "${BASE_URL}/test/reset" 2>/dev/null || echo "000")
+
+  if [[ "${http_code}" == "200" ]]; then
+    success "DB réinitialisée — état propre garanti"
+  else
+    warn "Reset DB échoué (HTTP ${http_code}) — le test continuera sur l'état existant"
+  fi
+}
+
+# ── 4. Run k6 load ─────────────────────────────────────────────────────────────
 run_load() {
-  info "Lancement du load test (~11 min, 10 req/sec au plateau)…"
+  info "Lancement du load test (~11 min, 25 req/sec au plateau)…"
   echo ""
 
   local perf_mount
@@ -134,18 +149,17 @@ run_load() {
   fi
 
   local docker_base_url="${BASE_URL/localhost/host.docker.internal}"
-  local docker_influx_url="${INFLUX_URL/localhost/host.docker.internal}"
 
   (
     if [[ "$OSTYPE" == msys* ]] || [[ -n "${MSYSTEM:-}" ]]; then
       export MSYS_NO_PATHCONV=1
     fi
     docker run --rm \
-      --add-host=host.docker.internal:host-gateway \
+      --network kora-core_default \
       -v "${perf_mount}:/perf" \
       -e BASE_URL="${docker_base_url}" \
       "${K6_IMAGE}" \
-      run --out "influxdb=${docker_influx_url}" /perf/load.js
+      run --out "influxdb=http://influxdb:8086/k6" /perf/load.js
   )
 
   return $?
@@ -158,6 +172,7 @@ main() {
   print_urls
   start_monitoring
   check_app
+  reset_db
   print_urls
 
   echo ""

@@ -27,7 +27,7 @@ export function scenarioCashIn(user, amount = 10_000, method = 'ORANGE_MONEY') {
     const res = http.post(
         `${BASE_URL}/payments/cash-in`,
         JSON.stringify({ rawPin: user.pin, amount, currency: 'XOF', paymentMethod: method }),
-        { headers: authHeaders(accessToken) }
+        { headers: authHeaders(accessToken), tags: { operation: 'cash' } }
     );
 
     check(res, {

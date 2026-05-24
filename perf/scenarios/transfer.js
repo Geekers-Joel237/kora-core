@@ -35,7 +35,7 @@ export function scenarioTransfer(sender, recipientPhone, amount = 2_000) {
             currency:      'XOF',
             toPhoneNumber: recipientPhone,
         }),
-        { headers: authHeaders(accessToken) }
+        { headers: authHeaders(accessToken), tags: { operation: 'transfer' } }
     );
 
     check(res, {

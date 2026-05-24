@@ -78,9 +78,11 @@ public class Transaction {
 
     private static String generateTransactionNumber(Id txId) {
         String datePart = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        String idValue = txId.value();
-        String lastFour = idValue.substring(idValue.length() - 4).toUpperCase();
-        return "TRX-" + datePart + "-" + lastFour;
+        // Remove dashes from UUID (32 hex chars) and take the last 8 → 16^8 = 4.3B combinations.
+        // 4-char suffix (65 536 values) caused birthday collisions at ~70 txns/run (~3.6% per run).
+        String idClean = txId.value().replace("-", "");
+        String suffix = idClean.substring(idClean.length() - 8).toUpperCase();
+        return "TRX-" + datePart + "-" + suffix;
     }
 
     /**

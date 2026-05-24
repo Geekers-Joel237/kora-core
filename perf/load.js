@@ -27,19 +27,23 @@ import { scenarioTransfer } from './scenarios/transfer.js';
 import { scenarioBalance } from './scenarios/balance.js';
 
 // ── Nombre d'utilisateurs de test ─────────────────────────────────────────────
-// 60 users = preAllocatedVUs → chaque VU a son propre user, élimine la contention OTP
+// USER_COUNT = preAllocatedVUs = maxVUs : chaque VU possède son propre user.
+// maxVUs > USER_COUNT ferait partager des comptes entre VUs → OLFE storm.
 const USER_COUNT = 60;
 
 // ── Config k6 — constant arrival rate ────────────────────────────────────────
 
 export const options = {
+    // 60 users × ~2.7s (register + OTP + verify + seed cashIn) ≈ 2m42s.
+    // Default k6 setupTimeout is 60s — raises it to 5m for safety margin.
+    setupTimeout: '5m',
     scenarios: {
         load: {
             executor:        'ramping-arrival-rate',
             startRate:       0,
             timeUnit:        '1s',
-            preAllocatedVUs: 60,    // pool de VUs disponibles
-            maxVUs:          100,   // plafond de sécurité
+            preAllocatedVUs: 60,
+            maxVUs:          60,    // = USER_COUNT — interdit le partage de compte entre VUs
             stages: [
                 { target: 25, duration: '2m' },   // ramp-up
                 { target: 25, duration: '8m' },   // plateau nominal
@@ -48,11 +52,19 @@ export const options = {
         },
     },
     thresholds: {
-        // SLOs stricts Étape 1
-        'http_req_duration{scenario:load}': ['p(95)<200'],
-        http_req_failed:                    ['rate<0.01'],
-        // On vérifie aussi que les checks passent
-        checks:                             ['rate>0.99'],
+        // Per-operation SLOs — calibrés par nature d'opération, pas par endpoint.
+        //
+        // balance   : lecture pure, 0 provider I/O, 0 lock → p(95) < 100ms
+        // transfer  : 1 TX avec lock customer account, 0 provider I/O → p(95) < 200ms
+        // cash      : TX-1 + provider I/O (~1 400–1 960ms) + TX-2 → p(95) < 2 500ms
+        //
+        // La borne cash (2 500ms) est au-dessus du plafond provider mesuré (2 130ms)
+        // mais assez serrée pour détecter une pool exhaustion (p(95) monterait à 5–30s).
+        'http_req_duration{operation:balance}':  ['p(95)<100'],
+        'http_req_duration{operation:transfer}': ['p(95)<200'],
+        'http_req_duration{operation:cash}':     ['p(95)<2500'],
+        http_req_failed:                          ['rate<0.01'],
+        checks:                                   ['rate>0.99'],
     },
 };
 

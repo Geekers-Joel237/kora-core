@@ -20,6 +20,7 @@ import com.geekersjoel237.koracore.domain.vo.Id;
 import com.geekersjoel237.koracore.domain.vo.PhoneNumber;
 import com.geekersjoel237.koracore.infrastructure.config.SecurityProperties;
 import com.geekersjoel237.koracore.infrastructure.security.BCryptCustomerPinEncoder;
+import com.geekersjoel237.koracore.shared.NoopTransactionManager;
 import com.geekersjoel237.koracore.shared.inmemory.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
@@ -58,7 +59,7 @@ class PaymentUseCaseTest {
             new SecurityProperties.Otp(5)
     );
 
-    private final CustomerPinEncoder pinEncoder = new BCryptCustomerPinEncoder();
+    private final CustomerPinEncoder pinEncoder = new BCryptCustomerPinEncoder(4);
 
     private InMemoryAccountRepository accountRepo;
     private InMemoryCustomerRepository customerRepo;
@@ -97,6 +98,7 @@ class PaymentUseCaseTest {
         authService = new AuthService(
                 new InMemoryUserRepository(), customerRepo, accountRepo, otpStore, pinEncoder, Clock.systemUTC(), TEST_SECURITY, mailPort);
         PaymentTransactionalExecutor executor = new PaymentTransactionalExecutor(
+                new NoopTransactionManager(),
                 authService, accountRepo, customerRepo,
                 transactionRepo, historicRepo, provider, ledgerRepository,
                 authorizationRecordRepo);

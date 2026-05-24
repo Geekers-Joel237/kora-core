@@ -15,7 +15,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 BASE_URL="${1:-http://localhost:8081}"
-INFLUX_URL="http://localhost:8086/k6"
 GRAFANA_URL="http://localhost:3000"
 GRAFANA_DASHBOARD="${GRAFANA_URL}/d/kora-load/kora-load-test"
 MAILDEV_URL="http://localhost:1080"
@@ -135,18 +134,17 @@ run_stress() {
   fi
 
   local docker_base_url="${BASE_URL/localhost/host.docker.internal}"
-  local docker_influx_url="${INFLUX_URL/localhost/host.docker.internal}"
 
   (
     if [[ "$OSTYPE" == msys* ]] || [[ -n "${MSYSTEM:-}" ]]; then
       export MSYS_NO_PATHCONV=1
     fi
     docker run --rm \
-      --add-host=host.docker.internal:host-gateway \
+      --network kora-core_default \
       -v "${perf_mount}:/perf" \
       -e BASE_URL="${docker_base_url}" \
       "${K6_IMAGE}" \
-      run --out "influxdb=${docker_influx_url}" /perf/stress.js
+      run --out "influxdb=http://influxdb:8086/k6" /perf/stress.js
   )
 
   return $?

@@ -24,7 +24,7 @@ export function scenarioBalance(user) {
 
     const res = http.get(
         `${BASE_URL}/payments/balance`,
-        { headers: authHeaders(accessToken) }
+        { headers: authHeaders(accessToken), tags: { operation: 'balance' } }
     );
 
     check(res, {

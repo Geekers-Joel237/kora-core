@@ -2,14 +2,16 @@
  * setup.js — Création et pré-authentification séquentielle des users de test.
  *
  * Flow par user :
- *   register → captureOtp → verify-otp → stocke { email, pin, phonePrefix,
- *   phoneNumber, fullPhone, accessToken, tokenExpiresAt }
+ *   register → captureOtp → verify-otp → seed cashIn → stocke { email, pin,
+ *   phonePrefix, phoneNumber, fullPhone, accessToken, tokenExpiresAt }
  *
  * tokenExpiresAt en secondes depuis epoch (évite corruption des grands
  * entiers par la sérialisation JSON Go/k6 entre setup() et default()).
  *
- * Le seed cashIn N'EST PAS fait ici. Le premier scénario cashIn de chaque
- * VU constitue le seed implicite (montant suffisant).
+ * Seed cashIn (100 000 XOF) : garantit un solde initial suffisant pour toute
+ * séquence aléatoire de cashOut/transfer avant le premier cashIn du scénario.
+ * Sans ce seed, un VU qui tire cashOut ou transfer en première itération échoue
+ * systématiquement (solde = 0 → InsufficientFundsException).
  */
 
 import http from 'k6/http';
@@ -109,6 +111,19 @@ export function createTestUsers(n, prefix = 'user') {
             console.error(`[setup] accessToken absent dans verify-otp pour ${email}`);
             console.log(`[setup] verify-otp body: ${verifyRes.body}`);
             continue;
+        }
+
+        // ── Seed cashIn ─────────────────────────────────────────────────────
+        // 100 000 XOF : couvre N itérations cashOut (5 000) + transfer (2 000)
+        // avant le premier cashIn du scénario. Le mix net est positif (+2 550 XOF/iter
+        // en moyenne), le solde croît ensuite de lui-même.
+        const seedRes = http.post(
+            `${BASE_URL}/payments/cash-in`,
+            JSON.stringify({ rawPin: PIN, amount: 100_000, currency: 'XOF', paymentMethod: 'ORANGE_MONEY' }),
+            { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` } }
+        );
+        if (seedRes.status !== 200) {
+            console.error(`[setup] seed cashIn échoué pour ${email}: ${seedRes.status} ${seedRes.body}`);
         }
 
         users.push({

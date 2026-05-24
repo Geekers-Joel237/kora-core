@@ -33,6 +33,8 @@ const USER_COUNT = 200;
 // ── Config k6 ─────────────────────────────────────────────────────────────────
 
 export const options = {
+    // 200 users × ~2.7s (register + OTP + verify + seed cashIn) ≈ 9min.
+    setupTimeout: '15m',
     scenarios: {
         stress: {
             executor:        'ramping-arrival-rate',
@@ -56,9 +58,18 @@ export const options = {
         },
     },
     // Seuils d'observation (abortOnFail = arrêt conditionnel à la rupture)
+    //
+    // Provider ceiling normal : ~2 100ms. Le seuil abortOnFail à 5 000ms est au-dessus
+    // du comportement sain — il ne se déclenche qu'en cas de vraie dégradation :
+    //   sain      : p(95) ≈ 2s  (provider ceiling, pas de contention)
+    //   dégradé   : p(95) > 3–5s (queuing pool / lock contention)
+    //   rupture   : p(95) > 10s+ (pool exhaustion, timeouts)
+    //
+    // Un seuil à 500ms s'arrêterait au premier cashIn (1.5s) → le test ne peut
+    // jamais atteindre les paliers supérieurs.
     thresholds: {
         http_req_duration: [
-            { threshold: 'p(95)<500', abortOnFail: true, delayAbortEval: '30s' },
+            { threshold: 'p(95)<5000', abortOnFail: true, delayAbortEval: '30s' },
         ],
         http_req_failed: [
             { threshold: 'rate<0.05', abortOnFail: true, delayAbortEval: '30s' },

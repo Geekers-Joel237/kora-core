@@ -46,9 +46,9 @@ public class Account {
 
     private static String generateAccountNumber(Id accountId) {
         String datePart = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        String idValue = accountId.value();
-        String lastFour = idValue.substring(idValue.length() - 4).toUpperCase();
-        return "ACC-" + datePart + "-" + lastFour;
+        String idClean = accountId.value().replace("-", ""); // 32 hex chars
+        String suffix = idClean.substring(idClean.length() - 8).toUpperCase();
+        return "ACC-" + datePart + "-" + suffix;
     }
 
     public boolean isActive() {
