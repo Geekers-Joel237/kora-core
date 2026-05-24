@@ -52,7 +52,7 @@ class TransactionHistoryServiceTest {
             new SecurityProperties.Otp(5)
     );
 
-    private final CustomerPinEncoder pinEncoder = new BCryptCustomerPinEncoder(4);
+    private final CustomerPinEncoder pinEncoder = new BCryptCustomerPinEncoder();
 
     private InMemoryAccountRepository accountRepo;
     private InMemoryCustomerRepository customerRepo;
