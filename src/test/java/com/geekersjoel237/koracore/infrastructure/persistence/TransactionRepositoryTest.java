@@ -38,8 +38,7 @@ class TransactionRepositoryTest extends AbstractRepositoryTest {
         Id txId = Id.generate();
         Transaction tx = Transaction.create(txId, fromId, toId,
                 TransactionType.CASH_IN, "ORANGE_MONEY", AMOUNT_10K);
-        tx.addOperation(Operation.create(Id.generate(), OperationType.DEBIT, AMOUNT_10K, fromId));
-        tx.addOperation(Operation.create(Id.generate(), OperationType.CREDIT, AMOUNT_10K, toId));
+        tx.recordDoubleEntry(AMOUNT_10K, fromId, toId);
         return tx;
     }
 

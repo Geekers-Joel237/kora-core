@@ -1,7 +1,7 @@
 package com.geekersjoel237.koracore.domain.model;
 
 import com.geekersjoel237.koracore.domain.enums.ResourceType;
-import com.geekersjoel237.koracore.domain.model.vo.AccountType;
+import com.geekersjoel237.koracore.domain.vo.AccountType;
 import com.geekersjoel237.koracore.domain.vo.Amount;
 import com.geekersjoel237.koracore.domain.vo.Balance;
 import com.geekersjoel237.koracore.domain.vo.Id;

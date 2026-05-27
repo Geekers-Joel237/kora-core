@@ -2,7 +2,7 @@ package com.geekersjoel237.koracore.infrastructure.persistence;
 
 import com.geekersjoel237.koracore.domain.enums.ResourceType;
 import com.geekersjoel237.koracore.domain.model.Account;
-import com.geekersjoel237.koracore.domain.model.vo.AccountType;
+import com.geekersjoel237.koracore.domain.vo.AccountType;
 import com.geekersjoel237.koracore.domain.port.AccountRepository;
 import com.geekersjoel237.koracore.domain.vo.Amount;
 import com.geekersjoel237.koracore.domain.vo.Balance;
