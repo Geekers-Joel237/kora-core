@@ -52,14 +52,15 @@ class AccountTest {
     void should_generate_account_number_with_correct_format() {
         Account account = Account.createCustomerAccount(
                 Id.generate(), CUSTOMER_ID);
-        assertTrue(account.snapshot().accountNumber().matches("ACC-\\d{8}-[A-Z0-9]{4}"));
+        assertTrue(account.snapshot().accountNumber().matches("ACC-\\d{8}-[A-Z0-9]{8}"));
     }
 
     @Test
-    void should_generate_account_number_using_last_4_chars_of_id() {
+    void should_generate_account_number_using_last_8_hex_chars_of_id() {
+        // UUID without dashes: 550e8400e29b41d4a716446655440000 → last 8 = 55440000
         Id id = new Id("550e8400-e29b-41d4-a716-446655440000");
         Account account = Account.createCustomerAccount(id, CUSTOMER_ID);
-        assertTrue(account.snapshot().accountNumber().endsWith("-0000"));
+        assertTrue(account.snapshot().accountNumber().endsWith("-55440000"));
     }
 
     // ── État ──────────────────────────────────────────────────────────────────

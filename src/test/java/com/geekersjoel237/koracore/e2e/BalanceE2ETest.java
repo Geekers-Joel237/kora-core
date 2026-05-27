@@ -32,7 +32,7 @@ class BalanceE2ETest extends AbstractE2ETest {
         BalanceResponse body = response.getBody();
         assertThat(body).isNotNull();
         assertThat(body.accountId()).isNotBlank();
-        assertThat(body.accountNumber()).matches("ACC-\\d{8}-[A-Z0-9]{4}");
+        assertThat(body.accountNumber()).matches("ACC-\\d{8}-[A-Z0-9]{8}");
         assertThat(body.amount()).isEqualByComparingTo(BigDecimal.ZERO);
         assertThat(body.currency()).isEqualTo("XOF");
     }

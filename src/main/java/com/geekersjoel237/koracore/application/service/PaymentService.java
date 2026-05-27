@@ -29,7 +29,7 @@ import java.util.function.Supplier;
 @Service
 public class PaymentService implements PaymentUseCase {
 
-    public static final int MAX_RETRY_ATTEMPTS = 3;
+    public static final int MAX_RETRY_ATTEMPTS = 5;
     private final PaymentTransactionalExecutor executor;
     private final AccountRepository accountRepository;
 
@@ -73,9 +73,12 @@ public class PaymentService implements PaymentUseCase {
                 return action.get();
             } catch (ObjectOptimisticLockingFailureException e) {
                 if (attempt == MAX_RETRY_ATTEMPTS)
-                    throw new TransientPaymentException("Concurrent update failed after 3 attempts", e);
+                    throw new TransientPaymentException(
+                            "Concurrent update failed after " + MAX_RETRY_ATTEMPTS + " attempts", e);
                 try {
-                    Thread.sleep(50L * attempt);
+                    long base = 50L * attempt;
+                    long jitter = (long) (base * 0.5 * Math.random());
+                    Thread.sleep(base + jitter);
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
                     throw new TransientPaymentException("Interrupted during retry", ie);

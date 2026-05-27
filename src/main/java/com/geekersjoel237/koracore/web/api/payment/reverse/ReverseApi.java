@@ -12,14 +12,15 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 
-@Tag(name = "Payments")
-@RequestMapping("/payments")
+@Tag(name = "Admin")
+@RequestMapping("/admin/payments")
 @SecurityRequirement(name = "bearerAuth")
 public interface ReverseApi {
 
-    @Operation(summary = "Reverse a payment — undo an authorized or captured transaction")
+    @Operation(summary = "Reverse a payment — undo an authorized or captured transaction (admin only)")
     @ApiResponse(responseCode = "200", description = "Reversal completed")
     @ApiResponse(responseCode = "401", description = "Unauthorized")
+    @ApiResponse(responseCode = "403", description = "Forbidden — admin role required")
     @PostMapping("/{txId}/reverse")
     ResponseEntity<TransactionResponse> reverse(
             @PathVariable("txId") String txId,
