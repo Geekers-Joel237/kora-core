@@ -1,10 +1,13 @@
 package com.geekersjoel237.koracore.domain.vo;
 
+import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 
 public record Otp(String code, Duration ttl, Instant createdAt) {
+
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     public Otp {
         if (code == null || code.isBlank())
@@ -18,6 +21,11 @@ public record Otp(String code, Duration ttl, Instant createdAt) {
     }
 
     public static Otp of(String code, Duration ttl, Clock clock) {
+        return new Otp(code, ttl, Instant.now(clock));
+    }
+
+    public static Otp generate(Duration ttl, Clock clock) {
+        String code = String.format("%06d", SECURE_RANDOM.nextInt(1_000_000));
         return new Otp(code, ttl, Instant.now(clock));
     }
 

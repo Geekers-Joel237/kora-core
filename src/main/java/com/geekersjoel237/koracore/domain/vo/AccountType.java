@@ -1,7 +1,6 @@
-package com.geekersjoel237.koracore.domain.model.vo;
+package com.geekersjoel237.koracore.domain.vo;
 
 import com.geekersjoel237.koracore.domain.enums.ResourceType;
-import com.geekersjoel237.koracore.domain.vo.Id;
 
 public record AccountType(Id resourceId, ResourceType resourceType) {
 

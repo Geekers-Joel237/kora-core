@@ -1,7 +1,7 @@
 package com.geekersjoel237.koracore.domain.model;
 
 import com.geekersjoel237.koracore.domain.enums.ResourceType;
-import com.geekersjoel237.koracore.domain.model.vo.AccountType;
+import com.geekersjoel237.koracore.domain.vo.AccountType;
 import com.geekersjoel237.koracore.domain.vo.Amount;
 import com.geekersjoel237.koracore.domain.vo.Balance;
 import com.geekersjoel237.koracore.domain.vo.Id;
@@ -46,9 +46,9 @@ public class Account {
 
     private static String generateAccountNumber(Id accountId) {
         String datePart = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        String idValue = accountId.value();
-        String lastFour = idValue.substring(idValue.length() - 4).toUpperCase();
-        return "ACC-" + datePart + "-" + lastFour;
+        String idClean = accountId.value().replace("-", ""); // 32 hex chars
+        String suffix = idClean.substring(idClean.length() - 8).toUpperCase();
+        return "ACC-" + datePart + "-" + suffix;
     }
 
     public boolean isActive() {

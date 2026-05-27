@@ -3,7 +3,6 @@ package com.geekersjoel237.koracore.application.service;
 import com.geekersjoel237.koracore.application.command.LoginCommand;
 import com.geekersjoel237.koracore.application.command.RegisterCommand;
 import com.geekersjoel237.koracore.application.port.in.AuthUseCase;
-import com.geekersjoel237.koracore.domain.OtpMailContext;
 import com.geekersjoel237.koracore.domain.enums.Role;
 import com.geekersjoel237.koracore.domain.exception.*;
 import com.geekersjoel237.koracore.domain.model.Account;
@@ -24,7 +23,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
-import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -42,7 +40,6 @@ public class AuthService implements AuthUseCase {
     private final CustomerPinEncoder pinEncoder;
     private final Clock clock;
     private final MailPort mailPort;
-    private final SecureRandom secureRandom = new SecureRandom();
 
     @Autowired
     public AuthService(UserRepository userRepository,
@@ -108,7 +105,7 @@ public class AuthService implements AuthUseCase {
         accountRepository.save(Account.createCustomerAccount(Id.generate(), customer.snapshot().customerId()));
 
         var otp = generateOtp(cmd.email());
-        sendOtpWithRetry(cmd.email(), otp, OtpMailContext.REGISTRATION);
+        sendOtpWithRetry(cmd.email(), otp, "Kora — verify your account");
     }
 
     @Override
@@ -118,7 +115,7 @@ public class AuthService implements AuthUseCase {
 
         validatePin(customer.snapshot().customerId(), cmd.rawPin());
         var otp = generateOtp(cmd.email());
-        sendOtpWithRetry(cmd.email(), otp, OtpMailContext.LOGIN);
+        sendOtpWithRetry(cmd.email(), otp, "Kora — login verification");
     }
 
     @Override
@@ -173,21 +170,19 @@ public class AuthService implements AuthUseCase {
         );
     }
 
-    // ── Internal ─────────────────────────────────────────────────────────────
 
     public String generateOtp(String email) {
-        String code = String.format("%06d", secureRandom.nextInt(1_000_000));
-        Otp otp = Otp.of(code, Duration.ofMinutes(securityProperties.otp().expirationMinutes()), clock);
+        Otp otp = Otp.generate(Duration.ofMinutes(securityProperties.otp().expirationMinutes()), clock);
         otpStore.save("otp:" + email, otp);
-        return code;
+        return otp.code();
     }
 
-    private void sendOtpWithRetry(String email, String code, OtpMailContext context) {
+    private void sendOtpWithRetry(String email, String code, String subject) {
         int maxAttempts = 3;
         MailProviderException lastException = null;
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
-                mailPort.sendOtp(email, code, context);
+                mailPort.sendOtp(email, code, subject);
                 return;
             } catch (MailProviderException e) {
                 lastException = e;

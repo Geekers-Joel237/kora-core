@@ -78,19 +78,11 @@ public class Transaction {
 
     private static String generateTransactionNumber(Id txId) {
         String datePart = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        String idValue = txId.value();
-        String lastFour = idValue.substring(idValue.length() - 4).toUpperCase();
-        return "TRX-" + datePart + "-" + lastFour;
-    }
-
-    /**
-     * @deprecated Use {@link #recordDoubleEntry(Amount, Id, Id)} instead.
-     * Direct operation injection bypasses the double-entry invariant check.
-     * Kept for infrastructure test bootstrapping only (TransactionRepositoryTest).
-     */
-    @Deprecated
-    public void addOperation(Operation op) {
-        this.operations.add(op);
+        // Remove dashes from UUID (32 hex chars) and take the last 8 → 16^8 = 4.3B combinations.
+        // 4-char suffix (65 536 values) caused birthday collisions at ~70 txns/run (~3.6% per run).
+        String idClean = txId.value().replace("-", "");
+        String suffix = idClean.substring(idClean.length() - 8).toUpperCase();
+        return "TRX-" + datePart + "-" + suffix;
     }
 
     public void recordDoubleEntry(Amount amount, Id debitAccountId, Id creditAccountId) {

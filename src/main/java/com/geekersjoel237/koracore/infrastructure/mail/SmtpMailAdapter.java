@@ -1,6 +1,5 @@
 package com.geekersjoel237.koracore.infrastructure.mail;
 
-import com.geekersjoel237.koracore.domain.OtpMailContext;
 import com.geekersjoel237.koracore.domain.exception.MailProviderException;
 import com.geekersjoel237.koracore.domain.port.MailPort;
 import org.slf4j.Logger;
@@ -27,12 +26,12 @@ public class SmtpMailAdapter implements MailPort {
     }
 
     @Override
-    public void sendOtp(String toEmail, String otpCode, OtpMailContext context) throws MailProviderException {
+    public void sendOtp(String toEmail, String otpCode, String subject) throws MailProviderException {
         try {
             SimpleMailMessage message = new SimpleMailMessage();
             message.setFrom(fromAddress);
             message.setTo(toEmail);
-            message.setSubject(subject(context));
+            message.setSubject(subject);
             message.setText("Your one-time code is valid for 5 minutes.\n\nDo not share it with anyone.");
 
             mailSender.send(message);
@@ -40,13 +39,7 @@ public class SmtpMailAdapter implements MailPort {
             throw new MailProviderException(e);
         } finally {
             // otpCode intentionally excluded from logs
-            log.info("Sending OTP mail to {} [context={}]", toEmail, context);
+            log.info("Sending OTP mail to {} [subject={}]", toEmail, subject);
         }
-    }
-
-    private String subject(OtpMailContext context) {
-        return context == OtpMailContext.REGISTRATION
-                ? "Kora — verify your account"
-                : "Kora — login verification";
     }
 }

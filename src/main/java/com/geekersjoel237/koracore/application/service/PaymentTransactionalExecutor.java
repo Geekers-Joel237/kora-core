@@ -19,24 +19,28 @@ import com.geekersjoel237.koracore.domain.vo.AuthorizationResult;
 import com.geekersjoel237.koracore.domain.vo.Id;
 import com.geekersjoel237.koracore.domain.vo.PhoneNumber;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Duration;
-import java.util.function.Supplier;
+import java.util.Objects;
 
 /**
- * Executes one payment attempt inside a single, self-contained transaction.
+ * Orchestrates payment use cases via explicit micro-transactions.
  * <p>
- * Kept separate from {@link PaymentService} so that the outer retry loop
- * in {@code PaymentService} can call this bean through a Spring proxy,
- * giving each retry attempt a <em>fresh</em> transaction (and a fresh
- * Hibernate session). Retrying inside the same transaction would re-use the
- * corrupted session state produced by the failed optimistic-lock attempt.
+ * Provider I/O (authorize, capture) runs between two short DB transactions,
+ * holding zero database connections during network calls:
+ * <pre>
+ *   TX-1 (~10ms)  : validate context, persist INITIALIZED
+ *   provider I/O  : authorize + capture (~1 400ms, no connection held)
+ *   TX-2 (~20ms)  : reload account with lock, apply balance, persist COMPLETED
+ * </pre>
+ * P2P transfers and reversals involve no provider I/O and run in a single TX.
  */
 @Service
-@Transactional
 public class PaymentTransactionalExecutor {
 
+    private final TransactionTemplate txTemplate;
     private final AuthUseCase authUseCase;
     private final AccountRepository accountRepository;
     private final CustomerRepository customerRepository;
@@ -46,7 +50,8 @@ public class PaymentTransactionalExecutor {
     private final LedgerRepository ledgerRepository;
     private final AuthorizationRecordRepository authorizationRecordRepository;
 
-    public PaymentTransactionalExecutor(AuthUseCase authUseCase,
+    public PaymentTransactionalExecutor(PlatformTransactionManager txManager,
+                                        AuthUseCase authUseCase,
                                         AccountRepository accountRepository,
                                         CustomerRepository customerRepository,
                                         TransactionRepository transactionRepository,
@@ -54,6 +59,7 @@ public class PaymentTransactionalExecutor {
                                         ProviderPort provider,
                                         LedgerRepository ledgerRepository,
                                         AuthorizationRecordRepository authorizationRecordRepository) {
+        this.txTemplate = new TransactionTemplate(txManager);
         this.authUseCase = authUseCase;
         this.accountRepository = accountRepository;
         this.customerRepository = customerRepository;
@@ -64,60 +70,230 @@ public class PaymentTransactionalExecutor {
         this.authorizationRecordRepository = authorizationRecordRepository;
     }
 
-    // ── payment flows ─────────────────────────────────────────────────────────
+    // ── Cash In ───────────────────────────────────────────────────────────────
 
     public Transaction executeCashIn(CashInCommand cmd) {
-        ValidatedPayer payer  = validatePayerAndGetAccount(cmd.customerId(), cmd.rawPin());
-        Account floatAccount  = getSystemFloatAccountForUpdate();
-        Ledger ledger         = ledgerRepository.findFirst();
-        PhoneNumber phone     = payer.customer().snapshot().phoneNumber();
-        String correlationId  = Id.generate().value();
+        final String correlationId = Id.generate().value();
 
-        // fromAccount = float (provider inbound), toAccount = customer
-        Transaction tx = ledger.initiate(floatAccount, payer.account(),
-                TransactionType.CASH_IN, cmd.paymentMethod(), cmd.amount());
+        // BCrypt (~200ms) runs outside any DB transaction — holds zero connections.
+        authUseCase.validatePin(cmd.customerId(), cmd.rawPin());
 
-        return executePayment(tx, ledger, floatAccount, payer.account(),
-                cmd.amount(), correlationId,
-                () -> provider.authorize(
-                        cmd.amount(), cmd.paymentMethod(), correlationId,
-                        ProviderOperationType.COLLECTION, phone));
+        // ── TX-1: validate context, persist INITIALIZED ───────────────────
+        record Tx1Context(Transaction tx, PhoneNumber phone) {}
+
+        Tx1Context ctx = Objects.requireNonNull(txTemplate.execute(status -> {
+            ValidatedPayer payer = validatePayerNoLock(cmd.customerId());
+            Account floatAccount = getSystemFloatAccount();
+            Ledger ledger        = ledgerRepository.findFirst();
+
+            Transaction tx = ledger.initiate(floatAccount, payer.account(),
+                    TransactionType.CASH_IN, cmd.paymentMethod(), cmd.amount());
+            persistInitialState(tx);
+            return new Tx1Context(tx, payer.customer().snapshot().phoneNumber());
+        }));
+
+        final Transaction tx = ctx.tx();
+
+        // ── Provider authorize: no DB connection held ─────────────────────
+        AuthorizationResult authResult;
+        try {
+            authResult = provider.authorize(cmd.amount(), cmd.paymentMethod(),
+                    correlationId, ProviderOperationType.COLLECTION, ctx.phone());
+        } catch (ProviderException e) {
+            txTemplate.execute(status -> {
+                tx.failAuthorization();
+                flushHistorySince(tx, 1);
+                transactionRepository.save(tx);
+                return null;
+            });
+            return tx;
+        }
+
+        // ── Provider capture: no DB connection held ───────────────────────
+        try {
+            provider.capture(authResult.providerReference(), correlationId);
+        } catch (ProviderException e) {
+            txTemplate.execute(status -> {
+                AuthorizationRecord authRecord = AuthorizationRecord.create(
+                        tx.snapshot().transactionId(), authResult.providerReference(),
+                        cmd.amount(), Duration.ofMinutes(15));
+                authorizationRecordRepository.save(authRecord);
+                tx.authorize();
+                authRecord.cancel();
+                authorizationRecordRepository.save(authRecord);
+                tx.failCapture();
+                flushHistorySince(tx, 1);
+                transactionRepository.save(tx);
+                return null;
+            });
+            return tx;
+        }
+
+        // ── TX-2: reload customer account with lock, apply balance, COMPLETED
+        return txTemplate.execute(status -> {
+            Account customerAccount = accountRepository
+                    .findByCustomerIdForUpdate(cmd.customerId())
+                    .orElseThrow(() -> new AccountNotFoundException(
+                            "Account not found for customer: " + cmd.customerId().value()));
+            Account floatAccount = getSystemFloatAccount();
+            Ledger ledger        = ledgerRepository.findFirst();
+
+            AuthorizationRecord authRecord = AuthorizationRecord.create(
+                    tx.snapshot().transactionId(), authResult.providerReference(),
+                    cmd.amount(), Duration.ofMinutes(15));
+            authorizationRecordRepository.save(authRecord);
+
+            tx.authorize();
+            tx.capture();
+            ledger.writeEntries(tx, floatAccount, customerAccount, cmd.amount());
+            applyBalanceUpdate(floatAccount, customerAccount, cmd.amount());
+            authRecord.consume();
+            authorizationRecordRepository.save(authRecord);
+
+            tx.pendSettlement();
+            tx.settle();
+            tx.markCompleted();
+
+            flushHistorySince(tx, 1);
+            transactionRepository.save(tx);
+            return tx;
+        });
     }
+
+    // ── Cash Out ──────────────────────────────────────────────────────────────
 
     public Transaction executeCashOut(CashOutCommand cmd) {
-        ValidatedPayer payer  = validatePayerAndGetAccount(cmd.customerId(), cmd.rawPin());
-        Account floatAccount  = getSystemFloatAccountForUpdate();
-        Ledger ledger         = ledgerRepository.findFirst();
-        PhoneNumber phone     = payer.customer().snapshot().phoneNumber();
-        String correlationId  = Id.generate().value();
+        final String correlationId = Id.generate().value();
 
-        // fromAccount = customer (funds leave wallet), toAccount = float (provider outbound)
-        Transaction tx = ledger.initiate(payer.account(), floatAccount,
-                TransactionType.CASH_OUT, cmd.paymentMethod(), cmd.amount());
+        // BCrypt (~200ms) runs outside any DB transaction — holds zero connections.
+        authUseCase.validatePin(cmd.customerId(), cmd.rawPin());
 
-        return executePayment(tx, ledger, payer.account(), floatAccount,
-                cmd.amount(), correlationId,
-                () -> provider.authorize(
-                        cmd.amount(), cmd.paymentMethod(), correlationId,
-                        ProviderOperationType.DISBURSEMENT, phone));
+        // ── TX-1: validate context (ledger.initiate checks sufficient funds),
+        //          persist INITIALIZED ──────────────────────────────────────
+        record Tx1Context(Transaction tx, PhoneNumber phone) {}
+
+        Tx1Context ctx = Objects.requireNonNull(txTemplate.execute(status -> {
+            ValidatedPayer payer = validatePayerNoLock(cmd.customerId());
+            Account floatAccount = getSystemFloatAccount();
+            Ledger ledger        = ledgerRepository.findFirst();
+            PhoneNumber phone    = payer.customer().snapshot().phoneNumber();
+
+            // ledger.initiate() calls requireSufficientFunds for CUSTOMER_ACCOUNT —
+            // throws InsufficientFundsException before persistInitialState if balance < amount.
+            Transaction tx = ledger.initiate(payer.account(), floatAccount,
+                    TransactionType.CASH_OUT, cmd.paymentMethod(), cmd.amount());
+            persistInitialState(tx);
+            return new Tx1Context(tx, phone);
+        }));
+
+        final Transaction tx = ctx.tx();
+
+        // ── Provider authorize: no DB connection held ─────────────────────
+        AuthorizationResult authResult;
+        try {
+            authResult = provider.authorize(cmd.amount(), cmd.paymentMethod(),
+                    correlationId, ProviderOperationType.DISBURSEMENT, ctx.phone());
+        } catch (ProviderException e) {
+            txTemplate.execute(status -> {
+                tx.failAuthorization();
+                flushHistorySince(tx, 1);
+                transactionRepository.save(tx);
+                return null;
+            });
+            return tx;
+        }
+
+        // ── Provider capture: no DB connection held ───────────────────────
+        try {
+            provider.capture(authResult.providerReference(), correlationId);
+        } catch (ProviderException e) {
+            txTemplate.execute(status -> {
+                AuthorizationRecord authRecord = AuthorizationRecord.create(
+                        tx.snapshot().transactionId(), authResult.providerReference(),
+                        cmd.amount(), Duration.ofMinutes(15));
+                authorizationRecordRepository.save(authRecord);
+                tx.authorize();
+                authRecord.cancel();
+                authorizationRecordRepository.save(authRecord);
+                tx.failCapture();
+                flushHistorySince(tx, 1);
+                transactionRepository.save(tx);
+                return null;
+            });
+            return tx;
+        }
+
+        // ── TX-2: reload customer account with lock, apply balance, COMPLETED
+        return txTemplate.execute(status -> {
+            Account customerAccount = accountRepository
+                    .findByCustomerIdForUpdate(cmd.customerId())
+                    .orElseThrow(() -> new AccountNotFoundException(
+                            "Account not found for customer: " + cmd.customerId().value()));
+            Account floatAccount = getSystemFloatAccount();
+            Ledger ledger        = ledgerRepository.findFirst();
+
+            AuthorizationRecord authRecord = AuthorizationRecord.create(
+                    tx.snapshot().transactionId(), authResult.providerReference(),
+                    cmd.amount(), Duration.ofMinutes(15));
+            authorizationRecordRepository.save(authRecord);
+
+            tx.authorize();
+            tx.capture();
+            ledger.writeEntries(tx, customerAccount, floatAccount, cmd.amount());
+            applyBalanceUpdate(customerAccount, floatAccount, cmd.amount());
+            authRecord.consume();
+            authorizationRecordRepository.save(authRecord);
+
+            tx.pendSettlement();
+            tx.settle();
+            tx.markCompleted();
+
+            flushHistorySince(tx, 1);
+            transactionRepository.save(tx);
+            return tx;
+        });
     }
+
+    // ── Transfer ──────────────────────────────────────────────────────────────
 
     public Transaction executeTransfer(TransferCommand cmd) {
-        ValidatedPayer payer = validatePayerAndGetAccount(cmd.customerId(), cmd.rawPin());
-        Account toAccount    = validateRecipientAndGetAccount(cmd.toPhoneNumber());
-        Ledger  ledger       = ledgerRepository.findFirst();
+        // BCrypt (~200ms) runs outside any DB transaction — holds zero connections.
+        authUseCase.validatePin(cmd.customerId(), cmd.rawPin());
 
-        Transaction tx = ledger.initiate(payer.account(), toAccount,
-                TransactionType.P2P_TRANSFER, "WALLET", cmd.amount());
+        // No provider I/O — single TX with both account locks (short hold, no I/O).
+        return txTemplate.execute(status -> {
+            ValidatedPayer payer = validatePayerWithLock(cmd.customerId());
+            Account toAccount    = validateRecipientAndGetAccount(cmd.toPhoneNumber());
+            Ledger  ledger       = ledgerRepository.findFirst();
 
-        return executeInternalTransfer(tx, ledger, payer.account(), toAccount, cmd.amount());
+            Transaction tx = ledger.initiate(payer.account(), toAccount,
+                    TransactionType.P2P_TRANSFER, "WALLET", cmd.amount());
+
+            return executeInternalTransfer(tx, ledger, payer.account(), toAccount, cmd.amount());
+        });
     }
+
+    // ── Reversal ──────────────────────────────────────────────────────────────
 
     public Transaction executeReversePayment(ReversePaymentCommand cmd) {
         if (cmd.reason() == null || cmd.reason().isBlank()) {
             throw new IllegalArgumentException("Reason is required for reversal");
         }
+        return txTemplate.execute(status -> reverseInTx(cmd));
+    }
 
+    // ── TTL expiry ────────────────────────────────────────────────────────────
+
+    public void executeExpireAuthorizations(java.time.Instant now) {
+        txTemplate.execute(status -> {
+            expireInTx(now);
+            return null;
+        });
+    }
+
+    // ── Reversal logic (runs inside a single TX) ──────────────────────────────
+
+    private Transaction reverseInTx(ReversePaymentCommand cmd) {
         Transaction tx = transactionRepository.findById(cmd.transactionId())
                 .orElseThrow(() -> new AccountNotFoundException(
                         "Transaction not found: " + cmd.transactionId().value()));
@@ -178,9 +354,7 @@ public class PaymentTransactionalExecutor {
         throw new InvalidStateTransitionException(currentState, TransactionState.REVERSED);
     }
 
-    // ── TTL expiry ────────────────────────────────────────────────────────────
-
-    public void executeExpireAuthorizations(java.time.Instant now) {
+    private void expireInTx(java.time.Instant now) {
         var expired = authorizationRecordRepository.findExpiredActive(now);
         for (AuthorizationRecord authRecord : expired) {
             authRecord.expire();
@@ -200,100 +374,33 @@ public class PaymentTransactionalExecutor {
         }
     }
 
-    // ── core payment orchestration ────────────────────────────────────────────
+    // ── Internal transfer (single TX, no provider) ────────────────────────────
 
-    /**
-     * Executes the full payment lifecycle for a single transaction:
-     * INITIALIZED → AUTHORIZED → CAPTURED → SETTLEMENT_PENDING → SETTLED → COMPLETED
-     * <p>
-     * On authorization failure  : INITIALIZED → AUTHORIZATION_FAILED
-     * On capture failure        : AUTHORIZED  → CAPTURE_FAILED
-     */
-    private Transaction executePayment(Transaction tx, Ledger ledger,
-                                       Account fromAccount, Account toAccount,
-                                       Amount amount,
-                                       String correlationId,
-                                       Supplier<AuthorizationResult> providerAuthorize) {
-        persistTransactionState(tx); // INITIALIZED
-
-        // ── Step 1: authorize with provider ──────────────────────────────────
-        AuthorizationResult authResult;
-        try {
-            authResult = providerAuthorize.get();
-        } catch (ProviderException e) {
-            tx.failAuthorization();
-            persistTransactionState(tx); // AUTHORIZATION_FAILED
-            return tx;
-        }
-
-        AuthorizationRecord authRecord = AuthorizationRecord.create(
-                tx.snapshot().transactionId(),
-                authResult.providerReference(),
-                amount,
-                Duration.ofMinutes(15));
-        authorizationRecordRepository.save(authRecord);
-        tx.authorize();
-        persistTransactionState(tx); // AUTHORIZED
-
-        // ── Step 2: capture with provider ────────────────────────────────────
-        try {
-            provider.capture(authResult.providerReference(), correlationId);
-        } catch (ProviderException e) {
-            tx.failCapture();
-            authRecord.cancel();
-            authorizationRecordRepository.save(authRecord);
-            persistTransactionState(tx); // CAPTURE_FAILED
-            return tx;
-        }
-
-        // ── Step 3: write ledger entries and update balances ──────────────────
-        ledger.writeEntries(tx, fromAccount, toAccount, amount);
-        applyBalanceUpdate(fromAccount, toAccount, amount);
-        authRecord.consume();
-        authorizationRecordRepository.save(authRecord);
-        tx.capture();
-        persistTransactionState(tx); // CAPTURED
-
-        tx.pendSettlement();
-        persistTransactionState(tx); // SETTLEMENT_PENDING
-
-        tx.settle();
-        persistTransactionState(tx); // SETTLED
-
-        tx.markCompleted();
-        persistTransactionState(tx); // COMPLETED
-
-        return tx;
-    }
-
-    /**
-     * Executes a P2P wallet-to-wallet transfer without any external provider call.
-     * Money is already inside KORA; the flow is purely internal.
-     */
     private Transaction executeInternalTransfer(Transaction tx, Ledger ledger,
                                                 Account fromAccount, Account toAccount,
                                                 Amount amount) {
-        persistTransactionState(tx); // INITIALIZED
+        // Persist INITIALIZED once upfront — mirrors the TX-1 pattern used by cash ops.
+        transactionRepository.save(tx);
+        historicRepo.save(tx.history().getFirst());
+
+        // All state transitions in memory — no intermediate saves.
         tx.authorize();
-        persistTransactionState(tx); // AUTHORIZED
         ledger.writeEntries(tx, fromAccount, toAccount, amount);
         applyBalanceUpdate(fromAccount, toAccount, amount);
         tx.capture();
-        persistTransactionState(tx); // CAPTURED
         tx.pendSettlement();
-        persistTransactionState(tx); // SETTLEMENT_PENDING
         tx.settle();
-        persistTransactionState(tx); // SETTLED
         tx.markCompleted();
-        persistTransactionState(tx); // COMPLETED
+
+        // Single flush at the end: 5 history entries + 1 final tx save (COMPLETED).
+        // Reduces 6 × save(tx) to 2, cutting UPDATE round-trips on the transactions row.
+        flushHistorySince(tx, 1);
+        transactionRepository.save(tx);
         return tx;
     }
 
-    /**
-     * Updates account balances after a successful capture.
-     * Only CUSTOMER_ACCOUNT balances are stored — FLOAT_ACCOUNT balance is always
-     * audited through ledger operations, never through the stored balance (ADR-001).
-     */
+    // ── Balance helpers ───────────────────────────────────────────────────────
+
     private void applyBalanceUpdate(Account fromAccount, Account toAccount, Amount amount) {
         if (fromAccount.snapshot().accountType().resourceType() == ResourceType.CUSTOMER_ACCOUNT) {
             fromAccount.debit(amount);
@@ -305,16 +412,6 @@ public class PaymentTransactionalExecutor {
         }
     }
 
-    /**
-     * Reverses the denormalized balance update applied during payment capture.
-     * Symmetric counterpart of applyBalanceUpdate() — applies the inverse
-     * movement using the same ResourceType filter logic.
-     *
-     * Correct for all three operation types:
-     *   Cash-in  (float→customer) : skip float, DEBIT  customer        ✓
-     *   Cash-out (customer→float) : CREDIT customer, skip float        ✓
-     *   P2P      (sender→receiver): CREDIT sender,   DEBIT  receiver   ✓
-     */
     private void reverseBalanceUpdate(Account fromAccount, Account toAccount, Amount amount) {
         if (fromAccount.snapshot().accountType().resourceType() == ResourceType.CUSTOMER_ACCOUNT) {
             fromAccount.credit(amount);
@@ -326,13 +423,62 @@ public class PaymentTransactionalExecutor {
         }
     }
 
-    // ── shared helpers ────────────────────────────────────────────────────────
+    // ── Persistence helpers ───────────────────────────────────────────────────
 
-    private ValidatedPayer validatePayerAndGetAccount(Id customerId, String pin) {
-        authUseCase.validatePin(customerId, pin);
+    /**
+     * Persists the INITIALIZED state and its history entry (index 0).
+     * Called once in TX-1 for cash-in and cash-out.
+     */
+    private void persistInitialState(Transaction tx) {
+        transactionRepository.save(tx);
+        historicRepo.save(tx.history().getFirst());
+    }
 
+    /**
+     * Saves all history entries accumulated in memory since the last TX commit.
+     * Used in TX-2 (and failure TXs) to flush the entries produced by
+     * in-memory state transitions (authorize, capture, etc.) that occurred
+     * outside any database transaction.
+     *
+     * @param fromIndex first entry to save (typically 1, skipping INITIALIZED already persisted in TX-1)
+     */
+    private void flushHistorySince(Transaction tx, int fromIndex) {
+        tx.history().subList(fromIndex, tx.history().size()).forEach(historicRepo::save);
+    }
+
+    // ── Validation helpers ────────────────────────────────────────────────────
+
+    /**
+     * Loads and validates the payer WITHOUT a pessimistic lock.
+     * PIN is validated by the caller before entering the TX — BCrypt holds no connection.
+     * Used in TX-1 of cash-in and cash-out where no balance write happens.
+     * TX-2 reloads the account with {@link AccountRepository#findByCustomerIdForUpdate}
+     * before applying the balance update.
+     */
+    private ValidatedPayer validatePayerNoLock(Id customerId) {
         Customer customer = customerRepository.findById(customerId)
+                .orElseThrow(() -> new CustomerNotFoundException(
+                        "Customer not found: " + customerId.value()));
+
+        if (customer.isSuspended())
+            throw new AccountSuspendedException(
+                    "Account suspended for customer: " + customerId.value());
+
+        Account account = accountRepository.findByCustomerId(customerId)
                 .orElseThrow(() -> new AccountNotFoundException(
+                        "Account not found for customer: " + customerId.value()));
+
+        return new ValidatedPayer(customer, account);
+    }
+
+    /**
+     * Loads and validates the payer WITH a pessimistic write lock.
+     * PIN is validated by the caller before entering the TX — BCrypt holds no connection.
+     * Used in P2P transfer where a single TX holds the lock for the balance write.
+     */
+    private ValidatedPayer validatePayerWithLock(Id customerId) {
+        Customer customer = customerRepository.findById(customerId)
+                .orElseThrow(() -> new CustomerNotFoundException(
                         "Customer not found: " + customerId.value()));
 
         if (customer.isSuspended())
@@ -364,14 +510,16 @@ public class PaymentTransactionalExecutor {
         return accountTo;
     }
 
-    private Account getSystemFloatAccountForUpdate() {
-        return accountRepository.findFloatByProviderIdForUpdate(SystemConstants.PROVIDER_ID)
-                .orElseThrow(() -> new AccountNotFoundException("Float account not found for provider: " + SystemConstants.PROVIDER_ID.value()));
-    }
-
-    private void persistTransactionState(Transaction tx) {
-        transactionRepository.save(tx);
-        historicRepo.save(tx.history().getLast());
+    /**
+     * Loads the system float account without a pessimistic lock.
+     * The float account balance is never written (ADR-001) — its integrity
+     * is maintained exclusively through double-entry ledger operations.
+     * A read lock would serialize all cash-in/cash-out operations for no benefit.
+     */
+    private Account getSystemFloatAccount() {
+        return accountRepository.findFloatByProviderId(SystemConstants.PROVIDER_ID)
+                .orElseThrow(() -> new AccountNotFoundException(
+                        "Float account not found for provider: " + SystemConstants.PROVIDER_ID.value()));
     }
 
     private record ValidatedPayer(Customer customer, Account account) {}

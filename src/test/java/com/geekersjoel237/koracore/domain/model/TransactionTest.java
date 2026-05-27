@@ -68,15 +68,6 @@ class TransactionTest {
                         TransactionType.P2P_TRANSFER, "MOBILE", AMT));
     }
 
-    // ── addOperation ──────────────────────────────────────────────────────────
-
-    @Test
-    void should_add_operation_when_valid() {
-        Transaction tx = createTestTransaction();
-        tx.addOperation(testOperation());
-        assertEquals(1, tx.operations().size());
-    }
-
     @Test
     void should_return_unmodifiable_operations_list() {
         Transaction tx = createTestTransaction();

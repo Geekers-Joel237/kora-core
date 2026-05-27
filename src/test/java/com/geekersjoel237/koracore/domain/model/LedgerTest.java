@@ -107,7 +107,7 @@ class LedgerTest {
     void should_generate_transaction_number_with_correct_format() {
         Transaction tx = ledger.cashIn(customerAccount, floatAccount,
                 Amount.of(BigDecimal.valueOf(100), "XOF"), "MOBILE");
-        assertTrue(tx.snapshot().transactionNumber().matches("TRX-\\d{8}-[A-Z0-9]{4}"));
+        assertTrue(tx.snapshot().transactionNumber().matches("TRX-\\d{8}-[A-Z0-9]{8}"));
     }
 
     @Test
