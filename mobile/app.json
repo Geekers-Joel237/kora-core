@@ -1,0 +1,53 @@
+{
+  "expo": {
+    "name": "Kora",
+    "slug": "kora",
+    "scheme": "kora",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "backgroundColor": "#0C0E12",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "cm.kora.wallet"
+    },
+    "android": {
+      "package": "cm.kora.wallet",
+      "adaptiveIcon": {
+        "backgroundColor": "#0C0E12",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-secure-store",
+      "expo-localization",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#0C0E12",
+          "dark": { "backgroundColor": "#0C0E12" }
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Kora utilise Face ID pour déverrouiller votre portefeuille."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
