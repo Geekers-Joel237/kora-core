@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/action';
 import { DateRangePicker, OptionRow, Segmented } from '@/components/input';
@@ -11,7 +12,7 @@ import { TX_STATES, type Direction, type TxState, type TxType } from '@/types/do
 import {
   activeFilterCount,
   NO_FILTERS,
-  PERIOD_LABELS,
+  PERIOD_DAYS,
   PERIOD_PRESETS,
   withPeriod,
   withRange,
@@ -29,24 +30,8 @@ export interface FilterSheetProps {
   loading: boolean;
 }
 
-const TYPE_OPTIONS = [
-  { value: null, label: 'Tous' },
-  { value: 'CASH_IN' as TxType, label: 'Dépôts' },
-  { value: 'CASH_OUT' as TxType, label: 'Retraits' },
-  { value: 'P2P_TRANSFER' as TxType, label: 'Transferts' },
-];
-
-const DIRECTION_OPTIONS = [
-  { value: null, label: 'Tous' },
-  { value: 'INBOUND' as Direction, label: 'Entrants' },
-  { value: 'OUTBOUND' as Direction, label: 'Sortants' },
-];
-
-const PERIOD_OPTIONS: { value: PeriodPreset | 'custom' | null; label: string }[] = [
-  { value: null, label: 'Tout' },
-  ...PERIOD_PRESETS.map((preset) => ({ value: preset, label: PERIOD_LABELS[preset] })),
-  { value: 'custom', label: 'Perso.' },
-];
+/** Nombre d'états visibles avant dépliage. */
+const COLLAPSED_STATES = 4;
 
 /**
  * Panneau de filtres — `docs/05-screens.md` §5.
@@ -69,8 +54,31 @@ export function FilterSheet({
   resultCount,
   loading,
 }: FilterSheetProps) {
+  const { t } = useTranslation();
   const theme = useTheme();
   const [statesExpanded, setStatesExpanded] = useState(false);
+
+  const typeOptions = [
+    { value: null, label: t('filters.all') },
+    { value: 'CASH_IN' as TxType, label: t('filters.deposits') },
+    { value: 'CASH_OUT' as TxType, label: t('filters.withdrawals') },
+    { value: 'P2P_TRANSFER' as TxType, label: t('filters.transfers') },
+  ];
+
+  const directionOptions = [
+    { value: null, label: t('filters.all') },
+    { value: 'INBOUND' as Direction, label: t('filters.inbound') },
+    { value: 'OUTBOUND' as Direction, label: t('filters.outbound') },
+  ];
+
+  const periodOptions: { value: PeriodPreset | 'custom' | null; label: string }[] = [
+    { value: null, label: t('filters.anyPeriod') },
+    ...PERIOD_PRESETS.map((preset) => ({
+      value: preset,
+      label: t('filters.days', { count: PERIOD_DAYS[preset] }),
+    })),
+    { value: 'custom', label: t('filters.custom') },
+  ];
 
   const customRange = filters.from !== null || filters.to !== null;
   const periodValue: PeriodPreset | 'custom' | null = filters.period ?? (customRange ? 'custom' : null);
@@ -88,41 +96,43 @@ export function FilterSheet({
   };
 
   const count = activeFilterCount(filters);
-  const visibleStates: readonly TxState[] = statesExpanded ? TX_STATES : TX_STATES.slice(0, 4);
+  const visibleStates: readonly TxState[] = statesExpanded
+    ? TX_STATES
+    : TX_STATES.slice(0, COLLAPSED_STATES);
 
   return (
-    <Sheet visible={visible} onClose={onClose} title="Filtrer" snapRatio={0.86}>
+    <Sheet visible={visible} onClose={onClose} title={t('filters.title')} snapRatio={0.86}>
       <ScrollView
         style={styles.scroll}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}
       >
-        <Section title="Type">
+        <Section title={t('filters.type')}>
           <Segmented
-            options={TYPE_OPTIONS}
+            options={typeOptions}
             value={filters.type}
             onChange={(value) => onChange({ ...filters, type: value })}
-            accessibilityLabel="Type d’opération"
+            accessibilityLabel={t('filters.typeA11y')}
             testID="filter-type"
           />
         </Section>
 
-        <Section title="Sens">
+        <Section title={t('filters.direction')}>
           <Segmented
-            options={DIRECTION_OPTIONS}
+            options={directionOptions}
             value={filters.direction}
             onChange={(value) => onChange({ ...filters, direction: value })}
-            accessibilityLabel="Sens de l’opération"
+            accessibilityLabel={t('filters.directionA11y')}
             testID="filter-direction"
           />
         </Section>
 
-        <Section title="Période">
+        <Section title={t('filters.period')}>
           <Segmented
-            options={PERIOD_OPTIONS}
+            options={periodOptions}
             value={periodValue}
             onChange={setPeriod}
-            accessibilityLabel="Période"
+            accessibilityLabel={t('filters.period')}
             testID="filter-period"
           />
           {periodValue === 'custom' && (
@@ -137,9 +147,9 @@ export function FilterSheet({
           )}
         </Section>
 
-        <Section title="État">
+        <Section title={t('filters.state')}>
           <Text variant="bodySm" color="tertiary">
-            Un seul état à la fois — le serveur n’en accepte pas davantage.
+            {t('filters.stateHint')}
           </Text>
           <Spacer size={2} />
           {visibleStates.map((state) => (
@@ -159,11 +169,15 @@ export function FilterSheet({
             onPress={() => setStatesExpanded((value) => !value)}
             haptic="tap"
             scale="card"
-            accessibilityLabel={statesExpanded ? 'Réduire la liste des états' : 'Voir tous les états'}
+            accessibilityLabel={
+              statesExpanded ? t('filters.collapseStatesA11y') : t('filters.expandStatesA11y')
+            }
             testID="filter-state-toggle"
           >
             <Text variant="labelMd" color="accent">
-              {statesExpanded ? 'Réduire' : `Voir les ${TX_STATES.length} états`}
+              {statesExpanded
+                ? t('filters.collapseStates')
+                : t('filters.showAllStates', { count: TX_STATES.length })}
             </Text>
           </Pressable>
         </Section>
@@ -172,15 +186,15 @@ export function FilterSheet({
       <View style={[styles.footer, { borderTopColor: theme.overlay.hairline }]}>
         <Text variant="bodySm" color="secondary">
           {loading
-            ? 'Recherche…'
+            ? t('filters.searching')
             : resultCount === null
               ? '—'
-              : `${resultCount} opération${resultCount > 1 ? 's' : ''}`}
+              : t('filters.resultCount', { count: resultCount })}
         </Text>
         <View style={styles.footerActions}>
           {count > 0 && (
             <Button
-              label="Réinitialiser"
+              label={t('common.reset')}
               variant="ghost"
               size="sm"
               fullWidth={false}
@@ -189,7 +203,7 @@ export function FilterSheet({
             />
           )}
           <Button
-            label="Voir"
+            label={t('filters.apply')}
             size="sm"
             fullWidth={false}
             onPress={onClose}

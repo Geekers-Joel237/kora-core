@@ -1,9 +1,11 @@
+import { useTranslation } from 'react-i18next';
 import { Tabs } from 'expo-router';
 
 import { Icon } from '@/components/primitives';
 import { layout, type as typeScale, useTheme } from '@/theme';
 
 export default function TabsLayout() {
+  const { t } = useTranslation();
   const theme = useTheme();
 
   return (
@@ -23,21 +25,21 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="home"
         options={{
-          title: 'Accueil',
+          title: t('tabs.home'),
           tabBarIcon: ({ color }) => <Icon name="home" size="md" color={color} />,
         }}
       />
       <Tabs.Screen
         name="activity"
         options={{
-          title: 'Activité',
+          title: t('tabs.activity'),
           tabBarIcon: ({ color }) => <Icon name="activity" size="md" color={color} />,
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
-          title: 'Réglages',
+          title: t('tabs.settings'),
           tabBarIcon: ({ color }) => <Icon name="settings" size="md" color={color} />,
         }}
       />

@@ -21,7 +21,10 @@ export const KvKey = {
   themePreference: 'kora.theme',
   languagePreference: 'kora.language',
   hapticsEnabled: 'kora.hapticsEnabled',
+  biometricsEnabled: 'kora.biometricsEnabled',
+  queryCache: 'kora.queryCache',
   apiUrlOverride: 'kora.devtools.apiUrl',
+  devtoolsJournal: 'kora.devtools.journal',
 } as const;
 
 export type KvKeyName = (typeof KvKey)[keyof typeof KvKey];

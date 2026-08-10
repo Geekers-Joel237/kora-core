@@ -1,5 +1,7 @@
 import { StyleSheet, View } from 'react-native';
 
+import { useTranslation } from 'react-i18next';
+
 import { IconButton } from '@/components/action';
 import { Skeleton } from '@/components/feedback';
 import { Pressable, Spacer, Surface, Text } from '@/components/primitives';
@@ -35,19 +37,20 @@ export function BalanceHero({
   loading = false,
   staleLabel = null,
 }: BalanceHeroProps) {
+  const { t } = useTranslation();
   const theme = useTheme();
 
   return (
     <Surface elevation={1} radius="xl" padding={6}>
       <View style={styles.header}>
         <Text variant="labelMd" color="secondary">
-          Solde disponible
+          {t('balance.available')}
         </Text>
         <IconButton
           name={hidden ? 'eye-off' : 'eye'}
           onPress={onToggleHidden}
           haptic="select"
-          accessibilityLabel={hidden ? 'Afficher le solde' : 'Masquer le solde'}
+          accessibilityLabel={hidden ? t('balance.show') : t('balance.hide')}
           testID="toggle-balance"
         />
       </View>
@@ -78,7 +81,7 @@ export function BalanceHero({
             {...(onCopyAccountNumber && { onLongPress: onCopyAccountNumber })}
             haptic="none"
             scale="hero"
-            accessibilityLabel={`Numéro de compte ${accountNumber}`}
+            accessibilityLabel={t('balance.accountNumberA11y', { number: accountNumber })}
           >
             <Text variant="monoMd" color="tertiary">
               {accountNumber}

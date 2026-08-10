@@ -44,8 +44,15 @@
         {
           "faceIDPermission": "Kora utilise Face ID pour déverrouiller votre portefeuille."
         }
-      ]
+      ],
+      "./plugins/with-certificate-pinning"
     ],
+    "extra": {
+      "certificatePinning": {
+        "domain": "",
+        "pins": []
+      }
+    },
     "experiments": {
       "typedRoutes": true
     }

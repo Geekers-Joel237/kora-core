@@ -1,69 +1,53 @@
 /**
  * Traductions métier — `docs/04-components.md` §5.
  *
- * **L'utilisateur ne voit jamais `AUTHORIZATION_FAILED`.** Ces tables sont la
+ * **L'utilisateur ne voit jamais `AUTHORIZATION_FAILED`.** Ces fonctions sont la
  * frontière entre le vocabulaire du domaine et celui du produit.
  *
- * Provisoirement en français en dur : le lot 9 les déplace vers i18next. Les
- * garder groupées ici rend cette migration mécanique.
+ * ⚠️ Elles lisent l'instance i18next **au moment de l'appel**. Tout composant
+ * qui les rend doit donc appeler `useTranslation()` — même sans utiliser le `t`
+ * renvoyé — afin de se re-rendre au changement de langue. Sans cette
+ * souscription, un écran garderait ses libellés dans l'ancienne langue.
  */
 
+import { t } from '@/i18n';
 import { brandColors } from '@/theme/brands';
-import type { OutcomeGroup } from '@/types/domain';
+import { isKnownTxState, type OutcomeGroup } from '@/types/domain';
 
-interface StateLabel {
+export interface StateLabel {
   label: string;
   description: string;
 }
-
-/** Les 11 états du contrat §3.1, plus le repli pour tout état futur. */
-const STATE_LABELS: Record<string, StateLabel> = {
-  INITIALIZED: { label: 'Initiée', description: 'Opération enregistrée' },
-  AUTHORIZED: { label: 'Autorisée', description: "Fonds réservés chez l'opérateur" },
-  CAPTURED: { label: 'Capturée', description: 'Fonds prélevés' },
-  COMPLETED: { label: 'Terminée', description: 'Opération finalisée' },
-  SETTLEMENT_PENDING: { label: 'Règlement en cours', description: "En attente de l'opérateur" },
-  SETTLED: { label: 'Réglée', description: 'Règlement confirmé' },
-  AUTHORIZATION_FAILED: {
-    label: 'Autorisation refusée',
-    description: "L'opérateur a refusé l'opération",
-  },
-  CAPTURE_FAILED: { label: 'Prélèvement échoué', description: "Le prélèvement n'a pas abouti" },
-  SETTLEMENT_FAILED: { label: 'Règlement échoué', description: "Le règlement n'a pas abouti" },
-  FAILED: { label: 'Échouée', description: "L'opération n'a pas pu être exécutée" },
-  REVERSED: { label: 'Annulée', description: 'Opération contrepassée' },
-};
 
 /**
  * Règle R2 — un état inconnu affiche son code brut plutôt qu'un message
  * générique. L'utilisateur préfère une chaîne imparfaite à « Erreur ».
  */
 export function stateLabel(state: string): StateLabel {
-  return STATE_LABELS[state] ?? { label: state, description: '' };
+  if (!isKnownTxState(state)) return { label: state, description: '' };
+  return {
+    label: t(`states.${state}.label`),
+    description: t(`states.${state}.description`),
+  };
 }
 
 /** Libellé court des familles, pour les puces d'état. */
-export const OUTCOME_LABELS: Record<OutcomeGroup, string> = {
-  pending: 'En cours',
-  success: 'Terminée',
-  failed: 'Échouée',
-  reversed: 'Annulée',
-};
+export function outcomeLabel(outcome: OutcomeGroup): string {
+  return t(`outcomes.${outcome}`);
+}
 
-const TYPE_LABELS: Record<string, string> = {
-  CASH_IN: 'Dépôt',
-  CASH_OUT: 'Retrait',
-  P2P_TRANSFER: 'Transfert',
-};
+const KNOWN_TYPES = ['CASH_IN', 'CASH_OUT', 'P2P_TRANSFER'];
 
 export function transactionTypeLabel(type: string): string {
-  return TYPE_LABELS[type] ?? type;
+  return KNOWN_TYPES.includes(type) ? t(`txTypes.${type}`) : type;
 }
 
 /**
  * Opérateurs Mobile Money — contrat §4.
+ *
  * `paymentMethod` est une chaîne libre côté backend : la liste est figée ici,
- * et n'est jamais rendue configurable par l'utilisateur.
+ * et n'est jamais rendue configurable par l'utilisateur. **Ces libellés ne sont
+ * pas traduits** : « Orange Money » est un nom de marque, pas du texte.
  */
 export const PAYMENT_METHODS = [
   { id: 'ORANGE_MONEY', label: 'Orange Money', brand: brandColors.ORANGE_MONEY },

@@ -8,15 +8,27 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
 import { QueryClientProvider } from '@tanstack/react-query';
 
-import { ToastProvider } from '@/components/feedback';
+import { PrivacyShield, ToastProvider } from '@/components/feedback';
+import { DevtoolsHost, initDevtools } from '@/devtools';
 import { startNetworkWatch } from '@/lib/network';
 import { createQueryClient } from '@/lib/queryClient';
+import { persistQueryCache, restoreQueryCache } from '@/lib/queryPersistence';
 import { useForegroundRevalidation } from '@/lib/useForegroundRevalidation';
 import { fontFamily, ThemeProvider, useTheme, useThemeContext } from '@/theme';
 
 // Créé une seule fois, hors du composant : le recréer à chaque rendu viderait
 // le cache et transformerait chaque re-rendu en rafale de requêtes.
 const queryClient = createQueryClient();
+
+// Réhydratation **avant le premier rendu**, donc avant tout appel réseau —
+// `docs/08-quality-bar.md` §4. MMKV est synchrone : c'est ce qui rend possible
+// un démarrage à froid hors ligne avec des données à l'écran.
+restoreQueryCache(queryClient);
+
+// Avant tout : la surcharge d'URL, le journal réseau et le simulateur doivent
+// être en place avant la première requête — y compris celle du portail de
+// session. Sans objet en production, où ce module est un substitut inerte.
+initDevtools();
 
 // 05-screens.md §1 — l'écran de lancement natif reste affiché jusqu'à la
 // résolution des polices. Aucun clignotement d'un écran intermédiaire.
@@ -68,11 +80,18 @@ function AppShell() {
   useForegroundRevalidation();
 
   useEffect(() => startNetworkWatch(), []);
+  useEffect(() => persistQueryCache(queryClient), []);
 
   return (
     <View style={[styles.root, { backgroundColor: theme.bg.app }]}>
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <Slot />
+      {/* Le panneau de validation flotte au-dessus de tout, y compris des
+          écrans publics : le parcours d'authentification est le scénario 1. */}
+      <DevtoolsHost />
+      {/* Dernier élément de l'arbre : rien ne doit se dessiner par-dessus dans
+          la vignette du sélecteur d'applications — NFR-44. */}
+      <PrivacyShield />
     </View>
   );
 }

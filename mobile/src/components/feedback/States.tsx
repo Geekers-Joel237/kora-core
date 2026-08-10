@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { useTranslation } from 'react-i18next';
+
 import { Button } from '@/components/action/Button';
 import { Icon, Pressable, Spacer, Text } from '@/components/primitives';
 import { isKoraError } from '@/lib/http';
@@ -80,10 +82,11 @@ export function ErrorState({
   title,
   description,
   onRetry,
-  retryLabel = 'Réessayer',
+  retryLabel,
   error,
   compact = false,
 }: ErrorStateProps) {
+  const { t } = useTranslation();
   const theme = useTheme();
   const [expanded, setExpanded] = useState(false);
 
@@ -106,7 +109,7 @@ export function ErrorState({
       </View>
 
       <Spacer size={6} />
-      <Button label={retryLabel} onPress={onRetry} size="md" fullWidth={false} />
+      <Button label={retryLabel ?? t('common.retry')} onPress={onRetry} size="md" fullWidth={false} />
 
       {detail && (
         <>
@@ -115,10 +118,10 @@ export function ErrorState({
             onPress={() => setExpanded((value) => !value)}
             haptic="tap"
             scale="card"
-            accessibilityLabel="Afficher le détail technique"
+            accessibilityLabel={t('feedback.showDetailA11y')}
           >
             <Text variant="labelSm" color="tertiary">
-              {expanded ? 'Masquer le détail' : 'Détail technique'}
+              {expanded ? t('feedback.hideDetail') : t('feedback.technicalDetail')}
             </Text>
           </Pressable>
           {expanded && (

@@ -1,4 +1,5 @@
 import { StyleSheet, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 
 import { Icon, Pressable, Text } from '@/components/primitives';
 import { radius, space, useTheme } from '@/theme';
@@ -36,6 +37,7 @@ export function Keypad({
   biometric = null,
   disabled = false,
 }: KeypadProps) {
+  const { t } = useTranslation();
   const theme = useTheme();
 
   const renderKey = (label: string, onPress: () => void, testID: string) => (
@@ -85,7 +87,7 @@ export function Keypad({
         disabled={disabled}
         scale="key"
         haptic="tap"
-        accessibilityLabel="Effacer"
+        accessibilityLabel={t('feedback.clear')}
         testID="key-delete"
         style={[styles.key, { borderRadius: radius.md }]}
       >

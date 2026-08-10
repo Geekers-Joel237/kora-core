@@ -1,0 +1,359 @@
+{
+  "common": {
+    "continue": "Continuer",
+    "cancel": "Annuler",
+    "close": "Fermer",
+    "confirm": "Confirmer",
+    "retry": "Réessayer",
+    "done": "Terminé",
+    "back": "Retour",
+    "next": "Suivant",
+    "skip": "Passer",
+    "start": "Commencer",
+    "reset": "Réinitialiser",
+    "free": "Gratuit",
+    "previousStep": "Étape précédente",
+    "goBack": "Revenir en arrière"
+  },
+
+  "tabs": {
+    "home": "Accueil",
+    "activity": "Activité",
+    "settings": "Réglages"
+  },
+
+  "onboarding": {
+    "slide1": {
+      "title": "Votre argent, sous contrôle",
+      "body": "Envoyez, recevez, suivez — en quelques secondes."
+    },
+    "slide2": {
+      "title": "Chaque étape, visible",
+      "body": "Suivez vos opérations état par état, en temps réel."
+    },
+    "slide3": {
+      "title": "Sécurisé par conception",
+      "body": "PIN, double authentification, chiffrement matériel."
+    }
+  },
+
+  "login": {
+    "title": "Bon retour",
+    "subtitle": "Connectez-vous pour accéder à votre portefeuille.",
+    "emailLabel": "Adresse e-mail",
+    "emailPlaceholder": "vous@exemple.com",
+    "emailInvalid": "Entrez une adresse e-mail valide.",
+    "createAccount": "Créer un compte",
+    "pinTitle": "Entrez votre PIN",
+    "backToEmail": "Revenir à l’e-mail"
+  },
+
+  "register": {
+    "nameTitle": "Comment vous appelez-vous ?",
+    "nameLabel": "Nom complet",
+    "namePlaceholder": "Aminata Diallo",
+    "nameRequired": "Entrez votre nom complet.",
+    "emailTitle": "Votre adresse e-mail",
+    "emailSubtitle": "Vos codes de vérification y seront envoyés.",
+    "emailInvalid": "Entrez une adresse valide.",
+    "phoneTitle": "Votre numéro de téléphone",
+    "phoneSubtitle": "Il servira à recevoir de l’argent d’autres utilisateurs Kora.",
+    "phoneInvalid": "Indicatif ou numéro invalide.",
+    "pinChoose": "Choisissez un PIN",
+    "pinConfirm": "Confirmez votre PIN",
+    "pinHint": "Entre {{min}} et {{max}} chiffres",
+    "pinConfirmHint": "Saisissez-le une seconde fois",
+    "pinLength": "Le PIN doit contenir entre {{min}} et {{max}} chiffres.",
+    "pinMismatch": "Les deux PIN ne correspondent pas."
+  },
+
+  "otp": {
+    "title": "Vérifiez votre e-mail",
+    "sentTo": "Code envoyé à {{email}}",
+    "expiresIn": "Expire dans {{time}}",
+    "expired": "Ce code a expiré. Demandez-en un nouveau.",
+    "lockedOut": "Trop de tentatives. Réessayez dans {{time}}.",
+    "inputA11y": "Code de vérification à {{count}} chiffres",
+    "openMailbox": "Ouvrir ma boîte mail",
+    "resend": "Renvoyer le code",
+    "resendIn": "Renvoyer dans {{time}}"
+  },
+
+  "phone": {
+    "prefixLabel": "Indicatif",
+    "numberLabel": "Numéro",
+    "numberPlaceholder": "0708091011",
+    "recents": "Récents",
+    "noNameLookup": "Kora ne peut pas afficher le nom du destinataire. Vérifiez le numéro avec attention."
+  },
+
+  "home": {
+    "greeting": "Bonjour, {{name}}",
+    "greetingFallback": "vous",
+    "greetingA11y": "Salutation — appui long pour le mode validation",
+    "balanceErrorTitle": "Solde indisponible",
+    "balanceErrorDescription": "Nous n’avons pas pu récupérer votre solde.",
+    "deposit": "Déposer",
+    "withdraw": "Retirer",
+    "send": "Envoyer",
+    "offlineActions": "Les opérations sont indisponibles hors connexion.",
+    "recentActivity": "Activité récente",
+    "seeAll": "Tout voir",
+    "seeAllA11y": "Voir tout l’historique",
+    "activityErrorTitle": "Activité indisponible",
+    "activityErrorDescription": "Nous n’avons pas pu charger vos dernières opérations.",
+    "emptyTitle": "Aucune opération pour l’instant",
+    "emptyDescription": "Votre première opération apparaîtra ici.",
+    "emptyAction": "Faire un dépôt",
+    "accountNumberCopied": "Numéro de compte copié",
+    "updatedAt": "Mis à jour {{age}}"
+  },
+
+  "balance": {
+    "available": "Solde disponible",
+    "show": "Afficher le solde",
+    "hide": "Masquer le solde",
+    "accountNumberA11y": "Numéro de compte {{number}}",
+    "remainingAfter": "Solde après opération : {{amount}}"
+  },
+
+  "activity": {
+    "title": "Activité",
+    "filter": "Filtrer l’historique",
+    "filterActive": "Filtres, {{count}} actifs",
+    "errorTitle": "Historique indisponible",
+    "errorDescription": "Nous n’avons pas pu charger vos opérations.",
+    "emptyFilteredTitle": "Aucun résultat",
+    "emptyFilteredDescription": "Aucune opération ne correspond à ces filtres.",
+    "emptyFilteredAction": "Réinitialiser les filtres",
+    "emptyTitle": "Aucune opération",
+    "emptyDescription": "Votre première opération apparaîtra ici.",
+    "emptyAction": "Faire un dépôt"
+  },
+
+  "filters": {
+    "title": "Filtrer",
+    "type": "Type",
+    "typeA11y": "Type d’opération",
+    "direction": "Sens",
+    "directionA11y": "Sens de l’opération",
+    "period": "Période",
+    "state": "État",
+    "stateHint": "Un seul état à la fois — le serveur n’en accepte pas davantage.",
+    "showAllStates": "Voir les {{count}} états",
+    "collapseStates": "Réduire",
+    "expandStatesA11y": "Voir tous les états",
+    "collapseStatesA11y": "Réduire la liste des états",
+    "searching": "Recherche…",
+    "resultCount_one": "{{count}} opération",
+    "resultCount_other": "{{count}} opérations",
+    "apply": "Voir",
+    "all": "Tous",
+    "deposits": "Dépôts",
+    "withdrawals": "Retraits",
+    "transfers": "Transferts",
+    "inbound": "Entrants",
+    "outbound": "Sortants",
+    "anyPeriod": "Tout",
+    "custom": "Perso.",
+    "days": "{{count}} j"
+  },
+
+  "calendar": {
+    "previousMonth": "Mois précédent",
+    "nextMonth": "Mois suivant",
+    "chooseStart": "Choisissez une date de début",
+    "chooseEnd": "Depuis le {{from}} — choisissez la fin",
+    "range": "{{from}} → {{to}}"
+  },
+
+  "detail": {
+    "notFoundTitle": "Opération introuvable",
+    "notFoundDescription": "Elle n’apparaît plus dans la page d’où elle a été ouverte.",
+    "backToHistory": "Retour à l’historique",
+    "errorTitle": "Détail indisponible",
+    "errorDescription": "Nous n’avons pas pu récupérer cette opération.",
+    "noStateHistory": "Aucun historique d’état n’a été renvoyé pour cette opération.",
+    "liveTracking": "Suivi en direct — cet écran se met à jour tout seul.",
+    "reference": "Réf.",
+    "referenceA11y": "Référence {{reference}}, appuyer pour copier",
+    "referenceCopied": "Référence copiée",
+    "copyReference": "Copier la référence",
+    "type": "Type",
+    "method": "Moyen",
+    "direction": "Sens",
+    "rawState": "État brut",
+    "inbound": "Entrant",
+    "outbound": "Sortant"
+  },
+
+  "flow": {
+    "deposit": "Déposer",
+    "withdraw": "Retirer",
+    "send": "Envoyer",
+    "recipientTitle": "À qui envoyez-vous ?",
+    "methodTitle": "Quel opérateur ?",
+    "recipient": "Destinataire",
+    "method": "Opérateur",
+    "fees": "Frais",
+    "totalCredited": "Total crédité",
+    "totalDebited": "Total débité",
+    "balanceAfter": "Solde après",
+    "verifyNumber": "J’ai vérifié ce numéro",
+    "pinTitle": "Entrez votre PIN pour confirmer",
+    "abandonTitle": "Abandonner l’opération ?",
+    "abandonMessage": "Le montant saisi sera perdu.",
+    "abandonConfirm": "Abandonner",
+    "currentState": "État actuel : {{state}}",
+    "retryWarning": "Réessayer pourrait créer une seconde opération."
+  },
+
+  "result": {
+    "success": {
+      "title": "Opération réussie",
+      "description": "",
+      "primary": "Terminé",
+      "secondary": "Voir le détail"
+    },
+    "pending": {
+      "title": "Opération en cours",
+      "description": "Votre opération a été prise en compte et sera finalisée sous peu.",
+      "primary": "Terminé",
+      "secondary": "Suivre l’opération"
+    },
+    "failed": {
+      "title": "Opération refusée",
+      "description": "",
+      "primary": "Réessayer",
+      "secondary": "Fermer"
+    },
+    "uncertain": {
+      "title": "Nous n’avons pas pu confirmer cette opération",
+      "description": "Elle a peut-être été enregistrée. Vérifiez votre historique avant de réessayer.",
+      "primary": "Vérifier l’historique",
+      "secondary": "Réessayer"
+    }
+  },
+
+  "settings": {
+    "title": "Réglages",
+    "profile": "Profil",
+    "noName": "Nom non renseigné",
+    "noEmail": "E-mail inconnu",
+    "phone": "Téléphone",
+    "accountNumber": "Numéro de compte",
+    "notAvailable": "Indisponible",
+    "security": "Sécurité",
+    "biometrics": "Déverrouillage biométrique",
+    "biometricsHint": "Demandé au retour après 5 minutes d’inactivité.",
+    "biometricsUnavailable": "Aucune biométrie enregistrée sur cet appareil.",
+    "biometricsPrompt": "Déverrouillez Kora",
+    "changePin": "Changer le PIN",
+    "changePinUnavailable": "Le backend n’expose pas encore cette opération.",
+    "preferences": "Préférences",
+    "theme": "Thème",
+    "themeSystem": "Système",
+    "themeDark": "Sombre",
+    "themeLight": "Clair",
+    "language": "Langue",
+    "languageSystem": "Système",
+    "hideBalance": "Masquer le solde par défaut",
+    "haptics": "Retour haptique",
+    "hapticsHint": "Vibrations légères à l’appui et à la confirmation.",
+    "about": "À propos",
+    "version": "Version",
+    "terms": "Conditions d’utilisation",
+    "legalPending": "Bientôt disponible",
+    "privacy": "Confidentialité",
+    "session": "Session",
+    "signOut": "Se déconnecter",
+    "signOutTitle": "Se déconnecter ?",
+    "signOutMessage": "Vos données locales seront effacées. Aucune opération n’est perdue.",
+    "validationMode": "Mode validation"
+  },
+
+  "session": {
+    "expiredTitle": "Session expirée",
+    "expiredMessage": "Reconnectez-vous pour reprendre là où vous en étiez.",
+    "pinTitle": "Entrez votre PIN",
+    "signIn": "Se reconnecter",
+    "signOut": "Se déconnecter",
+    "lockedTitle": "Kora est verrouillée",
+    "unlock": "Déverrouiller"
+  },
+
+  "states": {
+    "INITIALIZED": { "label": "Initiée", "description": "Opération enregistrée" },
+    "AUTHORIZED": { "label": "Autorisée", "description": "Fonds réservés chez l’opérateur" },
+    "CAPTURED": { "label": "Capturée", "description": "Fonds prélevés" },
+    "COMPLETED": { "label": "Terminée", "description": "Opération finalisée" },
+    "SETTLEMENT_PENDING": { "label": "Règlement en cours", "description": "En attente de l’opérateur" },
+    "SETTLED": { "label": "Réglée", "description": "Règlement confirmé" },
+    "AUTHORIZATION_FAILED": { "label": "Autorisation refusée", "description": "L’opérateur a refusé l’opération" },
+    "CAPTURE_FAILED": { "label": "Prélèvement échoué", "description": "Le prélèvement n’a pas abouti" },
+    "SETTLEMENT_FAILED": { "label": "Règlement échoué", "description": "Le règlement n’a pas abouti" },
+    "FAILED": { "label": "Échouée", "description": "L’opération n’a pas pu être exécutée" },
+    "REVERSED": { "label": "Annulée", "description": "Opération contrepassée" }
+  },
+
+  "outcomes": {
+    "pending": "En cours",
+    "success": "Terminée",
+    "failed": "Échouée",
+    "reversed": "Annulée"
+  },
+
+  "txTypes": {
+    "CASH_IN": "Dépôt",
+    "CASH_OUT": "Retrait",
+    "P2P_TRANSFER": "Transfert"
+  },
+
+  "feedback": {
+    "technicalDetail": "Détail technique",
+    "hideDetail": "Masquer le détail",
+    "showDetailA11y": "Afficher le détail technique",
+    "offline": "Pas de connexion",
+    "clear": "Effacer"
+  },
+
+  "datetime": {
+    "today": "Aujourd’hui",
+    "yesterday": "Hier",
+    "justNow": "à l’instant",
+    "minutesAgo": "il y a {{count}} min",
+    "hoursAgo": "il y a {{count}} h",
+    "daysAgo": "il y a {{count}} j"
+  },
+
+  "errors": {
+    "VALIDATION": "Certaines informations sont incorrectes.",
+    "TOKEN_EXPIRED": "Votre session a expiré.",
+    "INVALID_PIN": "PIN incorrect.",
+    "INVALID_OTP": "Code incorrect ou expiré.",
+    "FORBIDDEN": "Vous n’avez pas accès à cette opération.",
+    "NOT_FOUND": "Ressource introuvable.",
+    "CONFLICT": "Cette ressource existe déjà.",
+    "BUSINESS_RULE": "L’opération n’a pas pu être effectuée.",
+    "SERVER": "Le service rencontre un incident.",
+    "UNAVAILABLE": "Service temporairement indisponible.",
+    "NETWORK": "Pas de connexion internet.",
+    "TIMEOUT": "Le serveur met trop de temps à répondre.",
+    "UNKNOWN": "Une erreur inattendue est survenue.",
+
+    "credentials": "E-mail ou PIN incorrect.",
+    "unavailableRetry": "Service temporairement indisponible. Réessayez dans un instant.",
+    "emailTaken": "Cet e-mail est déjà utilisé.",
+    "mailNotSent": "L’e-mail de vérification n’a pas pu être envoyé. Réessayez.",
+
+    "insufficientFunds": "Solde insuffisant pour cette opération.",
+    "selfTransfer": "Vous ne pouvez pas vous envoyer de l’argent.",
+    "currencyMismatch": "Devise incompatible avec votre compte.",
+    "accountBlocked": "Votre compte est bloqué. Contactez le support.",
+    "recipientSuspended": "Le compte du destinataire est suspendu.",
+    "accountSuspended": "Votre compte est suspendu.",
+    "stateTransition": "Cette opération ne peut plus être modifiée.",
+    "recipientUnknown": "Aucun compte Kora n’est associé à ce numéro.",
+    "accountNotFound": "Votre compte est introuvable. Contactez le support."
+  }
+}

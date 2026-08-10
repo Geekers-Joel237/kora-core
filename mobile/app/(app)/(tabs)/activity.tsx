@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { RefreshControl, StyleSheet, View } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import { router } from 'expo-router';
 
 import { IconButton } from '@/components/action';
@@ -11,6 +12,7 @@ import {
   ErrorState,
   OfflineBanner,
   SkeletonTransactionList,
+  useDelayedLoading,
 } from '@/components/feedback';
 import { Divider, Spacer, Text } from '@/components/primitives';
 import { FilterSheet } from '@/features/history/FilterSheet';
@@ -34,6 +36,7 @@ const FOOTER_SKELETONS = 3;
 const BADGE_SIZE = 18;
 
 export default function ActivityScreen() {
+  const { t } = useTranslation();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const offline = useNetwork((state) => state.offline);
@@ -42,6 +45,9 @@ export default function ActivityScreen() {
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const history = useHistoryInfinite(filters);
+  // §6.5 — aucun squelette sur une réponse de moins de 200 ms : un clignotement
+  // de gabarits se lit comme un défaut, pas comme un chargement.
+  const showSkeleton = useDelayedLoading(history.isPending);
 
   const { rows, stickyIndices } = useMemo(
     () => toHistoryRows(history.data?.pages ?? []),
@@ -94,13 +100,15 @@ export default function ActivityScreen() {
       <View style={{ paddingTop: insets.top }}>
         <OfflineBanner />
         <View style={styles.nav}>
-          <Text variant="titleLg">Activité</Text>
+          <Text variant="titleLg">{t('activity.title')}</Text>
           <View>
             <IconButton
               name="filter"
               onPress={() => setSheetOpen(true)}
               accessibilityLabel={
-                filterCount > 0 ? `Filtres, ${filterCount} actifs` : 'Filtrer l’historique'
+                filterCount > 0
+                  ? t('activity.filterActive', { count: filterCount })
+                  : t('activity.filter')
               }
               tint={filterCount > 0 ? theme.accent.primary : undefined}
               testID="open-filters"
@@ -137,19 +145,21 @@ export default function ActivityScreen() {
 
   function Body() {
     if (history.isPending) {
-      return (
+      return showSkeleton ? (
         <View style={styles.padded}>
           <Spacer size={4} />
           <SkeletonTransactionList count={INITIAL_SKELETONS} />
         </View>
+      ) : (
+        <View style={styles.padded} />
       );
     }
 
     if (history.isError && rows.length === 0) {
       return (
         <ErrorState
-          title="Historique indisponible"
-          description="Nous n’avons pas pu charger vos opérations."
+          title={t('activity.errorTitle')}
+          description={t('activity.errorDescription')}
           onRetry={() => void history.refetch()}
           error={history.error}
         />
@@ -160,17 +170,17 @@ export default function ActivityScreen() {
       return filtered ? (
         <EmptyState
           icon="search"
-          title="Aucun résultat"
-          description="Aucune opération ne correspond à ces filtres."
-          actionLabel="Réinitialiser les filtres"
+          title={t('activity.emptyFilteredTitle')}
+          description={t('activity.emptyFilteredDescription')}
+          actionLabel={t('activity.emptyFilteredAction')}
           onAction={() => setFilters(NO_FILTERS)}
         />
       ) : (
         <EmptyState
           icon="activity"
-          title="Aucune opération"
-          description="Votre première opération apparaîtra ici."
-          actionLabel="Faire un dépôt"
+          title={t('activity.emptyTitle')}
+          description={t('activity.emptyDescription')}
+          actionLabel={t('activity.emptyAction')}
           onAction={() => router.push('/deposit')}
         />
       );
@@ -218,7 +228,7 @@ function Separator({ leadingItem }: { leadingItem?: HistoryRow }) {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   nav: {
-    height: layout.navBarHeight,
+    minHeight: layout.navBarHeight,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',

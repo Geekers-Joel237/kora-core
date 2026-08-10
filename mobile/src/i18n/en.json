@@ -1,0 +1,359 @@
+{
+  "common": {
+    "continue": "Continue",
+    "cancel": "Cancel",
+    "close": "Close",
+    "confirm": "Confirm",
+    "retry": "Try again",
+    "done": "Done",
+    "back": "Back",
+    "next": "Next",
+    "skip": "Skip",
+    "start": "Get started",
+    "reset": "Reset",
+    "free": "Free",
+    "previousStep": "Previous step",
+    "goBack": "Go back"
+  },
+
+  "tabs": {
+    "home": "Home",
+    "activity": "Activity",
+    "settings": "Settings"
+  },
+
+  "onboarding": {
+    "slide1": {
+      "title": "Your money, under control",
+      "body": "Send, receive and track — in seconds."
+    },
+    "slide2": {
+      "title": "Every step, visible",
+      "body": "Follow your payments state by state, in real time."
+    },
+    "slide3": {
+      "title": "Secure by design",
+      "body": "PIN, two-factor authentication, hardware encryption."
+    }
+  },
+
+  "login": {
+    "title": "Welcome back",
+    "subtitle": "Sign in to access your wallet.",
+    "emailLabel": "Email address",
+    "emailPlaceholder": "you@example.com",
+    "emailInvalid": "Enter a valid email address.",
+    "createAccount": "Create an account",
+    "pinTitle": "Enter your PIN",
+    "backToEmail": "Back to email"
+  },
+
+  "register": {
+    "nameTitle": "What is your name?",
+    "nameLabel": "Full name",
+    "namePlaceholder": "Aminata Diallo",
+    "nameRequired": "Enter your full name.",
+    "emailTitle": "Your email address",
+    "emailSubtitle": "Your verification codes will be sent there.",
+    "emailInvalid": "Enter a valid address.",
+    "phoneTitle": "Your phone number",
+    "phoneSubtitle": "It will be used to receive money from other Kora users.",
+    "phoneInvalid": "Invalid country code or number.",
+    "pinChoose": "Choose a PIN",
+    "pinConfirm": "Confirm your PIN",
+    "pinHint": "Between {{min}} and {{max}} digits",
+    "pinConfirmHint": "Enter it a second time",
+    "pinLength": "The PIN must be between {{min}} and {{max}} digits.",
+    "pinMismatch": "The two PINs do not match."
+  },
+
+  "otp": {
+    "title": "Check your email",
+    "sentTo": "Code sent to {{email}}",
+    "expiresIn": "Expires in {{time}}",
+    "expired": "This code has expired. Request a new one.",
+    "lockedOut": "Too many attempts. Try again in {{time}}.",
+    "inputA11y": "{{count}}-digit verification code",
+    "openMailbox": "Open my mailbox",
+    "resend": "Resend the code",
+    "resendIn": "Resend in {{time}}"
+  },
+
+  "phone": {
+    "prefixLabel": "Code",
+    "numberLabel": "Number",
+    "numberPlaceholder": "0708091011",
+    "recents": "Recent",
+    "noNameLookup": "Kora cannot display the recipient’s name. Check the number carefully."
+  },
+
+  "home": {
+    "greeting": "Hello, {{name}}",
+    "greetingFallback": "there",
+    "greetingA11y": "Greeting — long press for validation mode",
+    "balanceErrorTitle": "Balance unavailable",
+    "balanceErrorDescription": "We could not retrieve your balance.",
+    "deposit": "Deposit",
+    "withdraw": "Withdraw",
+    "send": "Send",
+    "offlineActions": "Payments are unavailable while offline.",
+    "recentActivity": "Recent activity",
+    "seeAll": "See all",
+    "seeAllA11y": "See the full history",
+    "activityErrorTitle": "Activity unavailable",
+    "activityErrorDescription": "We could not load your latest payments.",
+    "emptyTitle": "Nothing here yet",
+    "emptyDescription": "Your first payment will appear here.",
+    "emptyAction": "Make a deposit",
+    "accountNumberCopied": "Account number copied",
+    "updatedAt": "Updated {{age}}"
+  },
+
+  "balance": {
+    "available": "Available balance",
+    "show": "Show balance",
+    "hide": "Hide balance",
+    "accountNumberA11y": "Account number {{number}}",
+    "remainingAfter": "Balance afterwards: {{amount}}"
+  },
+
+  "activity": {
+    "title": "Activity",
+    "filter": "Filter history",
+    "filterActive": "Filters, {{count}} active",
+    "errorTitle": "History unavailable",
+    "errorDescription": "We could not load your payments.",
+    "emptyFilteredTitle": "No results",
+    "emptyFilteredDescription": "No payment matches these filters.",
+    "emptyFilteredAction": "Reset filters",
+    "emptyTitle": "No payments",
+    "emptyDescription": "Your first payment will appear here.",
+    "emptyAction": "Make a deposit"
+  },
+
+  "filters": {
+    "title": "Filter",
+    "type": "Type",
+    "typeA11y": "Payment type",
+    "direction": "Direction",
+    "directionA11y": "Payment direction",
+    "period": "Period",
+    "state": "State",
+    "stateHint": "One state at a time — the server accepts no more.",
+    "showAllStates": "Show all {{count}} states",
+    "collapseStates": "Collapse",
+    "expandStatesA11y": "Show all states",
+    "collapseStatesA11y": "Collapse the state list",
+    "searching": "Searching…",
+    "resultCount_one": "{{count}} payment",
+    "resultCount_other": "{{count}} payments",
+    "apply": "Show",
+    "all": "All",
+    "deposits": "Deposits",
+    "withdrawals": "Withdrawals",
+    "transfers": "Transfers",
+    "inbound": "Incoming",
+    "outbound": "Outgoing",
+    "anyPeriod": "Any",
+    "custom": "Custom",
+    "days": "{{count}} d"
+  },
+
+  "calendar": {
+    "previousMonth": "Previous month",
+    "nextMonth": "Next month",
+    "chooseStart": "Choose a start date",
+    "chooseEnd": "From {{from}} — choose the end",
+    "range": "{{from}} → {{to}}"
+  },
+
+  "detail": {
+    "notFoundTitle": "Payment not found",
+    "notFoundDescription": "It no longer appears on the page it was opened from.",
+    "backToHistory": "Back to history",
+    "errorTitle": "Details unavailable",
+    "errorDescription": "We could not retrieve this payment.",
+    "noStateHistory": "No state history was returned for this payment.",
+    "liveTracking": "Live tracking — this screen updates on its own.",
+    "reference": "Ref.",
+    "referenceA11y": "Reference {{reference}}, tap to copy",
+    "referenceCopied": "Reference copied",
+    "copyReference": "Copy reference",
+    "type": "Type",
+    "method": "Method",
+    "direction": "Direction",
+    "rawState": "Raw state",
+    "inbound": "Incoming",
+    "outbound": "Outgoing"
+  },
+
+  "flow": {
+    "deposit": "Deposit",
+    "withdraw": "Withdraw",
+    "send": "Send",
+    "recipientTitle": "Who are you sending to?",
+    "methodTitle": "Which provider?",
+    "recipient": "Recipient",
+    "method": "Provider",
+    "fees": "Fees",
+    "totalCredited": "Total credited",
+    "totalDebited": "Total debited",
+    "balanceAfter": "Balance afterwards",
+    "verifyNumber": "I have checked this number",
+    "pinTitle": "Enter your PIN to confirm",
+    "abandonTitle": "Discard this payment?",
+    "abandonMessage": "The amount you entered will be lost.",
+    "abandonConfirm": "Discard",
+    "currentState": "Current state: {{state}}",
+    "retryWarning": "Trying again could create a second payment."
+  },
+
+  "result": {
+    "success": {
+      "title": "Payment successful",
+      "description": "",
+      "primary": "Done",
+      "secondary": "View details"
+    },
+    "pending": {
+      "title": "Payment in progress",
+      "description": "Your payment has been accepted and will be finalised shortly.",
+      "primary": "Done",
+      "secondary": "Track the payment"
+    },
+    "failed": {
+      "title": "Payment declined",
+      "description": "",
+      "primary": "Try again",
+      "secondary": "Close"
+    },
+    "uncertain": {
+      "title": "We could not confirm this payment",
+      "description": "It may have been recorded. Check your history before trying again.",
+      "primary": "Check history",
+      "secondary": "Try again"
+    }
+  },
+
+  "settings": {
+    "title": "Settings",
+    "profile": "Profile",
+    "noName": "No name recorded",
+    "noEmail": "Unknown email",
+    "phone": "Phone",
+    "accountNumber": "Account number",
+    "notAvailable": "Unavailable",
+    "security": "Security",
+    "biometrics": "Biometric unlock",
+    "biometricsHint": "Requested when returning after 5 minutes of inactivity.",
+    "biometricsUnavailable": "No biometrics enrolled on this device.",
+    "biometricsPrompt": "Unlock Kora",
+    "changePin": "Change PIN",
+    "changePinUnavailable": "The backend does not expose this operation yet.",
+    "preferences": "Preferences",
+    "theme": "Theme",
+    "themeSystem": "System",
+    "themeDark": "Dark",
+    "themeLight": "Light",
+    "language": "Language",
+    "languageSystem": "System",
+    "hideBalance": "Hide balance by default",
+    "haptics": "Haptic feedback",
+    "hapticsHint": "Light vibrations on tap and confirmation.",
+    "about": "About",
+    "version": "Version",
+    "terms": "Terms of use",
+    "legalPending": "Coming soon",
+    "privacy": "Privacy",
+    "session": "Session",
+    "signOut": "Sign out",
+    "signOutTitle": "Sign out?",
+    "signOutMessage": "Your local data will be erased. No payment is lost.",
+    "validationMode": "Validation mode"
+  },
+
+  "session": {
+    "expiredTitle": "Session expired",
+    "expiredMessage": "Sign in again to pick up where you left off.",
+    "pinTitle": "Enter your PIN",
+    "signIn": "Sign in again",
+    "signOut": "Sign out",
+    "lockedTitle": "Kora is locked",
+    "unlock": "Unlock"
+  },
+
+  "states": {
+    "INITIALIZED": { "label": "Initiated", "description": "Payment recorded" },
+    "AUTHORIZED": { "label": "Authorised", "description": "Funds reserved with the provider" },
+    "CAPTURED": { "label": "Captured", "description": "Funds taken" },
+    "COMPLETED": { "label": "Completed", "description": "Payment finalised" },
+    "SETTLEMENT_PENDING": { "label": "Settlement pending", "description": "Waiting for the provider" },
+    "SETTLED": { "label": "Settled", "description": "Settlement confirmed" },
+    "AUTHORIZATION_FAILED": { "label": "Authorisation declined", "description": "The provider declined the payment" },
+    "CAPTURE_FAILED": { "label": "Capture failed", "description": "The capture did not go through" },
+    "SETTLEMENT_FAILED": { "label": "Settlement failed", "description": "The settlement did not go through" },
+    "FAILED": { "label": "Failed", "description": "The payment could not be executed" },
+    "REVERSED": { "label": "Reversed", "description": "Payment reversed" }
+  },
+
+  "outcomes": {
+    "pending": "In progress",
+    "success": "Completed",
+    "failed": "Failed",
+    "reversed": "Reversed"
+  },
+
+  "txTypes": {
+    "CASH_IN": "Deposit",
+    "CASH_OUT": "Withdrawal",
+    "P2P_TRANSFER": "Transfer"
+  },
+
+  "feedback": {
+    "technicalDetail": "Technical detail",
+    "hideDetail": "Hide detail",
+    "showDetailA11y": "Show technical detail",
+    "offline": "No connection",
+    "clear": "Clear"
+  },
+
+  "datetime": {
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "justNow": "just now",
+    "minutesAgo": "{{count}} min ago",
+    "hoursAgo": "{{count}} h ago",
+    "daysAgo": "{{count}} d ago"
+  },
+
+  "errors": {
+    "VALIDATION": "Some information is incorrect.",
+    "TOKEN_EXPIRED": "Your session has expired.",
+    "INVALID_PIN": "Incorrect PIN.",
+    "INVALID_OTP": "Incorrect or expired code.",
+    "FORBIDDEN": "You do not have access to this operation.",
+    "NOT_FOUND": "Resource not found.",
+    "CONFLICT": "This resource already exists.",
+    "BUSINESS_RULE": "The payment could not be carried out.",
+    "SERVER": "The service is having an incident.",
+    "UNAVAILABLE": "Service temporarily unavailable.",
+    "NETWORK": "No internet connection.",
+    "TIMEOUT": "The server is taking too long to respond.",
+    "UNKNOWN": "An unexpected error occurred.",
+
+    "credentials": "Incorrect email or PIN.",
+    "unavailableRetry": "Service temporarily unavailable. Try again in a moment.",
+    "emailTaken": "This email is already in use.",
+    "mailNotSent": "The verification email could not be sent. Try again.",
+
+    "insufficientFunds": "Insufficient balance for this payment.",
+    "selfTransfer": "You cannot send money to yourself.",
+    "currencyMismatch": "Currency incompatible with your account.",
+    "accountBlocked": "Your account is blocked. Contact support.",
+    "recipientSuspended": "The recipient's account is suspended.",
+    "accountSuspended": "Your account is suspended.",
+    "stateTransition": "This payment can no longer be modified.",
+    "recipientUnknown": "No Kora account is linked to this number.",
+    "accountNotFound": "Your account could not be found. Contact support."
+  }
+}

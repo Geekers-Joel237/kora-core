@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -45,6 +46,7 @@ export function OtpInput({
 }: OtpInputProps) {
   const theme = useTheme();
   const shake = useShake();
+  const { t } = useTranslation();
   const inputRef = useRef<TextInput>(null);
   const [code, setCode] = useState('');
   const [focused, setFocused] = useState(false);
@@ -108,7 +110,7 @@ export function OtpInput({
         autoFocus={autoFocus}
         caretHidden
         style={styles.hiddenInput}
-        accessibilityLabel={`Code de vérification à ${length} chiffres`}
+        accessibilityLabel={t('otp.inputA11y', { count: length })}
         testID="otp-input"
       />
 
@@ -183,7 +185,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', justifyContent: 'center', gap: space[2] },
   cell: {
     width: CELL_WIDTH,
-    height: CELL_HEIGHT,
+    minHeight: CELL_HEIGHT,
     borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',

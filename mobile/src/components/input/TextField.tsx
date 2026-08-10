@@ -6,6 +6,7 @@ import { useShake } from '@/components/money/useShake';
 import { Spacer, Text } from '@/components/primitives';
 import {
   layout,
+  maxFontScale,
   radius,
   space,
   spring,
@@ -99,6 +100,8 @@ export function TextField({
           autoFocus={autoFocus}
           {...(onSubmitEditing && { onSubmitEditing, returnKeyType: 'next' as const })}
           accessibilityLabel={label}
+          // Sans plafond, un champ de 56 dp rogne son texte à 200 %.
+          maxFontSizeMultiplier={maxFontScale.bodyLg}
           {...(testID !== undefined && { testID })}
           style={[
             styles.input,

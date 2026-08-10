@@ -1,5 +1,5 @@
 import {
-  CREDENTIALS_MESSAGE,
+  credentialsMessage,
   loginErrorMessage,
   otpErrorMessage,
   registerErrorMessage,
@@ -23,8 +23,8 @@ describe('messages d’authentification — l’invariant de sécurité du lot',
     const unknownEmail = normalizeHttpError(404, { status: 404, detail: 'Customer not found' }, AUTH);
     const wrongPin = normalizeHttpError(401, { status: 401, detail: 'Invalid PIN' }, AUTH);
 
-    expect(loginErrorMessage(unknownEmail)).toBe(CREDENTIALS_MESSAGE);
-    expect(loginErrorMessage(wrongPin)).toBe(CREDENTIALS_MESSAGE);
+    expect(loginErrorMessage(unknownEmail)).toBe(credentialsMessage());
+    expect(loginErrorMessage(wrongPin)).toBe(credentialsMessage());
     expect(loginErrorMessage(unknownEmail)).toBe(loginErrorMessage(wrongPin));
   });
 

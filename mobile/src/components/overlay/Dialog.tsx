@@ -7,6 +7,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { useTranslation } from 'react-i18next';
+
 import { Button } from '@/components/action/Button';
 import { Text } from '@/components/primitives';
 import { radius, space, spring, timing, useReduceMotion, useTheme } from '@/theme';
@@ -40,10 +42,11 @@ export function Dialog({
   message,
   confirmLabel,
   onConfirm,
-  cancelLabel = 'Annuler',
+  cancelLabel,
   onCancel,
   destructive = false,
 }: DialogProps) {
+  const { t } = useTranslation();
   const theme = useTheme();
   const reduceMotion = useReduceMotion();
   const progress = useSharedValue(0);
@@ -97,7 +100,12 @@ export function Dialog({
               variant={destructive ? 'danger' : 'primary'}
               size="md"
             />
-            <Button label={cancelLabel} onPress={onCancel} variant="ghost" size="md" />
+            <Button
+              label={cancelLabel ?? t('common.cancel')}
+              onPress={onCancel}
+              variant="ghost"
+              size="md"
+            />
           </View>
         </Animated.View>
       </View>

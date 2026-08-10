@@ -52,6 +52,16 @@ export function areHapticsEnabled(): boolean {
   return isEnabled();
 }
 
+/**
+ * Relit la préférence depuis le stockage.
+ *
+ * Indispensable après une déconnexion : `kvClear()` efface la clé, mais la
+ * valeur mise en cache dans ce module survivrait au changement de compte.
+ */
+export function reloadHapticsPreference(): void {
+  enabled = null;
+}
+
 /** Réinitialise l'étranglement et le cache de préférence. Réservé aux tests. */
 export function __resetHaptics(): void {
   lastFiredAt = Number.NEGATIVE_INFINITY;

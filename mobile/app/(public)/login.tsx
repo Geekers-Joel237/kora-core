@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import { router } from 'expo-router';
 
 import { Button, IconButton } from '@/components/action';
@@ -15,6 +16,7 @@ import { space, useTheme } from '@/theme';
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function LoginScreen() {
+  const { t } = useTranslation();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
 
@@ -26,12 +28,12 @@ export default function LoginScreen() {
 
   const submitEmail = useCallback(() => {
     if (!EMAIL_PATTERN.test(email.trim())) {
-      setEmailError('Entrez une adresse e-mail valide.');
+      setEmailError(t('login.emailInvalid'));
       return;
     }
     setEmailError(null);
     setStep('pin');
-  }, [email]);
+  }, [email, t]);
 
   const submitPin = useCallback(
     async (rawPin: string) => {
@@ -59,7 +61,7 @@ export default function LoginScreen() {
           <IconButton
             name="back"
             onPress={() => setStep('email')}
-            accessibilityLabel="Revenir à l'e-mail"
+            accessibilityLabel={t('login.backToEmail')}
             testID="back-to-email"
           />
         )}
@@ -67,19 +69,19 @@ export default function LoginScreen() {
 
       {step === 'email' ? (
         <View style={styles.form}>
-          <Text variant="titleLg">Bon retour</Text>
+          <Text variant="titleLg">{t('login.title')}</Text>
           <Spacer size={2} />
           <Text variant="bodyMd" color="secondary">
-            Connectez-vous pour accéder à votre portefeuille.
+            {t('login.subtitle')}
           </Text>
 
           <Spacer size={8} />
 
           <TextField
-            label="Adresse e-mail"
+            label={t('login.emailLabel')}
             value={email}
             onChangeText={setEmail}
-            placeholder="vous@exemple.com"
+            placeholder={t('login.emailPlaceholder')}
             keyboardType="email-address"
             autoComplete="email"
             error={emailError}
@@ -89,11 +91,11 @@ export default function LoginScreen() {
           />
 
           <Spacer size={6} />
-          <Button label="Continuer" onPress={submitEmail} />
+          <Button label={t('common.continue')} onPress={submitEmail} />
 
           <Spacer size={4} />
           <Button
-            label="Créer un compte"
+            label={t('login.createAccount')}
             onPress={() => router.push('/register')}
             variant="ghost"
             size="md"
@@ -101,7 +103,7 @@ export default function LoginScreen() {
         </View>
       ) : (
         <PinPad
-          title="Entrez votre PIN"
+          title={t('login.pinTitle')}
           subtitle={email.trim()}
           onComplete={(pin) => void submitPin(pin)}
           error={pinError}

@@ -8,12 +8,18 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 
 import { Button, IconButton } from '@/components/action';
 import { StateTimeline, StatusChip } from '@/components/display';
-import { ErrorState, SkeletonTimeline, useToast } from '@/components/feedback';
+import {
+  ErrorState,
+  SkeletonTimeline,
+  useDelayedLoading,
+  useToast,
+} from '@/components/feedback';
 import { Amount } from '@/components/money';
 import { Divider, Icon, Pressable, Spacer, Surface, Text, type IconName } from '@/components/primitives';
 import { parseFilters } from '@/features/history/filters';
@@ -44,6 +50,7 @@ const REVEAL_DISTANCE = 12;
  * vide, même quand la requête met une seconde.
  */
 export default function TransactionDetailScreen() {
+  const { t } = useTranslation();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const toast = useToast();
@@ -64,10 +71,13 @@ export default function TransactionDetailScreen() {
   const copyReference = useCallback(async () => {
     if (!transaction) return;
     await Clipboard.setStringAsync(transaction.reference);
-    toast.show({ message: 'Référence copiée', icon: 'copy', tone: 'success' });
-  }, [transaction, toast]);
+    toast.show({ message: t('detail.referenceCopied'), icon: 'copy', tone: 'success' });
+  }, [transaction, toast, t]);
 
   const notFound = detail.isSuccess && detail.data === null && cached === null;
+  // §6.5 — le cache de la liste rend l'essentiel immédiatement ; le squelette
+  // n'a de sens que si la requête dépasse 200 ms.
+  const showSkeleton = useDelayedLoading(transaction === null);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bg.app }]}>
@@ -75,29 +85,33 @@ export default function TransactionDetailScreen() {
         <IconButton
           name="back"
           onPress={() => router.back()}
-          accessibilityLabel="Retour"
+          accessibilityLabel={t('common.back')}
           testID="detail-back"
         />
       </View>
 
       {notFound ? (
         <ErrorState
-          title="Opération introuvable"
-          description="Elle n’apparaît plus dans la page d’où elle a été ouverte."
+          title={t('detail.notFoundTitle')}
+          description={t('detail.notFoundDescription')}
           onRetry={() => router.back()}
-          retryLabel="Retour à l’historique"
+          retryLabel={t('detail.backToHistory')}
         />
       ) : detail.isError && !transaction ? (
         <ErrorState
-          title="Détail indisponible"
-          description="Nous n’avons pas pu récupérer cette opération."
+          title={t('detail.errorTitle')}
+          description={t('detail.errorDescription')}
           onRetry={() => void detail.refetch()}
           error={detail.error}
         />
       ) : !transaction ? (
         <View style={styles.content}>
-          <Spacer size={8} />
-          <SkeletonTimeline />
+          {showSkeleton && (
+            <>
+              <Spacer size={8} />
+              <SkeletonTimeline />
+            </>
+          )}
         </View>
       ) : (
         <ScrollView
@@ -173,7 +187,7 @@ export default function TransactionDetailScreen() {
                 <SkeletonTimeline />
               ) : (
                 <Text variant="bodySm" color="tertiary">
-                  Aucun historique d’état n’a été renvoyé pour cette opération.
+                  {t('detail.noStateHistory')}
                 </Text>
               )}
 
@@ -181,7 +195,7 @@ export default function TransactionDetailScreen() {
                 <>
                   <Spacer size={2} />
                   <Text variant="bodySm" color="tertiary">
-                    Suivi en direct — cet écran se met à jour tout seul.
+                    {t('detail.liveTracking')}
                   </Text>
                 </>
               )}
@@ -195,24 +209,37 @@ export default function TransactionDetailScreen() {
               <Pressable
                 onLongPress={() => void copyReference()}
                 onPress={() => void copyReference()}
-                haptic="tap"
+                // §3 — « Copie du numéro d'opération » appelle `select`.
+                haptic="select"
                 scale="card"
-                accessibilityLabel={`Référence ${transaction.reference}, appuyer pour copier`}
+                accessibilityLabel={t('detail.referenceA11y', {
+                  reference: transaction.reference,
+                })}
                 testID="copy-reference"
               >
-                <DetailRow label="Réf." value={transaction.reference} mono trailingIcon="copy" />
+                <DetailRow
+                  label={t('detail.reference')}
+                  value={transaction.reference}
+                  mono
+                  trailingIcon="copy"
+                />
               </Pressable>
               <Divider inset={4} />
-              <DetailRow label="Type" value={transactionTypeLabel(transaction.type)} />
-              <Divider inset={4} />
-              <DetailRow label="Moyen" value={paymentMethodLabel(transaction.paymentMethod)} />
+              <DetailRow label={t('detail.type')} value={transactionTypeLabel(transaction.type)} />
               <Divider inset={4} />
               <DetailRow
-                label="Sens"
-                value={transaction.direction === 'INBOUND' ? 'Entrant' : 'Sortant'}
+                label={t('detail.method')}
+                value={paymentMethodLabel(transaction.paymentMethod)}
               />
               <Divider inset={4} />
-              <DetailRow label="État brut" value={transaction.state} mono />
+              <DetailRow
+                label={t('detail.direction')}
+                value={
+                  transaction.direction === 'INBOUND' ? t('detail.inbound') : t('detail.outbound')
+                }
+              />
+              <Divider inset={4} />
+              <DetailRow label={t('detail.rawState')} value={transaction.state} mono />
             </Surface>
           </Reveal>
 
@@ -220,7 +247,7 @@ export default function TransactionDetailScreen() {
 
           <Reveal index={3} reduceMotion={reduceMotion}>
             <Button
-              label="Copier la référence"
+              label={t('detail.copyReference')}
               variant="secondary"
               icon="copy"
               onPress={() => void copyReference()}

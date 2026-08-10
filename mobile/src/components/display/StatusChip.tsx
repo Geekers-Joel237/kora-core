@@ -7,9 +7,10 @@ import Animated, {
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
+import { useTranslation } from 'react-i18next';
 
 import { Icon, Text } from '@/components/primitives';
-import { OUTCOME_LABELS, stateLabel } from '@/features/shared/labels';
+import { outcomeLabel, stateLabel } from '@/features/shared/labels';
 import { radius, space, useReduceMotion, useTheme } from '@/theme';
 import { outcomeOf, type OutcomeGroup } from '@/types/domain';
 import type { IconName } from '@/components/primitives';
@@ -44,9 +45,11 @@ export function StatusChip({
   detailed = false,
 }: StatusChipProps) {
   const theme = useTheme();
+  // Souscription au changement de langue : `stateLabel` lit i18next à l'appel.
+  useTranslation();
   const outcome = outcomeOf(state);
   const colors = theme.status[outcome];
-  const label = detailed ? stateLabel(state).label : OUTCOME_LABELS[outcome];
+  const label = detailed ? stateLabel(state).label : outcomeLabel(outcome);
 
   return (
     <View

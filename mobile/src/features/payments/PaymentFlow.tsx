@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import { router } from 'expo-router';
 
 import { ActionBar, Button, IconButton } from '@/components/action';
@@ -21,19 +22,14 @@ import {
   type FlowKind,
   type FlowStep,
 } from './flowStore';
-import { RESULT_COPY } from './messages';
+import { resultCopy } from './messages';
 import { usePendingPolling } from './usePendingPolling';
 import { useBlockBackWhileSubmitting, useSubmitPayment } from './useSubmitPayment';
-
-const TITLES: Record<FlowKind, string> = {
-  deposit: 'Déposer',
-  withdraw: 'Retirer',
-  send: 'Envoyer',
-};
 
 const QUICK_AMOUNTS = [5000, 10000, 25000];
 
 export function PaymentFlow({ kind, step }: { kind: FlowKind; step: FlowStep }) {
+  const { t } = useTranslation();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const flow = usePaymentFlow();
@@ -78,7 +74,9 @@ export function PaymentFlow({ kind, step }: { kind: FlowKind; step: FlowStep }) 
   const maxMinor = kind === 'deposit' ? undefined : balance.data?.balance.minor;
   const remaining =
     maxMinor !== undefined
-      ? `Solde après opération : ${formatMinorToString(Math.max(0, maxMinor - flow.amountMinor), flow.currency)}`
+      ? t('balance.remainingAfter', {
+          amount: formatMinorToString(Math.max(0, maxMinor - flow.amountMinor), flow.currency),
+        })
       : null;
 
   return (
@@ -90,13 +88,13 @@ export function PaymentFlow({ kind, step }: { kind: FlowKind; step: FlowStep }) 
           <IconButton
             name={index === 0 ? 'close' : 'back'}
             onPress={() => (index === 0 ? requestClose() : router.back())}
-            accessibilityLabel={index === 0 ? 'Fermer' : 'Étape précédente'}
+            accessibilityLabel={index === 0 ? t('common.close') : t('common.previousStep')}
             disabled={submitting}
             testID="flow-back"
           />
         )}
         {step !== 'result' && (
-          <Text variant="titleSm">{TITLES[kind]}</Text>
+          <Text variant="titleSm">{t(`flow.${kind}`)}</Text>
         )}
         <View style={styles.navSpacer} />
       </View>
@@ -107,7 +105,7 @@ export function PaymentFlow({ kind, step }: { kind: FlowKind; step: FlowStep }) 
           maxMinor={maxMinor}
           remaining={remaining}
           onNext={goNext}
-          nextLabel={kind === 'send' ? 'Continuer' : 'Continuer'}
+          nextLabel={t('common.continue')}
         />
       )}
       {step === 'method' && <MethodStep onNext={goNext} />}
@@ -127,14 +125,14 @@ export function PaymentFlow({ kind, step }: { kind: FlowKind; step: FlowStep }) 
 
       <Dialog
         visible={confirmExit}
-        title="Abandonner l’opération ?"
-        message="Le montant saisi sera perdu."
-        confirmLabel="Abandonner"
+        title={t('flow.abandonTitle')}
+        message={t('flow.abandonMessage')}
+        confirmLabel={t('flow.abandonConfirm')}
         onConfirm={() => {
           setConfirmExit(false);
           close();
         }}
-        cancelLabel="Continuer"
+        cancelLabel={t('common.continue')}
         onCancel={() => setConfirmExit(false)}
         destructive
       />
@@ -145,6 +143,7 @@ export function PaymentFlow({ kind, step }: { kind: FlowKind; step: FlowStep }) 
 // ─────────────────────────────────────────────────────────────── Étapes ─────
 
 function RecipientStep({ onNext }: { onNext: () => void }) {
+  const { t } = useTranslation();
   const flow = usePaymentFlow();
   const [prefix, setPrefix] = useState('+225');
   const [number, setNumber] = useState('');
@@ -155,7 +154,7 @@ function RecipientStep({ onNext }: { onNext: () => void }) {
 
   const submit = () => {
     if (!valid) {
-      setError('Indicatif ou numéro invalide.');
+      setError(t('register.phoneInvalid'));
       return;
     }
     flow.setRecipient(`${prefix}${number}`);
@@ -165,7 +164,7 @@ function RecipientStep({ onNext }: { onNext: () => void }) {
   return (
     <>
       <ScrollView contentContainerStyle={styles.body}>
-        <Text variant="titleLg">À qui envoyez-vous ?</Text>
+        <Text variant="titleLg">{t('flow.recipientTitle')}</Text>
         <Spacer size={6} />
         <PhoneField
           prefix={prefix}
@@ -184,7 +183,12 @@ function RecipientStep({ onNext }: { onNext: () => void }) {
         />
       </ScrollView>
       <ActionBar>
-        <Button label="Continuer" onPress={submit} disabled={!valid} testID="flow-next" />
+        <Button
+          label={t('common.continue')}
+          onPress={submit}
+          disabled={!valid}
+          testID="flow-next"
+        />
       </ActionBar>
     </>
   );
@@ -226,23 +230,30 @@ function AmountStep({
 }
 
 function MethodStep({ onNext }: { onNext: () => void }) {
+  const { t } = useTranslation();
   const flow = usePaymentFlow();
 
   return (
     <>
       <ScrollView contentContainerStyle={styles.body}>
-        <Text variant="titleLg">Quel opérateur ?</Text>
+        <Text variant="titleLg">{t('flow.methodTitle')}</Text>
         <Spacer size={6} />
         <MethodPicker value={flow.method} onChange={flow.setMethod} />
       </ScrollView>
       <ActionBar>
-        <Button label="Continuer" onPress={onNext} disabled={!flow.method} testID="flow-next" />
+        <Button
+          label={t('common.continue')}
+          onPress={onNext}
+          disabled={!flow.method}
+          testID="flow-next"
+        />
       </ActionBar>
     </>
   );
 }
 
 function ReviewStep({ kind, onNext }: { kind: FlowKind; onNext: () => void }) {
+  const { t } = useTranslation();
   const theme = useTheme();
   const flow = usePaymentFlow();
   const balance = useBalance();
@@ -271,7 +282,7 @@ function ReviewStep({ kind, onNext }: { kind: FlowKind; onNext: () => void }) {
           {isTransfer ? (
             <>
               <Text variant="labelMd" color="secondary">
-                Destinataire
+                {t('flow.recipient')}
               </Text>
               <Spacer size={2} />
               {/* Groupé par blocs de deux : c'est la seule vérification
@@ -283,7 +294,7 @@ function ReviewStep({ kind, onNext }: { kind: FlowKind; onNext: () => void }) {
           ) : (
             <>
               <Text variant="labelMd" color="secondary">
-                Opérateur
+                {t('flow.method')}
               </Text>
               <Spacer size={2} />
               <Text variant="titleMd">{paymentMethodLabel(flow.method ?? '')}</Text>
@@ -294,15 +305,15 @@ function ReviewStep({ kind, onNext }: { kind: FlowKind; onNext: () => void }) {
           <Divider />
           <Spacer size={5} />
 
-          <ReviewRow label="Frais" value="Gratuit" />
+          <ReviewRow label={t('flow.fees')} value={t('common.free')} />
           <Spacer size={3} />
           <ReviewRow
-            label={kind === 'deposit' ? 'Total crédité' : 'Total débité'}
+            label={kind === 'deposit' ? t('flow.totalCredited') : t('flow.totalDebited')}
             value={formatMinorToString(flow.amountMinor, flow.currency)}
           />
           <Spacer size={3} />
           <ReviewRow
-            label="Solde après"
+            label={t('flow.balanceAfter')}
             value={formatMinorToString(Math.max(0, after), flow.currency)}
           />
         </Surface>
@@ -316,7 +327,7 @@ function ReviewStep({ kind, onNext }: { kind: FlowKind; onNext: () => void }) {
               scale="card"
               accessibilityRole="checkbox"
               accessibilityState={{ checked: flow.verifiedRecipient }}
-              accessibilityLabel="J'ai vérifié ce numéro"
+              accessibilityLabel={t('flow.verifyNumber')}
               testID="verify-recipient"
               style={styles.checkboxRow}
             >
@@ -340,7 +351,7 @@ function ReviewStep({ kind, onNext }: { kind: FlowKind; onNext: () => void }) {
                 )}
               </View>
               <Text variant="bodyMd" style={styles.checkboxLabel}>
-                J’ai vérifié ce numéro
+                {t('flow.verifyNumber')}
               </Text>
             </Pressable>
           </>
@@ -349,7 +360,7 @@ function ReviewStep({ kind, onNext }: { kind: FlowKind; onNext: () => void }) {
 
       <ActionBar>
         <Button
-          label="Confirmer"
+          label={t('common.confirm')}
           onPress={onNext}
           disabled={isTransfer && !flow.verifiedRecipient}
           testID="flow-confirm"
@@ -379,11 +390,12 @@ function PinStep({
   submitting: boolean;
   onSubmit: (pin: string) => Promise<void>;
 }) {
+  const { t } = useTranslation();
   const flow = usePaymentFlow();
 
   return (
     <PinPad
-      title="Entrez votre PIN pour confirmer"
+      title={t('flow.pinTitle')}
       subtitle={formatMinorToString(flow.amountMinor, flow.currency)}
       onComplete={(pin) => void onSubmit(pin)}
       loading={submitting}
@@ -392,13 +404,14 @@ function PinStep({
 }
 
 function ResultStep({ kind, onClose }: { kind: FlowKind; onClose: () => void }) {
+  const { t } = useTranslation();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const reduceMotion = useReduceMotion();
   const flow = usePaymentFlow();
 
   const outcome = flow.outcome ?? 'failed';
-  const copy = RESULT_COPY[outcome];
+  const copy = resultCopy(outcome);
 
   // Sondage borné : contrat §6.4. Actif uniquement sur une issue « en cours ».
   const polledState = usePendingPolling(
@@ -467,7 +480,7 @@ function ResultStep({ kind, onClose }: { kind: FlowKind; onClose: () => void }) 
           <>
             <Spacer size={3} />
             <Text variant="bodySm" color="tertiary" align="center">
-              État actuel : {polledState}
+              {t('flow.currentState', { state: polledState })}
             </Text>
           </>
         )}
@@ -498,7 +511,7 @@ function ResultStep({ kind, onClose }: { kind: FlowKind; onClose: () => void }) 
             />
             <Spacer size={3} />
             <Text variant="bodySm" color="tertiary" align="center">
-              Réessayer pourrait créer une seconde opération.
+              {t('flow.retryWarning')}
             </Text>
             <Spacer size={2} />
             <Button

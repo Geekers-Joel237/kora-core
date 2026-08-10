@@ -5,6 +5,7 @@
  * vide ou non-JSON. Tous convergent ici vers un `KoraError` unique.
  */
 
+import { t } from '@/i18n';
 import type { ApiViolation } from '@/types/api';
 
 export type KoraErrorCode =
@@ -106,21 +107,15 @@ function codeForStatus(status: number, detail: string | undefined, tokenExpiry: 
   }
 }
 
-const DEFAULT_MESSAGES: Record<KoraErrorCode, string> = {
-  VALIDATION: 'Certaines informations sont incorrectes.',
-  TOKEN_EXPIRED: 'Votre session a expiré.',
-  INVALID_PIN: 'PIN incorrect.',
-  INVALID_OTP: 'Code incorrect ou expiré.',
-  FORBIDDEN: "Vous n'avez pas accès à cette opération.",
-  NOT_FOUND: 'Ressource introuvable.',
-  CONFLICT: 'Cette ressource existe déjà.',
-  BUSINESS_RULE: "L'opération n'a pas pu être effectuée.",
-  SERVER: 'Le service rencontre un incident.',
-  UNAVAILABLE: 'Service temporairement indisponible.',
-  NETWORK: 'Pas de connexion internet.',
-  TIMEOUT: 'Le serveur met trop de temps à répondre.',
-  UNKNOWN: 'Une erreur inattendue est survenue.',
-};
+/**
+ * Message par défaut d'un code d'erreur.
+ *
+ * Résolu **à l'appel**, jamais figé dans une table de module : la langue peut
+ * changer entre le chargement du module et l'affichage de l'erreur.
+ */
+function defaultMessage(code: KoraErrorCode): string {
+  return t(`errors.${code}`);
+}
 
 export interface NormalizeContext {
   /** Chemin appelé — détermine si l'issue peut être incertaine. */
@@ -158,7 +153,7 @@ export function normalizeHttpError(
   return {
     status,
     code,
-    message: detail ?? DEFAULT_MESSAGES[code],
+    message: detail ?? defaultMessage(code),
     ...(detail !== undefined && { detail }),
     ...(violations !== undefined && { violations }),
     raw: body,
@@ -177,7 +172,7 @@ export function normalizeTransportError(
   return {
     status: 0,
     code,
-    message: DEFAULT_MESSAGES[code],
+    message: defaultMessage(code),
     raw: cause,
     // Une lecture peut être reprise, une écriture monétaire jamais.
     isRetryable: !context.isMoneyMovement,

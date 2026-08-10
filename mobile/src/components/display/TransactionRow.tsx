@@ -1,9 +1,11 @@
 import { StyleSheet, View } from 'react-native';
 
+import { useTranslation } from 'react-i18next';
+
 import { Amount } from '@/components/money/Amount';
 import { Icon, Pressable, Text, type IconName } from '@/components/primitives';
 import { formatRowTimestamp } from '@/lib/datetime';
-import { paymentMethodLabel, transactionTypeLabel } from '@/features/shared/labels';
+import { outcomeLabel, paymentMethodLabel, transactionTypeLabel } from '@/features/shared/labels';
 import { layout, radius, space, useTheme } from '@/theme';
 import type { Transaction } from '@/types/domain';
 
@@ -30,6 +32,7 @@ const BADGE_SIZE = 44;
  */
 export function TransactionRow({ transaction, onPress }: TransactionRowProps) {
   const theme = useTheme();
+  useTranslation();
   const status = theme.status[transaction.outcome];
 
   // Le serveur masque déjà le numéro pour les P2P ; il vaut `null` pour les
@@ -78,11 +81,7 @@ export function TransactionRow({ transaction, onPress }: TransactionRowProps) {
         />
         {transaction.outcome !== 'success' && (
           <Text variant="labelSm" tint={status.fg}>
-            {transaction.outcome === 'pending'
-              ? 'En cours'
-              : transaction.outcome === 'failed'
-                ? 'Échouée'
-                : 'Annulée'}
+            {outcomeLabel(transaction.outcome)}
           </Text>
         )}
       </View>
@@ -106,7 +105,7 @@ export function TransactionRow({ transaction, onPress }: TransactionRowProps) {
 
 const styles = StyleSheet.create({
   row: {
-    height: layout.rowHeight,
+    minHeight: layout.rowHeight,
     flexDirection: 'row',
     alignItems: 'center',
     gap: space[3],

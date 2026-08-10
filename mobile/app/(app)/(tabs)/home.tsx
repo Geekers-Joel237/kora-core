@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback } from 'react';
 import { RefreshControl, StyleSheet, View } from 'react-native';
 import Animated, {
   Extrapolation,
@@ -8,6 +8,7 @@ import Animated, {
   useSharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import { router } from 'expo-router';
 
 import { ActionTile, IconButton } from '@/components/action';
@@ -17,17 +18,19 @@ import {
   ErrorState,
   OfflineBanner,
   SkeletonTransactionList,
+  useDelayedLoading,
   useToast,
 } from '@/components/feedback';
 import { Amount, BalanceHero } from '@/components/money';
 import { Divider, Pressable, Spacer, Text } from '@/components/primitives';
+import { devtoolsTrigger } from '@/devtools';
 import { useSession } from '@/features/auth/session';
 import { useRecentTransactions } from '@/features/history/hooks';
 import { useBalance } from '@/features/wallet/hooks';
 import { formatRelativeAge } from '@/lib/datetime';
 import { haptic } from '@/lib/haptics';
 import { useNetwork } from '@/lib/network';
-import { KvKey, kvGetBoolean, kvSetBoolean } from '@/lib/storage/kv';
+import { setBalanceHidden, usePreferences } from '@/lib/preferences';
 import { DEFAULT_CURRENCY } from '@/lib/money';
 import { layout, space, useTheme } from '@/theme';
 
@@ -36,6 +39,7 @@ const COLLAPSE_DISTANCE = 120;
 const COMPACT_APPEAR_AT = 60;
 
 export default function HomeScreen() {
+  const { t } = useTranslation();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const toast = useToast();
@@ -48,7 +52,12 @@ export default function HomeScreen() {
   const balance = useBalance();
   const history = useRecentTransactions();
 
-  const [hidden, setHidden] = useState(() => kvGetBoolean(KvKey.balanceHidden));
+  // §6.5 — un squelette n'apparaît qu'au-delà de 200 ms d'attente.
+  const showBalanceSkeleton = useDelayedLoading(balance.isPending);
+  const showHistorySkeleton = useDelayedLoading(history.isPending);
+
+  // Partagé avec les réglages : les deux commandes doivent rester d'accord.
+  const hidden = usePreferences((state) => state.balanceHidden);
 
   const scrollY = useSharedValue(0);
   const onScroll = useAnimatedScrollHandler((event) => {
@@ -60,12 +69,7 @@ export default function HomeScreen() {
     opacity: interpolate(scrollY.value, [0, COLLAPSE_DISTANCE], [1, 0], Extrapolation.CLAMP),
     transform: [
       {
-        scale: interpolate(
-          scrollY.value,
-          [0, COLLAPSE_DISTANCE],
-          [1, 0.92],
-          Extrapolation.CLAMP,
-        ),
+        scale: interpolate(scrollY.value, [0, COLLAPSE_DISTANCE], [1, 0.92], Extrapolation.CLAMP),
       },
     ],
   }));
@@ -90,11 +94,8 @@ export default function HomeScreen() {
   }));
 
   const toggleHidden = useCallback(() => {
-    setHidden((value) => {
-      kvSetBoolean(KvKey.balanceHidden, !value);
-      return !value;
-    });
-  }, []);
+    setBalanceHidden(!hidden);
+  }, [hidden]);
 
   const refresh = useCallback(() => {
     haptic.select();
@@ -103,8 +104,8 @@ export default function HomeScreen() {
   }, [balance, history]);
 
   const copyAccountNumber = useCallback(() => {
-    toast.show({ message: 'Numéro de compte copié', icon: 'copy', tone: 'success' });
-  }, [toast]);
+    toast.show({ message: t('home.accountNumberCopied'), icon: 'copy', tone: 'success' });
+  }, [toast, t]);
 
   const account = balance.data;
   const currency = account?.balance.currency ?? DEFAULT_CURRENCY;
@@ -114,7 +115,7 @@ export default function HomeScreen() {
   // l'utilisateur doit savoir que le chiffre n'est peut-être plus à jour.
   const staleLabel =
     offline && balance.dataUpdatedAt > 0
-      ? `Mis à jour ${formatRelativeAge(new Date(balance.dataUpdatedAt))}`
+      ? t('home.updatedAt', { age: formatRelativeAge(new Date(balance.dataUpdatedAt)) })
       : null;
 
   return (
@@ -123,9 +124,23 @@ export default function HomeScreen() {
         <OfflineBanner />
         <View style={styles.nav}>
           <View style={styles.navTitle}>
-            <Text variant="titleSm" numberOfLines={1}>
-              Bonjour, {profile.fullName?.split(' ')[0] ?? user?.email ?? 'vous'}
-            </Text>
+            {/* Déclencheur du mode validation — §2. Inerte en production :
+                `devtoolsTrigger` y est une paire de fonctions vides. */}
+            <Pressable
+              onLongPress={devtoolsTrigger.logoLongPress}
+              haptic="none"
+              scale="hero"
+              accessibilityLabel={t('home.greetingA11y')}
+            >
+              <Text variant="titleSm" numberOfLines={1}>
+                {t('home.greeting', {
+                  // Contrat §6.3 — sur un nouvel appareil, le nom est inconnu :
+                  // repli sur l'e-mail, jamais sur un nom fabriqué.
+                  name:
+                    profile.fullName?.split(' ')[0] ?? user?.email ?? t('home.greetingFallback'),
+                })}
+              </Text>
+            </Pressable>
             <Animated.View style={compactStyle}>
               {account && (
                 <Amount
@@ -140,7 +155,7 @@ export default function HomeScreen() {
           <IconButton
             name="settings"
             onPress={() => router.push('/settings')}
-            accessibilityLabel="Réglages"
+            accessibilityLabel={t('tabs.settings')}
             testID="open-settings"
           />
         </View>
@@ -166,8 +181,8 @@ export default function HomeScreen() {
         <Animated.View style={heroStyle}>
           {balance.isError && !account ? (
             <ErrorState
-              title="Solde indisponible"
-              description="Nous n'avons pas pu récupérer votre solde."
+              title={t('home.balanceErrorTitle')}
+              description={t('home.balanceErrorDescription')}
               onRetry={() => void balance.refetch()}
               error={balance.error}
               compact
@@ -180,7 +195,7 @@ export default function HomeScreen() {
               hidden={hidden}
               onToggleHidden={toggleHidden}
               onCopyAccountNumber={copyAccountNumber}
-              loading={balance.isPending}
+              loading={showBalanceSkeleton}
               staleLabel={staleLabel}
             />
           )}
@@ -191,7 +206,7 @@ export default function HomeScreen() {
         <View style={styles.actions}>
           <ActionTile
             icon="arrow-down-circle"
-            label="Déposer"
+            label={t('home.deposit')}
             index={0}
             disabled={offline}
             onPress={() => router.push('/deposit')}
@@ -199,7 +214,7 @@ export default function HomeScreen() {
           />
           <ActionTile
             icon="arrow-up-circle"
-            label="Retirer"
+            label={t('home.withdraw')}
             index={1}
             disabled={offline}
             onPress={() => router.push('/withdraw')}
@@ -207,7 +222,7 @@ export default function HomeScreen() {
           />
           <ActionTile
             icon="send"
-            label="Envoyer"
+            label={t('home.send')}
             index={2}
             disabled={offline}
             onPress={() => router.push('/send')}
@@ -219,7 +234,7 @@ export default function HomeScreen() {
           <>
             <Spacer size={3} />
             <Text variant="bodySm" color="tertiary" align="center">
-              Les opérations sont indisponibles hors connexion.
+              {t('home.offlineActions')}
             </Text>
           </>
         )}
@@ -227,16 +242,16 @@ export default function HomeScreen() {
         <Spacer size={8} />
 
         <View style={styles.sectionHeader}>
-          <Text variant="titleSm">Activité récente</Text>
+          <Text variant="titleSm">{t('home.recentActivity')}</Text>
           <Pressable
             onPress={() => router.push('/activity')}
             haptic="tap"
             scale="card"
-            accessibilityLabel="Voir tout l'historique"
+            accessibilityLabel={t('home.seeAllA11y')}
             testID="see-all"
           >
             <Text variant="labelMd" color="accent">
-              Tout voir
+              {t('home.seeAll')}
             </Text>
           </Pressable>
         </View>
@@ -250,13 +265,14 @@ export default function HomeScreen() {
 
   /** Isolé : sa frontière d'erreur est distincte de celle du solde. */
   function RecentActivity() {
-    if (history.isPending) return <SkeletonTransactionList count={5} />;
+    if (history.isPending)
+      return showHistorySkeleton ? <SkeletonTransactionList count={5} /> : null;
 
     if (history.isError) {
       return (
         <ErrorState
-          title="Activité indisponible"
-          description="Nous n'avons pas pu charger vos dernières opérations."
+          title={t('home.activityErrorTitle')}
+          description={t('home.activityErrorDescription')}
           onRetry={() => void history.refetch()}
           error={history.error}
           compact
@@ -270,9 +286,9 @@ export default function HomeScreen() {
       return (
         <EmptyState
           icon="activity"
-          title="Aucune opération pour l'instant"
-          description="Votre première opération apparaîtra ici."
-          actionLabel="Faire un dépôt"
+          title={t('home.emptyTitle')}
+          description={t('home.emptyDescription')}
+          actionLabel={t('home.emptyAction')}
           onAction={() => router.push('/deposit')}
           compact
         />
@@ -298,7 +314,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   nav: {
-    height: layout.navBarHeight,
+    minHeight: layout.navBarHeight,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',

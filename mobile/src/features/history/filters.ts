@@ -27,13 +27,8 @@ import type { HistoryFilters } from './api';
 export const PERIOD_PRESETS = ['7d', '30d', '90d'] as const;
 export type PeriodPreset = (typeof PERIOD_PRESETS)[number];
 
-const PRESET_DAYS: Record<PeriodPreset, number> = { '7d': 7, '30d': 30, '90d': 90 };
-
-export const PERIOD_LABELS: Record<PeriodPreset, string> = {
-  '7d': '7 j',
-  '30d': '30 j',
-  '90d': '90 j',
-};
+/** Nombre de jours de chaque fenêtre. Le libellé se compose à partir de là. */
+export const PERIOD_DAYS: Record<PeriodPreset, number> = { '7d': 7, '30d': 30, '90d': 90 };
 
 export interface ActiveFilters {
   type: TxType | null;
@@ -104,7 +99,7 @@ export function toHistoryQuery(
 
   if (filters.period) {
     // `- (n - 1)` : « 7 j » inclut aujourd'hui, sinon la fenêtre en couvre huit.
-    query.from = startOfLocalDay(shiftDays(now, -(PRESET_DAYS[filters.period] - 1)));
+    query.from = startOfLocalDay(shiftDays(now, -(PERIOD_DAYS[filters.period] - 1)));
   } else {
     if (filters.from) query.from = startOfLocalDay(filters.from);
     if (filters.to) query.to = endOfLocalDay(filters.to);

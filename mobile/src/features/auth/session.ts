@@ -2,6 +2,8 @@ import { create } from 'zustand';
 
 import { decodeAccessToken, isTokenExpired } from '@/lib/jwt';
 import { registerTokenProvider } from '@/lib/http';
+import { reloadPreferences } from '@/lib/preferences';
+import { discardQueryCache } from '@/lib/queryPersistence';
 import { KvKey, kvClear, kvGetString, kvSetString } from '@/lib/storage/kv';
 import { SecureKey, secureClear, secureGet, secureSet } from '@/lib/storage/secure';
 import { parseInstantOrEpoch } from '@/lib/datetime';
@@ -17,9 +19,23 @@ interface SessionState {
   /** Reconstitué localement : aucun endpoint de profil n'existe. Contrat §6.3. */
   profile: { fullName: string | null; phone: string | null };
 
+  /**
+   * Rafraîchissement définitivement échoué — `docs/05-screens.md` §8.1.
+   *
+   * **Le statut reste `authenticated`.** Éjecter vers l'écran de connexion
+   * détruirait la pile de navigation, et donc le parcours en cours : quelqu'un
+   * au récapitulatif d'un transfert de 50 000 F doit y revenir. Un panneau
+   * non bloquant remonte par-dessus l'écran, qui reste monté.
+   */
+  expired: boolean;
+  /** Écran à retrouver après reconnexion. */
+  resumePath: string | null;
+
   bootstrap: () => Promise<void>;
   adopt: (tokens: Tokens) => Promise<void>;
   rememberProfile: (profile: { fullName?: string; phone?: string; email?: string }) => void;
+  markExpired: (resumePath: string | null) => Promise<void>;
+  consumeResumePath: () => string | null;
   signOut: () => Promise<void>;
 }
 
@@ -64,6 +80,8 @@ export const useSession = create<SessionState>((set, get) => ({
   status: 'unknown',
   tokens: null,
   user: null,
+  expired: false,
+  resumePath: null,
   profile: {
     fullName: kvGetString(KvKey.profileFullName),
     phone: kvGetString(KvKey.profilePhone),
@@ -105,7 +123,28 @@ export const useSession = create<SessionState>((set, get) => ({
 
   adopt: async (tokens) => {
     await persist(tokens);
-    set({ status: 'authenticated', tokens, user: toUser(tokens.accessToken) });
+    set({
+      status: 'authenticated',
+      tokens,
+      user: toUser(tokens.accessToken),
+      expired: false,
+    });
+  },
+
+  /**
+   * Les jetons morts sont effacés, mais la session **n'est pas fermée** : le
+   * profil, la pile de navigation et le parcours en cours survivent.
+   */
+  markExpired: async (resumePath) => {
+    if (get().expired) return;
+    await secureClear();
+    set({ expired: true, resumePath, tokens: null });
+  },
+
+  consumeResumePath: () => {
+    const path = get().resumePath;
+    if (path !== null) set({ resumePath: null });
+    return path;
   },
 
   rememberProfile: ({ fullName, phone, email }) => {
@@ -130,7 +169,20 @@ export const useSession = create<SessionState>((set, get) => ({
   signOut: async () => {
     await secureClear();
     kvClear();
-    set({ status: 'anonymous', tokens: null, user: null, profile: { fullName: null, phone: null } });
+    // Les préférences vivaient dans le stockage qui vient d'être purgé : les
+    // laisser en mémoire ferait réapparaître les choix du compte précédent.
+    reloadPreferences();
+    // Contrat §6.5 — la déconnexion purge SecureStore, MMKV **et** le cache de
+    // requêtes. Un solde persisté survivant à la déconnexion serait une fuite.
+    discardQueryCache();
+    set({
+      status: 'anonymous',
+      tokens: null,
+      user: null,
+      expired: false,
+      resumePath: null,
+      profile: { fullName: null, phone: null },
+    });
   },
 }));
 
@@ -151,7 +203,13 @@ registerTokenProvider({
       refreshTokenExpiry: parseInstantOrEpoch(raw.refreshTokenExpiry),
     });
   },
+  /**
+   * ⚠️ **Pas de `signOut()` ici.** Le §8.1 de `docs/05-screens.md` interdit
+   * explicitement d'éjecter l'utilisateur en perdant son parcours. Le chemin de
+   * reprise est renseigné par `SessionExpiredSheet`, qui seul connaît la route
+   * courante.
+   */
   onSessionExpired: () => {
-    void useSession.getState().signOut();
+    void useSession.getState().markExpired(null);
   },
 });

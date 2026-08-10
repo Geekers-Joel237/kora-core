@@ -55,3 +55,33 @@ jest.mock('expo-haptics', () => ({
   ImpactFeedbackStyle: { Light: 'light', Medium: 'medium', Heavy: 'heavy' },
   NotificationFeedbackType: { Success: 'success', Warning: 'warning', Error: 'error' },
 }));
+
+/**
+ * `expo-localization` renvoie la langue de la machine de test. Sans ce mock,
+ * la suite passerait en anglais sur un poste anglophone et en français ailleurs
+ * — des assertions de texte deviendraient dépendantes de l'environnement.
+ *
+ * Le français est figé ici parce que c'est la langue par défaut du produit
+ * (NFR-60). La résolution `system` reste testée directement, sans couche
+ * native, par `resolveLanguage`.
+ */
+jest.mock('expo-localization', () => ({
+  getLocales: () => [{ languageTag: 'fr-FR', languageCode: 'fr' }],
+}));
+
+/** La biométrie est un module natif : absente en test, jamais disponible. */
+jest.mock('expo-local-authentication', () => ({
+  hasHardwareAsync: jest.fn(async () => false),
+  isEnrolledAsync: jest.fn(async () => false),
+  authenticateAsync: jest.fn(async () => ({ success: false })),
+}));
+
+/**
+ * `DevSettings` touche à un `NativeEventEmitter` inexistant en test et émet un
+ * avertissement à chaque appel. Le mode validation s'en sert pour l'entrée du
+ * menu développeur et le rechargement après bascule d'environnement.
+ */
+jest.mock('react-native/Libraries/Utilities/DevSettings', () => ({
+  addMenuItem: jest.fn(),
+  reload: jest.fn(),
+}));

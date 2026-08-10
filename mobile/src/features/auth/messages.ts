@@ -1,3 +1,4 @@
+import { t } from '@/i18n';
 import { isKoraError, type KoraError } from '@/lib/http';
 
 /**
@@ -14,46 +15,48 @@ import { isKoraError, type KoraError } from '@/lib/http';
  * L'application rend donc **exactement le même message** dans les deux cas.
  * Ne jamais « améliorer » ce comportement en le rendant plus précis.
  */
-export const CREDENTIALS_MESSAGE = 'E-mail ou PIN incorrect.';
+export function credentialsMessage(): string {
+  return t('errors.credentials');
+}
 
 export function loginErrorMessage(error: unknown): string {
-  if (!isKoraError(error)) return "Une erreur inattendue s'est produite.";
+  if (!isKoraError(error)) return t('errors.UNKNOWN');
 
   switch (error.status) {
     case 401:
     case 404:
-      return CREDENTIALS_MESSAGE;
+      return credentialsMessage();
     case 503:
-      return 'Service temporairement indisponible. Réessayez dans un instant.';
+      return t('errors.unavailableRetry');
     case 0:
-      return 'Pas de connexion internet.';
+      return t('errors.NETWORK');
     default:
       return error.message;
   }
 }
 
 export function otpErrorMessage(error: unknown): string {
-  if (!isKoraError(error)) return "Une erreur inattendue s'est produite.";
+  if (!isKoraError(error)) return t('errors.UNKNOWN');
 
   // Un OTP réutilisé, expiré ou faux produit le même `401` : le backend
   // supprime le code du magasin dès la première vérification réussie.
-  if (error.status === 401) return 'Code incorrect ou expiré.';
-  if (error.status === 0) return 'Pas de connexion internet.';
+  if (error.status === 401) return t('errors.INVALID_OTP');
+  if (error.status === 0) return t('errors.NETWORK');
   return error.message;
 }
 
 export function registerErrorMessage(error: unknown): string {
-  if (!isKoraError(error)) return "Une erreur inattendue s'est produite.";
+  if (!isKoraError(error)) return t('errors.UNKNOWN');
 
   switch (error.status) {
     case 409:
-      return 'Cet e-mail est déjà utilisé.';
+      return t('errors.emailTaken');
     case 400:
-      return 'Certaines informations sont incorrectes.';
+      return t('errors.VALIDATION');
     case 503:
-      return "L'e-mail de vérification n'a pas pu être envoyé. Réessayez.";
+      return t('errors.mailNotSent');
     case 0:
-      return 'Pas de connexion internet.';
+      return t('errors.NETWORK');
     default:
       return error.message;
   }
@@ -63,4 +66,13 @@ export function registerErrorMessage(error: unknown): string {
 export function violationField(error: unknown): string | null {
   if (!isKoraError(error)) return null;
   return (error as KoraError).violations?.[0]?.field ?? null;
+}
+
+/**
+ * Un `409` désigne toujours l'e-mail — c'est la seule contrainte d'unicité du
+ * backend. Le test sur le message rendu était fragile dès la traduction : il
+ * dépendait de la présence du mot « e-mail » dans une phrase française.
+ */
+export function isEmailConflict(error: unknown): boolean {
+  return (isKoraError(error) && error.status === 409) || violationField(error) === 'email';
 }

@@ -10,6 +10,13 @@ import * as Crypto from 'expo-crypto';
 
 import { env } from '@/lib/env';
 import { isKoraError, normalizeHttpError, normalizeTransportError } from './errors';
+import {
+  getHttpObserver,
+  getHttpSimulator,
+  maskHeaders,
+  maskSecrets,
+  type ObservedEvent,
+} from './instrumentation';
 import { getTokenProvider } from './session';
 import type { ApiTokensResponse } from '@/types/api';
 
@@ -46,8 +53,26 @@ export function newCorrelationId(): string {
 /** Alias explicite : une clé d'idempotence est un UUID v4, comme la corrélation. */
 export const newIdempotencyKey = newCorrelationId;
 
+/**
+ * URL de base effective — `docs/10-validation-mode.md` §6.
+ *
+ * Une surcharge persistée permet au mode validation de pointer vers un autre
+ * environnement sans recompiler. Elle est lue **à chaque requête** : changer
+ * d'environnement ne doit pas exiger de relancer le processus JavaScript pour
+ * prendre effet. En l'absence de surcharge, `env.apiUrl` fait foi.
+ */
+let apiBaseOverride: string | null = null;
+
+export function setApiBaseUrl(url: string | null): void {
+  apiBaseOverride = url && url.trim() !== '' ? url.trim().replace(/\/+$/, '') : null;
+}
+
+export function getApiBaseUrl(): string {
+  return apiBaseOverride ?? env.apiUrl;
+}
+
 function buildUrl(path: string, query?: RequestOptions['query']): string {
-  const url = `${env.apiUrl}${path}`;
+  const url = `${getApiBaseUrl()}${path}`;
   if (!query) return url;
 
   const params = new URLSearchParams();
@@ -155,9 +180,10 @@ async function executeOnce(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
 
+  const correlationId = newCorrelationId();
   const headers: Record<string, string> = {
     Accept: 'application/json',
-    'X-Correlation-Id': newCorrelationId(),
+    'X-Correlation-Id': correlationId,
   };
 
   if (options.body !== undefined) headers['Content-Type'] = 'application/json';
@@ -168,16 +194,67 @@ async function executeOnce(
     if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
   }
 
+  // ── Mode validation : journal et injection de défaillance ──
+  const observer = getHttpObserver();
+  const simulator = getHttpSimulator();
+  const startedAt = Date.now();
+
+  if (observer) {
+    observer.onRequest({
+      id: correlationId,
+      method,
+      path,
+      query: options.query,
+      correlationId,
+      // Masqués **avant** de sortir d'ici : le journal ne voit jamais de secret.
+      headers: maskHeaders(headers),
+      body: options.body === undefined ? undefined : maskSecrets(options.body),
+      startedAt,
+    });
+  }
+
+  const settle = (attempt: Attempt): Attempt => {
+    observer?.onResponse(correlationId, {
+      status: attempt.status,
+      body: attempt.body,
+      durationMs: Date.now() - startedAt,
+    });
+    return attempt;
+  };
+
+  let cutTimer: ReturnType<typeof setTimeout> | null = null;
+
   try {
+    if (simulator) {
+      const latency = simulator.latencyMs();
+      if (latency > 0) await wait(latency);
+
+      const forced = simulator.forcedResponse(path, method);
+      if (forced) {
+        return settle({ status: forced.status, body: forced.body, ok: false });
+      }
+
+      const cutAfter = simulator.abortAfterMs(path, method);
+      // La coupure passe par le même `AbortController` que l'expiration : le
+      // client voit exactement ce qu'il verrait sur un réseau qui tombe.
+      if (cutAfter !== null) cutTimer = setTimeout(() => controller.abort(), cutAfter);
+    }
+
     const response = await fetch(url, {
       method,
       headers,
       ...(options.body !== undefined && { body: JSON.stringify(options.body) }),
       signal: options.signal ?? controller.signal,
     });
-    return { status: response.status, body: await readBody(response), ok: response.ok };
+    return settle({ status: response.status, body: await readBody(response), ok: response.ok });
   } catch (cause) {
     const timedOut = controller.signal.aborted;
+    observer?.onResponse(correlationId, {
+      status: 0,
+      body: null,
+      durationMs: Date.now() - startedAt,
+      transportError: cause instanceof Error ? cause.message : String(cause),
+    });
     throw normalizeTransportError(cause, {
       path,
       isMoneyMovement: isMoneyMovement(path, method),
@@ -185,7 +262,12 @@ async function executeOnce(
     });
   } finally {
     clearTimeout(timeout);
+    if (cutTimer !== null) clearTimeout(cutTimer);
   }
+}
+
+function notify(event: ObservedEvent): void {
+  getHttpObserver()?.onEvent(event);
 }
 
 function backoffDelay(attempt: number): number {
@@ -241,7 +323,9 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     if (error.isAuthExpired && !refreshAttempted && options.auth !== false) {
       refreshAttempted = true;
       try {
+        notify('refresh');
         await refreshTokens();
+        notify('replay');
         continue; // rejeu unique, transparent pour l'utilisateur
       } catch {
         throw error;

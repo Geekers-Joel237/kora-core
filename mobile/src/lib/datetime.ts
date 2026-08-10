@@ -7,7 +7,8 @@
  */
 
 import { format, isToday, isYesterday, parseISO } from 'date-fns';
-import { fr } from 'date-fns/locale';
+
+import { dateLocale, t } from '@/i18n';
 
 /** Règle R2 — une date illisible ne fait pas planter un écran. */
 export function parseInstant(iso: string): Date | null {
@@ -75,27 +76,27 @@ export function isSameLocalDay(a: Date, b: Date): boolean {
 /** Borne de plage personnalisée : `6 août`, ou `6 août 2025` si autre année. */
 export function formatRangeBound(date: Date, reference: Date = new Date()): string {
   return date.getFullYear() === reference.getFullYear()
-    ? format(date, 'd MMM', { locale: fr })
-    : format(date, 'd MMM yyyy', { locale: fr });
+    ? format(date, 'd MMM', { locale: dateLocale() })
+    : format(date, 'd MMM yyyy', { locale: dateLocale() });
 }
 
 // ── Formats d'affichage — architecture §8.2 ──
 
 /** Ligne d'historique : `11:42` si aujourd'hui, sinon `6 août`. */
 export function formatRowTimestamp(date: Date): string {
-  return isToday(date) ? format(date, 'HH:mm') : format(date, 'd MMM', { locale: fr });
+  return isToday(date) ? format(date, 'HH:mm') : format(date, 'd MMM', { locale: dateLocale() });
 }
 
 /** En-tête de section : `Aujourd'hui`, `Hier`, ou `6 août 2026`. */
 export function formatSectionHeader(date: Date): string {
-  if (isToday(date)) return "Aujourd'hui";
-  if (isYesterday(date)) return 'Hier';
-  return format(date, 'd MMMM yyyy', { locale: fr });
+  if (isToday(date)) return t('datetime.today');
+  if (isYesterday(date)) return t('datetime.yesterday');
+  return format(date, 'd MMMM yyyy', { locale: dateLocale() });
 }
 
 /** Écran de détail : `6 août 2026, 11:42`. */
 export function formatDetailTimestamp(date: Date): string {
-  return format(date, "d MMMM yyyy, HH:mm", { locale: fr });
+  return format(date, 'd MMMM yyyy, HH:mm', { locale: dateLocale() });
 }
 
 /** Frise des états : `11:42:13`, à la seconde. */
@@ -111,11 +112,11 @@ export function dayKey(date: Date): string {
 /** « Mis à jour il y a X » sur les données de cache servies hors ligne. */
 export function formatRelativeAge(from: Date, now: Date = new Date()): string {
   const seconds = Math.max(0, Math.floor((now.getTime() - from.getTime()) / 1000));
-  if (seconds < 60) return "à l'instant";
+  if (seconds < 60) return t('datetime.justNow');
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `il y a ${minutes} min`;
+  if (minutes < 60) return t('datetime.minutesAgo', { count: minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `il y a ${hours} h`;
+  if (hours < 24) return t('datetime.hoursAgo', { count: hours });
   const days = Math.floor(hours / 24);
-  return `il y a ${days} j`;
+  return t('datetime.daysAgo', { count: days });
 }

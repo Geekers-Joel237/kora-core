@@ -62,7 +62,7 @@ export function SkeletonTimeline({ nodes = 4 }: { nodes?: number }) {
 
 const styles = StyleSheet.create({
   row: {
-    height: layout.rowHeight,
+    minHeight: layout.rowHeight,
     flexDirection: 'row',
     alignItems: 'center',
     gap: space[3],

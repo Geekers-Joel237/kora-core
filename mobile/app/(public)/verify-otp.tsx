@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import * as ScreenCapture from 'expo-screen-capture';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import { router } from 'expo-router';
 
 import { Button, IconButton } from '@/components/action';
@@ -28,9 +29,11 @@ const MAX_ATTEMPTS = 3;
 const LOCKOUT_S = 60;
 
 export default function VerifyOtpScreen() {
+  const { t } = useTranslation();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const adopt = useSession((state) => state.adopt);
+  const consumeResumePath = useSession((state) => state.consumeResumePath);
 
   const email = otpEmail();
   const origin = otpOrigin();
@@ -75,7 +78,10 @@ export default function VerifyOtpScreen() {
         const tokens = await verifyOtp(email, code);
         await adopt(tokens);
         endOtpFlow();
-        router.replace('/home');
+        // Reconnexion après expiration : retour **exact** à l'écran quitté,
+        // jamais à l'accueil — `docs/05-screens.md` §8.1.
+        const resume = consumeResumePath();
+        router.replace((resume ?? '/home') as '/home');
       } catch (cause) {
         const next = attempts + 1;
         setAttempts(next);
@@ -88,7 +94,7 @@ export default function VerifyOtpScreen() {
         setLoading(false);
       }
     },
-    [email, attempts, lockout, adopt],
+    [email, attempts, lockout, adopt, consumeResumePath],
   );
 
   /**
@@ -133,18 +139,18 @@ export default function VerifyOtpScreen() {
             endOtpFlow();
             router.back();
           }}
-          accessibilityLabel="Revenir en arrière"
+          accessibilityLabel={t('common.goBack')}
           testID="otp-back"
         />
       </View>
 
       <View style={styles.body}>
         <Text variant="titleLg" align="center">
-          Vérifiez votre e-mail
+          {t('otp.title')}
         </Text>
         <Spacer size={2} />
         <Text variant="bodyMd" color="secondary" align="center">
-          Code envoyé à {maskEmail(email)}
+          {t('otp.sentTo', { email: maskEmail(email) })}
         </Text>
 
         <Spacer size={8} />
@@ -159,15 +165,15 @@ export default function VerifyOtpScreen() {
 
         {locked ? (
           <Text variant="bodySm" tint={theme.status.failed.fg} align="center">
-            Trop de tentatives. Réessayez dans {formatSeconds(lockout)}.
+            {t('otp.lockedOut', { time: formatSeconds(lockout) })}
           </Text>
         ) : expired ? (
           <Text variant="bodySm" tint={theme.status.pending.fg} align="center">
-            Ce code a expiré. Demandez-en un nouveau.
+            {t('otp.expired')}
           </Text>
         ) : (
           <Text variant="bodySm" color="tertiary" align="center">
-            Expire dans {formatSeconds(remaining)}
+            {t('otp.expiresIn', { time: formatSeconds(remaining) })}
           </Text>
         )}
 
@@ -176,7 +182,7 @@ export default function VerifyOtpScreen() {
         {/* Essentiel : le code arrive par e-mail, pas par SMS. Sans ce bouton,
             l'utilisateur doit chercher son client mail lui-même. */}
         <Button
-          label="Ouvrir ma boîte mail"
+          label={t('otp.openMailbox')}
           onPress={() => void openMailbox()}
           variant="secondary"
           icon="send"
@@ -185,7 +191,11 @@ export default function VerifyOtpScreen() {
         <Spacer size={3} />
 
         <Button
-          label={cooldown > 0 ? `Renvoyer dans ${formatSeconds(cooldown)}` : 'Renvoyer le code'}
+          label={
+            cooldown > 0
+              ? t('otp.resendIn', { time: formatSeconds(cooldown) })
+              : t('otp.resend')
+          }
           onPress={() => void resend()}
           variant={expired ? 'primary' : 'ghost'}
           disabled={cooldown > 0 || loading}

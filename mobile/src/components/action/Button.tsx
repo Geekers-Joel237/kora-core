@@ -86,7 +86,10 @@ export function Button({
       style={[
         styles.base,
         {
-          height: layout.buttonHeight[size],
+          // `minHeight`, pas `height` : à 200 % de taille de police le
+          // libellé passe sur deux lignes et doit faire grandir le bouton,
+          // jamais être rogné — NFR d'accessibilité, `08-quality-bar.md`.
+          minHeight: layout.buttonHeight[size],
           backgroundColor: bg,
           borderRadius: radius.md,
           alignSelf: fullWidth ? 'stretch' : 'flex-start',

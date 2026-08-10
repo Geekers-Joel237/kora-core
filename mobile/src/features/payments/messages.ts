@@ -1,3 +1,4 @@
+import { t } from '@/i18n';
 import { isKoraError } from '@/lib/http';
 import type { FlowOutcome } from './flowStore';
 
@@ -12,36 +13,21 @@ interface Rule {
   status: number;
   /** Fragment recherché dans le `detail` du serveur, en minuscules. */
   match: string;
-  message: string;
+  /** Clé i18n — le message est résolu à l'affichage, pas au chargement. */
+  key: string;
 }
 
 const RULES: Rule[] = [
-  { status: 422, match: 'insufficient funds', message: 'Solde insuffisant pour cette opération.' },
-  { status: 422, match: 'self transfer', message: 'Vous ne pouvez pas vous envoyer de l’argent.' },
-  { status: 422, match: 'currency', message: 'Devise incompatible avec votre compte.' },
-  { status: 422, match: 'blocked', message: 'Votre compte est bloqué. Contactez le support.' },
-  {
-    status: 422,
-    match: 'recipient account is suspended',
-    message: 'Le compte du destinataire est suspendu.',
-  },
-  { status: 422, match: 'suspended', message: 'Votre compte est suspendu.' },
-  {
-    status: 422,
-    match: 'state transition',
-    message: 'Cette opération ne peut plus être modifiée.',
-  },
+  { status: 422, match: 'insufficient funds', key: 'errors.insufficientFunds' },
+  { status: 422, match: 'self transfer', key: 'errors.selfTransfer' },
+  { status: 422, match: 'currency', key: 'errors.currencyMismatch' },
+  { status: 422, match: 'blocked', key: 'errors.accountBlocked' },
+  { status: 422, match: 'recipient account is suspended', key: 'errors.recipientSuspended' },
+  { status: 422, match: 'suspended', key: 'errors.accountSuspended' },
+  { status: 422, match: 'state transition', key: 'errors.stateTransition' },
   // ⚠️ Un destinataire inconnu arrive en 404, pas en 422 — contrat §2.
-  {
-    status: 404,
-    match: 'no account found for phone',
-    message: 'Aucun compte Kora n’est associé à ce numéro.',
-  },
-  {
-    status: 404,
-    match: 'account not found',
-    message: 'Votre compte est introuvable. Contactez le support.',
-  },
+  { status: 404, match: 'no account found for phone', key: 'errors.recipientUnknown' },
+  { status: 404, match: 'account not found', key: 'errors.accountNotFound' },
 ];
 
 /**
@@ -50,14 +36,14 @@ const RULES: Rule[] = [
  * « Une erreur est survenue ».
  */
 export function paymentErrorMessage(error: unknown): string {
-  if (!isKoraError(error)) return 'Une erreur inattendue est survenue.';
+  if (!isKoraError(error)) return t('errors.UNKNOWN');
 
   const detail = (error.detail ?? '').toLowerCase();
   const rule = RULES.find((entry) => entry.status === error.status && detail.includes(entry.match));
-  if (rule) return rule.message;
+  if (rule) return t(rule.key);
 
-  if (error.code === 'INVALID_PIN') return 'PIN incorrect.';
-  if (error.status === 400) return 'Certaines informations sont incorrectes.';
+  if (error.code === 'INVALID_PIN') return t('errors.INVALID_PIN');
+  if (error.status === 400) return t('errors.VALIDATION');
 
   return error.detail ?? error.message;
 }
@@ -85,35 +71,25 @@ export function outcomeForState(outcome: 'pending' | 'success' | 'failed' | 'rev
   return 'failed';
 }
 
-export const RESULT_COPY: Record<
-  FlowOutcome,
-  { title: string; description: string; primary: string; secondary: string }
-> = {
-  success: {
-    title: 'Opération réussie',
-    description: '',
-    primary: 'Terminé',
-    secondary: 'Voir le détail',
-  },
-  pending: {
-    title: 'Opération en cours',
-    description:
-      'Votre opération a été prise en compte et sera finalisée sous peu.',
-    primary: 'Terminé',
-    secondary: 'Suivre l’opération',
-  },
-  failed: {
-    title: 'Opération refusée',
-    description: '',
-    primary: 'Réessayer',
-    secondary: 'Fermer',
-  },
-  uncertain: {
-    title: 'Nous n’avons pas pu confirmer cette opération',
-    description:
-      'Elle a peut-être été enregistrée. Vérifiez votre historique avant de réessayer.',
-    // ⚠️ L'action principale est la VÉRIFICATION, jamais le rejeu — contrat §6.1.
-    primary: 'Vérifier l’historique',
-    secondary: 'Réessayer',
-  },
-};
+export interface ResultCopy {
+  title: string;
+  description: string;
+  primary: string;
+  secondary: string;
+}
+
+/**
+ * Textes de l'écran de résultat — `docs/05-screens.md` §4.6.
+ *
+ * ⚠️ Sur une issue incertaine, l'action **principale** est la vérification de
+ * l'historique, jamais le rejeu : sans idempotence serveur, un rejeu peut
+ * débiter deux fois. Contrat §6.1.
+ */
+export function resultCopy(outcome: FlowOutcome): ResultCopy {
+  return {
+    title: t(`result.${outcome}.title`),
+    description: t(`result.${outcome}.description`),
+    primary: t(`result.${outcome}.primary`),
+    secondary: t(`result.${outcome}.secondary`),
+  };
+}

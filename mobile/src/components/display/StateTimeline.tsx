@@ -10,6 +10,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { useTranslation } from 'react-i18next';
+
 import { Text } from '@/components/primitives';
 import { stateLabel } from '@/features/shared/labels';
 import { formatTimelineTimestamp } from '@/lib/datetime';
@@ -76,6 +78,8 @@ function Node({
 
   const outcome = outcomeOf(transition.to);
   const failed = outcome === 'failed';
+  // Souscription au changement de langue — voir `features/shared/labels.ts`.
+  useTranslation();
   const { label, description } = stateLabel(transition.to);
 
   const color = failed ? theme.status.failed.fg : theme.accent.primary;

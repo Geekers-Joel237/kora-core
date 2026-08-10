@@ -60,7 +60,7 @@
     "android": "expo start --android --port 8090",
     "ios": "expo start --ios --port 8090",
     "web": "expo start --web --port 8090",
-    "export:android": "cross-env NODE_ENV=production expo export --platform android --output-dir dist",
+    "export:android": "cross-env NODE_ENV=production EXPO_PUBLIC_ENV=production expo export --platform android --output-dir dist",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings=0",
     "lint:fix": "eslint . --fix",
@@ -68,7 +68,10 @@
     "format:check": "prettier --check \"**/*.{ts,tsx,json,md}\"",
     "test": "jest",
     "test:watch": "jest --watch",
-    "verify": "npm run typecheck && npm run lint && npm run test"
+    "verify": "npm run typecheck && npm run lint && npm run test",
+    "audit:bundle": "node scripts/audit-bundle.mjs",
+    "audit:pinning": "node scripts/audit-pinning.mjs",
+    "audit": "npm run audit:pinning && npm run audit:bundle"
   },
   "jest": {
     "preset": "jest-expo",

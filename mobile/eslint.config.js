@@ -138,4 +138,39 @@ module.exports = [
     files: ['**/*.test.{ts,tsx}', 'jest.setup.ts'],
     rules: { 'no-restricted-syntax': 'off', '@typescript-eslint/no-explicit-any': 'off' },
   },
+
+  /**
+   * Outillage de build : plugins de configuration Expo, scripts d'audit,
+   * `metro.config.js`. Du CommonJS Node, hors de l'application — ni React, ni
+   * TypeScript, ni jetons de design.
+   */
+  {
+    files: ['plugins/**/*.js', 'metro.config.js'],
+    languageOptions: {
+      sourceType: 'commonjs',
+      globals: {
+        __dirname: 'readonly',
+        console: 'readonly',
+        module: 'writable',
+        process: 'readonly',
+        require: 'readonly',
+      },
+    },
+    rules: { 'no-restricted-syntax': 'off', 'no-console': 'off', 'no-undef': 'off' },
+  },
+
+  {
+    files: ['scripts/**/*.mjs'],
+    languageOptions: {
+      sourceType: 'module',
+      globals: { console: 'readonly', process: 'readonly' },
+    },
+    rules: { 'no-restricted-syntax': 'off', 'no-console': 'off', 'no-undef': 'off' },
+  },
+
+  {
+    files: ['plugins/**/__tests__/**/*.js'],
+    languageOptions: { globals: { describe: 'readonly', expect: 'readonly', it: 'readonly' } },
+    rules: { 'no-undef': 'off' },
+  },
 ];

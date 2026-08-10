@@ -1,8 +1,11 @@
 import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
+import { format } from 'date-fns';
 
 import { IconButton } from '@/components/action';
 import { Icon, Pressable, Text } from '@/components/primitives';
+import { dateLocale } from '@/i18n';
 import { dayKey, formatRangeBound } from '@/lib/datetime';
 import { layout, radius, space, useTheme } from '@/theme';
 
@@ -14,21 +17,12 @@ export interface DateRangePickerProps {
   maxDate?: Date;
 }
 
-const WEEKDAYS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
-const MONTHS = [
-  'janvier',
-  'février',
-  'mars',
-  'avril',
-  'mai',
-  'juin',
-  'juillet',
-  'août',
-  'septembre',
-  'octobre',
-  'novembre',
-  'décembre',
-];
+/**
+ * Les jours et les mois viennent de `date-fns`, jamais d'une table écrite ici :
+ * une liste figée en français resterait française en anglais, et la semaine
+ * française commence le lundi là où l'anglaise commence le dimanche.
+ */
+const WEEK_STARTS_MONDAY_OFFSET = 6;
 const CELL_SIZE = 40;
 const WEEK_LENGTH = 7;
 
@@ -45,8 +39,19 @@ const WEEK_LENGTH = 7;
  * on s'aperçoit qu'on a commencé par la mauvaise borne.
  */
 export function DateRangePicker({ from, to, onChange, maxDate }: DateRangePickerProps) {
+  const { t } = useTranslation();
   const theme = useTheme();
+  const locale = dateLocale();
   const ceiling = maxDate ?? new Date();
+
+  // Semaine du 5 janvier 2026 : un lundi. Sert uniquement d'axe de nommage.
+  const weekdays = useMemo(
+    () =>
+      Array.from({ length: WEEK_LENGTH }, (_, index) =>
+        format(new Date(2026, 0, 5 + index), 'EEEEE', { locale }),
+      ),
+    [locale],
+  );
 
   const [cursor, setCursor] = useState<Date>(() => {
     const anchor = from ?? ceiling;
@@ -73,7 +78,7 @@ export function DateRangePicker({ from, to, onChange, maxDate }: DateRangePicker
   const shiftMonth = (delta: number) =>
     setCursor((current) => new Date(current.getFullYear(), current.getMonth() + delta, 1));
 
-  const monthLabel = `${MONTHS[cursor.getMonth()] ?? ''} ${cursor.getFullYear()}`;
+  const monthLabel = format(cursor, 'LLLL yyyy', { locale });
   const nextDisabled =
     cursor.getFullYear() > ceiling.getFullYear() ||
     (cursor.getFullYear() === ceiling.getFullYear() && cursor.getMonth() >= ceiling.getMonth());
@@ -84,7 +89,7 @@ export function DateRangePicker({ from, to, onChange, maxDate }: DateRangePicker
         <IconButton
           name="chevron-left"
           onPress={() => shiftMonth(-1)}
-          accessibilityLabel="Mois précédent"
+          accessibilityLabel={t('calendar.previousMonth')}
           testID="calendar-prev"
         />
         <Text variant="labelMd">{monthLabel}</Text>
@@ -92,13 +97,13 @@ export function DateRangePicker({ from, to, onChange, maxDate }: DateRangePicker
           name="chevron-right"
           onPress={() => shiftMonth(1)}
           disabled={nextDisabled}
-          accessibilityLabel="Mois suivant"
+          accessibilityLabel={t('calendar.nextMonth')}
           testID="calendar-next"
         />
       </View>
 
       <View style={styles.week}>
-        {WEEKDAYS.map((weekday, index) => (
+        {weekdays.map((weekday, index) => (
           <View key={`${weekday}-${index}`} style={styles.cell}>
             <Text variant="labelSm" color="tertiary" align="center">
               {weekday}
@@ -160,10 +165,13 @@ export function DateRangePicker({ from, to, onChange, maxDate }: DateRangePicker
         <Icon name="calendar" size="xs" color={theme.text.tertiary} />
         <Text variant="bodySm" color="tertiary">
           {from === null
-            ? 'Choisissez une date de début'
+            ? t('calendar.chooseStart')
             : to === null
-              ? `Depuis le ${formatRangeBound(from, ceiling)} — choisissez la fin`
-              : `${formatRangeBound(from, ceiling)} → ${formatRangeBound(to, ceiling)}`}
+              ? t('calendar.chooseEnd', { from: formatRangeBound(from, ceiling) })
+              : t('calendar.range', {
+                  from: formatRangeBound(from, ceiling),
+                  to: formatRangeBound(to, ceiling),
+                })}
         </Text>
       </View>
     </View>
@@ -178,7 +186,7 @@ function buildMonthGrid(cursor: Date): (Date | null)[] {
   const year = cursor.getFullYear();
   const month = cursor.getMonth();
   const first = new Date(year, month, 1);
-  const leading = (first.getDay() + 6) % WEEK_LENGTH;
+  const leading = (first.getDay() + WEEK_STARTS_MONDAY_OFFSET) % WEEK_LENGTH;
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
   const cells: (Date | null)[] = Array.from({ length: leading }, () => null);

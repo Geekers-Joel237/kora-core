@@ -2,13 +2,14 @@ import { useCallback, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import { router } from 'expo-router';
 
 import { Button, IconButton } from '@/components/action';
 import { PinPad, TextField } from '@/components/input';
 import { Spacer, Text } from '@/components/primitives';
 import { register } from '@/features/auth/api';
-import { registerErrorMessage, violationField } from '@/features/auth/messages';
+import { isEmailConflict, registerErrorMessage } from '@/features/auth/messages';
 import { beginOtpFlow } from '@/features/auth/otpFlow';
 import { useSession } from '@/features/auth/session';
 import { radius, space, spring, stroke, useTheme } from '@/theme';
@@ -31,6 +32,7 @@ const PIN_MAX = 8;
 const PROGRESS_HEIGHT = 3;
 
 export default function RegisterScreen() {
+  const { t } = useTranslation();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const rememberProfile = useSession((state) => state.rememberProfile);
@@ -99,8 +101,9 @@ export default function RegisterScreen() {
         router.push('/verify-otp');
       } catch (error) {
         // `409` sur l'e-mail : retour direct à l'étape concernée, pas un
-        // message générique sur l'écran du PIN.
-        if (violationField(error) === 'email' || registerErrorMessage(error).includes('e-mail')) {
+        // message générique sur l'écran du PIN. Le test porte sur le statut,
+        // jamais sur le texte rendu — celui-ci change avec la langue.
+        if (isEmailConflict(error)) {
           setFirstPin(null);
           setStep('email');
           setFieldError(registerErrorMessage(error));
@@ -118,7 +121,7 @@ export default function RegisterScreen() {
   const handlePin = useCallback(
     (pin: string) => {
       if (pin.length < PIN_MIN || pin.length > PIN_MAX) {
-        setPinError(`Le PIN doit contenir entre ${PIN_MIN} et ${PIN_MAX} chiffres.`);
+        setPinError(t('register.pinLength', { min: PIN_MIN, max: PIN_MAX }));
         return;
       }
       if (firstPin === null) {
@@ -128,18 +131,23 @@ export default function RegisterScreen() {
       }
       if (pin !== firstPin) {
         setFirstPin(null);
-        setPinError('Les deux PIN ne correspondent pas.');
+        setPinError(t('register.pinMismatch'));
         return;
       }
       void submit(pin);
     },
-    [firstPin, submit],
+    [firstPin, submit, t],
   );
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bg.app }]}>
       <View style={[styles.nav, { paddingTop: insets.top + space[2] }]}>
-        <IconButton name="back" onPress={goBack} accessibilityLabel="Étape précédente" testID="register-back" />
+        <IconButton
+          name="back"
+          onPress={goBack}
+          accessibilityLabel={t('common.previousStep')}
+          testID="register-back"
+        />
       </View>
 
       <View style={[styles.progressTrack, { backgroundColor: theme.overlay.hairline }]}>
@@ -155,11 +163,11 @@ export default function RegisterScreen() {
       {step === 'pin' ? (
         <PinPad
           key={firstPin === null ? 'first' : 'confirm'}
-          title={firstPin === null ? 'Choisissez un PIN' : 'Confirmez votre PIN'}
+          title={firstPin === null ? t('register.pinChoose') : t('register.pinConfirm')}
           subtitle={
             firstPin === null
-              ? `Entre ${PIN_MIN} et ${PIN_MAX} chiffres`
-              : 'Saisissez-le une seconde fois'
+              ? t('register.pinHint', { min: PIN_MIN, max: PIN_MAX })
+              : t('register.pinConfirmHint')
           }
           onComplete={handlePin}
           error={pinError}
@@ -169,27 +177,27 @@ export default function RegisterScreen() {
         <View style={styles.form}>
           {step === 'name' && (
             <>
-              <Text variant="titleLg">Comment vous appelez-vous ?</Text>
+              <Text variant="titleLg">{t('register.nameTitle')}</Text>
               <Spacer size={8} />
               <TextField
-                label="Nom complet"
+                label={t('register.nameLabel')}
                 value={fullName}
                 onChangeText={setFullName}
-                placeholder="Aminata Diallo"
+                placeholder={t('register.namePlaceholder')}
                 autoCapitalize="words"
                 autoComplete="name"
                 error={fieldError}
                 onSubmitEditing={() =>
-                  advance('name', fullName.trim().length > 0, 'Entrez votre nom complet.')
+                  advance('name', fullName.trim().length > 0, t('register.nameRequired'))
                 }
                 autoFocus
                 testID="register-name"
               />
               <Spacer size={6} />
               <Button
-                label="Continuer"
+                label={t('common.continue')}
                 onPress={() =>
-                  advance('name', fullName.trim().length > 0, 'Entrez votre nom complet.')
+                  advance('name', fullName.trim().length > 0, t('register.nameRequired'))
                 }
               />
             </>
@@ -197,31 +205,31 @@ export default function RegisterScreen() {
 
           {step === 'email' && (
             <>
-              <Text variant="titleLg">Votre adresse e-mail</Text>
+              <Text variant="titleLg">{t('register.emailTitle')}</Text>
               <Spacer size={2} />
               <Text variant="bodyMd" color="secondary">
-                Vos codes de vérification y seront envoyés.
+                {t('register.emailSubtitle')}
               </Text>
               <Spacer size={8} />
               <TextField
-                label="Adresse e-mail"
+                label={t('login.emailLabel')}
                 value={email}
                 onChangeText={setEmail}
-                placeholder="vous@exemple.com"
+                placeholder={t('login.emailPlaceholder')}
                 keyboardType="email-address"
                 autoComplete="email"
                 error={fieldError}
                 onSubmitEditing={() =>
-                  advance('email', EMAIL_PATTERN.test(email.trim()), 'Entrez une adresse valide.')
+                  advance('email', EMAIL_PATTERN.test(email.trim()), t('register.emailInvalid'))
                 }
                 autoFocus
                 testID="register-email"
               />
               <Spacer size={6} />
               <Button
-                label="Continuer"
+                label={t('common.continue')}
                 onPress={() =>
-                  advance('email', EMAIL_PATTERN.test(email.trim()), 'Entrez une adresse valide.')
+                  advance('email', EMAIL_PATTERN.test(email.trim()), t('register.emailInvalid'))
                 }
               />
             </>
@@ -229,16 +237,16 @@ export default function RegisterScreen() {
 
           {step === 'phone' && (
             <>
-              <Text variant="titleLg">Votre numéro de téléphone</Text>
+              <Text variant="titleLg">{t('register.phoneTitle')}</Text>
               <Spacer size={2} />
               <Text variant="bodyMd" color="secondary">
-                {"Il servira à recevoir de l'argent d'autres utilisateurs Kora."}
+                {t('register.phoneSubtitle')}
               </Text>
               <Spacer size={8} />
               <View style={styles.phoneRow}>
                 <View style={styles.prefix}>
                   <TextField
-                    label="Indicatif"
+                    label={t('phone.prefixLabel')}
                     value={phonePrefix}
                     onChangeText={setPhonePrefix}
                     keyboardType="phone-pad"
@@ -247,10 +255,10 @@ export default function RegisterScreen() {
                 </View>
                 <View style={styles.number}>
                   <TextField
-                    label="Numéro"
+                    label={t('phone.numberLabel')}
                     value={phoneNumber}
                     onChangeText={(text) => setPhoneNumber(text.replace(/\D/g, ''))}
-                    placeholder="0708091011"
+                    placeholder={t('phone.numberPlaceholder')}
                     keyboardType="phone-pad"
                     autoComplete="tel"
                     error={fieldError}
@@ -261,12 +269,12 @@ export default function RegisterScreen() {
               </View>
               <Spacer size={6} />
               <Button
-                label="Continuer"
+                label={t('common.continue')}
                 onPress={() =>
                   advance(
                     'phone',
                     PREFIX_PATTERN.test(phonePrefix) && NUMBER_PATTERN.test(phoneNumber),
-                    'Indicatif ou numéro invalide.',
+                    t('register.phoneInvalid'),
                   )
                 }
               />

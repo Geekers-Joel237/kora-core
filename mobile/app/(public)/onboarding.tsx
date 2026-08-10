@@ -9,6 +9,7 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import { router } from 'expo-router';
 
 import { Button } from '@/components/action';
@@ -16,22 +17,11 @@ import { Icon, Spacer, Text, type IconName } from '@/components/primitives';
 import { KvKey, kvSetBoolean } from '@/lib/storage/kv';
 import { radius, space, spring, useTheme } from '@/theme';
 
-const SLIDES: { icon: IconName; title: string; body: string }[] = [
-  {
-    icon: 'shield',
-    title: 'Votre argent, sous contrôle',
-    body: 'Envoyez, recevez, suivez — en quelques secondes.',
-  },
-  {
-    icon: 'activity',
-    title: 'Chaque étape, visible',
-    body: 'Suivez vos opérations état par état, en temps réel.',
-  },
-  {
-    icon: 'lock',
-    title: 'Sécurisé par conception',
-    body: 'PIN, double authentification, chiffrement matériel.',
-  },
+/** Les textes vivent dans `src/i18n/` ; seule la structure reste ici. */
+const SLIDES: { key: 'slide1' | 'slide2' | 'slide3'; icon: IconName }[] = [
+  { key: 'slide1', icon: 'shield' },
+  { key: 'slide2', icon: 'activity' },
+  { key: 'slide3', icon: 'lock' },
 ];
 
 /** L'illustration se déplace à 0,4× la vitesse du texte. §2.1 */
@@ -42,6 +32,7 @@ const SWIPE_THRESHOLD_RATIO = 0.25;
 const ICON_BOX = 140;
 
 export default function OnboardingScreen() {
+  const { t } = useTranslation();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -89,14 +80,22 @@ export default function OnboardingScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.bg.app }]}>
       <View style={[styles.skip, { top: insets.top + space[2] }]}>
-        {!isLast && <Button label="Passer" onPress={finish} variant="ghost" size="sm" fullWidth={false} />}
+        {!isLast && (
+          <Button
+            label={t('common.skip')}
+            onPress={finish}
+            variant="ghost"
+            size="sm"
+            fullWidth={false}
+          />
+        )}
       </View>
 
       <GestureDetector gesture={pan}>
         <View style={styles.stage}>
           <Animated.View style={[styles.track, { width: width * SLIDES.length }, trackStyle]}>
             {SLIDES.map((slide) => (
-              <View key={slide.title} style={[styles.slide, { width }]}>
+              <View key={slide.key} style={[styles.slide, { width }]}>
                 <Animated.View
                   style={[
                     styles.iconBox,
@@ -109,11 +108,11 @@ export default function OnboardingScreen() {
 
                 <Spacer size={10} />
                 <Text variant="titleLg" align="center">
-                  {slide.title}
+                  {t(`onboarding.${slide.key}.title`)}
                 </Text>
                 <Spacer size={3} />
                 <Text variant="bodyLg" color="secondary" align="center">
-                  {slide.body}
+                  {t(`onboarding.${slide.key}.body`)}
                 </Text>
               </View>
             ))}
@@ -124,14 +123,14 @@ export default function OnboardingScreen() {
       <View style={[styles.footer, { paddingBottom: insets.bottom + space[6] }]}>
         <View style={styles.dots}>
           {SLIDES.map((slide, dotIndex) => (
-            <Dot key={slide.title} active={dotIndex === index} color={theme.accent.primary} />
+            <Dot key={slide.key} active={dotIndex === index} color={theme.accent.primary} />
           ))}
         </View>
 
         <Spacer size={6} />
 
         <Button
-          label={isLast ? 'Commencer' : 'Suivant'}
+          label={isLast ? t('common.start') : t('common.next')}
           onPress={() => (isLast ? finish() : goTo(index + 1))}
         />
       </View>

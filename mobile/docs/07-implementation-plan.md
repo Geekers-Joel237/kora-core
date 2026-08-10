@@ -89,26 +89,53 @@ L'ordre n'est pas négociable : les lots 2 et 3 construisent le socle visuel et 
 
 ---
 
-## Lot 1bis — Mode validation
+## Lot 1bis — Mode validation ✅
 
-**Objectif** : rendre le backend observable. Écrit tôt parce qu'il sert à tous les lots suivants.
+**Objectif** : rendre le backend observable. Écrit tôt parce qu'il sert à tous les lots suivants — *et écrit en dernier, ce qui a coûté exactement ce que l'introduction annonçait.*
 
-- [ ] `src/devtools/` avec `DEV_MODE`, import dynamique, exclusion au secouage
-- [ ] Ouverture par secousse et par appui long sur le logo
-- [ ] **Inspecteur réseau** — 200 entrées, détail requête/réponse, `rawPin` masqué
-- [ ] `Copier en cURL` sur chaque entrée
-- [ ] Signaux visuels : erreur, lenteur, rafraîchissement de jeton, rejeu
-- [ ] Bascule d'environnement avec purge des jetons et test de connectivité
-- [ ] Inspecteur de session — claims décodés, compte à rebours d'expiration, actions d'invalidation
-- [ ] Simulation client : latence forcée, coupure réseau, statut de réponse imposé
+- [x] `src/devtools/` avec `DEV_MODE`, import dynamique, exclusion au secouage — *fait au lot 8, vérifié et corrigé au lot 10*
+- [x] Ouverture par secousse et par appui long sur le logo — *plus l'appui triple sur la version ; la secousse passe par le menu développeur, voir ci-dessous*
+- [x] **Inspecteur réseau** — 200 entrées, détail requête/réponse, `rawPin` masqué
+- [x] `Copier en cURL` sur chaque entrée
+- [x] Signaux visuels : erreur, lenteur, rafraîchissement de jeton, rejeu
+- [x] Bascule d'environnement avec purge des jetons et test de connectivité
+- [x] Inspecteur de session — claims décodés, compte à rebours d'expiration, actions d'invalidation
+- [x] Simulation client : latence forcée, coupure réseau, statut de réponse imposé
 
-Reporté après le lot 8 : détecteur de dérive de contrat, inspecteur de transactions, journal de scénarios.
+Le détecteur de dérive de contrat, l'inspecteur de transactions et le journal de scénarios ont été faits au lot 8. Le panneau compte désormais **huit onglets**.
 
-**Vérification** :
-- L'inspecteur capture un parcours d'authentification complet, PIN masqué partout
-- Le `cURL` copié rejoue l'appel à l'identique depuis un terminal
-- Le changement d'environnement purge bien SecureStore et le cache
-- Le bundle de production ne contient aucun module de `src/devtools/`
+**Vérification** — **340 tests**, toutes passées (33 de plus qu'au lot 10) :
+
+- **`rawPin` est masqué sans exception**, y compris imbriqué et dans un tableau ; les jetons aussi. Vérifié sur une vraie requête traversant le client HTTP, pas seulement sur la fonction de masquage
+- L'en-tête `Authorization` garde son schéma lisible et perd sa valeur
+- Le `cURL` produit deux fois le même texte pour le même appel — sans ordre stable, comparer deux copies devient un exercice de patience
+- Le rejeu n'est proposé que sur un `GET` — jamais sur un `POST`, de paiement ou non
+- Les quatre signaux du §3 se déclenchent aux bons seuils, et **le rafraîchissement de jeton est observé de bout en bout** : un `401`, un rafraîchissement, un rejeu, deux entrées marquées
+- Le journal est plafonné à 200 entrées, en tampon circulaire
+- Une coupure réseau armée sur `/payments/` produit une **issue incertaine** et **une seule requête**
+- Une réponse imposée se désarme après usage, et ne touche pas les chemins non ciblés
+- La bascule d'environnement écrit l'URL **après** la purge — l'écrire avant la ferait emporter par `kvClear()`
+- Le test de connectivité rapporte un échec HTTP comme une absence de serveur, sans lever
+- `npm run audit:bundle` : **0 module de `src/devtools/`** dans le bundle de production, malgré les onze fichiers ajoutés
+
+**Trois obstacles rencontrés :**
+
+| Obstacle | Résolution |
+|---|---|
+| **L'inspecteur réseau et le simulateur doivent vivre dans `lib/http`, qui ne doit rien savoir de `src/devtools`** — sous peine de ramener le panneau entier dans le bundle de production | `lib/http/instrumentation.ts` expose deux emplacements vides ; les devtools s'y branchent. Exactement le motif de `registerTokenProvider`, et la flèche de dépendance ne s'inverse jamais |
+| **Un branchement par `useEffect` manque le parcours d'authentification.** Les effets d'un enfant se déclenchent avant ceux de son parent, et le portail de session émet son `/auth/refresh` depuis un effet | `initDevtools()` est appelé au **chargement du module racine**, à côté de la réhydratation du cache. L'hôte est monté à la racine et non sous `(app)` : le panneau est atteignable depuis l'écran de connexion, où se joue le scénario 1 |
+| **La secousse exigerait `expo-sensors`**, l'accéléromètre en continu et une reconstruction native | La secousse ouvre nativement le menu développeur de React Native : `DevSettings.addMenuItem` y ajoute une entrée Kora. Un appui de plus, zéro dépendance. `CONTOURNEMENT(indéterminé)`. Les deux autres déclencheurs — appui long sur la salutation d'accueil, appui triple sur le numéro de version — sont exacts |
+
+**Deux choix structurants :**
+
+| Point | Décision |
+|---|---|
+| **Le masquage vit dans le code de production, pas dans les devtools** | Le §3 exige `rawPin` masqué « sans exception, même en développement ». Le confier au panneau reviendrait à parier qu'on n'oubliera jamais : une entrée enregistrée avant masquage serait en clair. `lib/http` masque **avant** que l'entrée n'existe, et le panneau n'a jamais vu un PIN |
+| **Le `cURL` copié n'est pas rejouable tel quel sur un appel porteur d'un secret** | `rawPin` y vaut `****`, le Bearer aussi. C'est la contrepartie assumée de la règle précédente : l'opérateur remplace les `****` à la main. La `Vérification` du plan disait « rejoue l'appel à l'identique » — c'est incompatible avec le §3, et c'est le §3 qui gagne |
+
+**Le journal réseau n'est jamais persisté.** Ces charges utiles ont beau être masquées, elles décrivent l'activité financière de quelqu'un : elles restent en mémoire, plafonnées, et disparaissent avec le processus.
+
+**Bundle** : 4,67 Mo, inchangé — le mode validation n'y entre pas.
 
 ---
 
@@ -370,57 +397,164 @@ Le lot le plus long et le plus risqué.
 
 ---
 
-## Lot 8 — Historique et détail
+## Lot 8 — Historique et détail ✅
 
-- [ ] `FlashList` avec groupement par jour et en-têtes collants
-- [ ] Défilement infini, `size=20`, déclenchement à 80 %
-- [ ] Panneau de filtres en `Sheet`, application en direct
-- [ ] Sérialisation des dates en ISO-8601 UTC
-- [ ] Écran de détail avec `StateTimeline` animée
-- [ ] Transition partagée liste → détail — ou son repli imposé
-- [ ] Copie de la référence par appui long
-- [ ] Sondage sur les opérations en cours
-- [ ] **Devtools** : inspecteur de transactions — états bruts, durées inter-états, suivi forcé à 2 s
-- [ ] **Devtools** : détecteur de dérive contre `/v3/api-docs`
-- [ ] **Devtools** : journal de scénarios, export Markdown
+- [x] `FlashList` avec groupement par jour et en-têtes collants
+- [x] Défilement infini, `size=20`, déclenchement à 80 %
+- [x] Panneau de filtres en `Sheet`, application en direct
+- [x] Sérialisation des dates en ISO-8601 UTC
+- [x] Écran de détail avec `StateTimeline` animée
+- [x] Transition partagée liste → détail — **repli imposé**, voir ci-dessous
+- [x] Copie de la référence par appui long
+- [x] Sondage sur les opérations en cours
+- [x] **Devtools** : inspecteur de transactions — états bruts, durées inter-états, suivi forcé à 2 s
+- [x] **Devtools** : détecteur de dérive contre `/v3/api-docs`
+- [x] **Devtools** : journal de scénarios, export Markdown
+- [x] **En plus** : hôte de panneau à onglets, faute d'existence du lot 1bis
 
-**Vérification** :
-- 200 lignes défilent à 60 fps sur l'appareil socle
-- Les filtres combinés produisent la bonne requête, dates comprises
-- Une opération en cours voit sa frise se compléter en direct
-- La transition partagée ne produit aucune image fixe
+**Vérification** — **242 tests**, toutes passées (36 de plus qu'au lot 7) :
+
+- Une journée à cheval sur deux pages ne produit **qu'un seul en-tête** — le suivi du dernier jour émis traverse les pages
+- La page d'origine est transportée sur chaque ligne jusqu'à l'écran de détail — contrat §6.7
+- L'aller-retour de sérialisation conserve la sélection ; les bornes reviennent **ramenées au jour**
+- Une valeur inconnue (`t=CRYPTO_SWAP`, `s=REFUNDED`) est ignorée, jamais propagée au serveur — règle R2
+- « 7 j » démarre sept journées pleines avant aujourd'hui **inclus**, pas 168 heures en arrière
+- La pagination demande `size=20` puis `page=1`, et s'arrête sur `hasNext=false`
+- Le détecteur de dérive classe correctement les six catégories du §5 de `10-validation-mode.md`, descend dans `stateHistory[]`, accepte `integer` là où l'app attend un nombre, et **constate un document illisible sans lever**
+- Les durées inter-états trient avant de soustraire — aucun delta négatif
+- L'export Markdown produit le tableau de synthèse et le détail attendus par `09-api-evolution.md` §7
+
+**Trois obstacles rencontrés :**
+
+| Obstacle | Résolution |
+|---|---|
+| **Les transitions d'élément partagé sont indisponibles.** Reanimated 4.5.1 les garde derrière le drapeau statique `ENABLE_SHARED_ELEMENT_TRANSITIONS`, à `false` (`lib/module/featureFlags/staticFeatureFlags.js`), et elles restent expérimentales sur la nouvelle architecture — la seule que Reanimated 4 supporte | Repli **assumé et animé** : chaque bloc du détail monte de 12 dp avec 60 ms de décalage. Pas une absence d'animation, une continuité obtenue autrement. `CONTOURNEMENT(indéterminé)` |
+| **Une borne de date recalculée à chaque rendu fabrique une clé de requête neuve à chaque rendu**, donc un rechargement en boucle de l'historique filtré | La clé porte la **sélection** (`serializeFilters`), pas les bornes résolues. `toHistoryQuery` ne s'exécute que dans le `queryFn`, à granularité du jour |
+| **L'hôte du panneau devtools relève du lot 1bis, non implémenté** — les trois inspecteurs du lot 8 n'avaient nulle part où vivre | Construction de `DevtoolsPanel` (4 onglets) et de `DevtoolsHost` (montage `lazy` gardé par `DEV_MODE`). Les déclencheurs — secousse, appui long sur le logo, triple appui sur la version — restent au lot 1bis ; une entrée provisoire figure dans les réglages |
+
+**Deux choix structurants :**
+
+| Point | Décision |
+|---|---|
+| **Le filtre d'état est un choix unique parmi les onze états concrets** | `TransactionFilter.state` n'accepte qu'une valeur — contrat §6.8. Filtrer une famille localement fausserait le total **et** la pagination. Les familles restent le mode d'affichage. Drapeau `API_CAPABILITIES.multiStateFilter` |
+| **L'écran de détail affiche deux sources superposées** | Le cache de la liste donne montant, contrepartie et date **immédiatement** ; le rejeu de la page d'origine avec `detail=true` apporte l'historique d'états. L'écran ne s'ouvre jamais sur un squelette vide alors que l'app connaît déjà l'essentiel |
+
+**Sur le détecteur de dérive** : les schémas de réponse sont résolus en **suivant le `$ref`** déclaré dans la réponse `200`, jamais en devinant un nom de schéma. springdoc les nomme d'après les classes Java ; toute table de noms attendus serait fausse au premier renommage backend.
+
+**Bundle** : 6,3 Mo. L'encadré `NFR-23` du lot 5 reste d'actualité.
+
+**Non vérifié ici** : les 60 fps sur 200 lignes et la complétion en direct d'une frise. Les deux exigent l'appareil socle et un backend produisant des transitions réelles — c'est précisément ce que l'inspecteur de transactions sert à observer.
 
 ---
 
-## Lot 9 — Réglages, i18n, finition
+## Lot 9 — Réglages, i18n, finition ✅
 
-- [ ] Écran de profil, données reconstruites selon le contrat §6.3
-- [ ] Bascules de thème, de langue, de masquage par défaut
-- [ ] Biométrie *(P1)*
-- [ ] Déconnexion avec purge intégrale
-- [ ] `fr.json` et `en.json` complets — **zéro chaîne en dur**
-- [ ] Libellés d'accessibilité sur tout élément interactif
-- [ ] Support de la mise à l'échelle des polices jusqu'à 200 %
-- [ ] `OfflineBanner` avec seuil de 2 s
-- [ ] Gestion de la session expirée par `Sheet`, avec retour à l'écran quitté
-- [ ] Occultation dans le sélecteur d'applications
+- [x] Écran de profil, données reconstruites selon le contrat §6.3
+- [x] Bascules de thème, de langue, de masquage par défaut
+- [x] Biométrie *(P1)*
+- [x] Déconnexion avec purge intégrale
+- [x] `fr.json` et `en.json` complets — **zéro chaîne en dur**
+- [x] Libellés d'accessibilité sur tout élément interactif
+- [x] Support de la mise à l'échelle des polices jusqu'à 200 %
+- [x] `OfflineBanner` avec seuil de 2 s *(déjà en place au lot 3)*
+- [x] Gestion de la session expirée par `Sheet`, avec retour à l'écran quitté
+- [x] Occultation dans le sélecteur d'applications — **garantie inégale selon la plateforme**, voir ci-dessous
+- [x] **En plus** : `Toggle` du design system, verrou au retour au premier plan
 
-**Vérification** :
-- Le basculement de langue ne laisse apparaître aucune chaîne non traduite
-- À 200 % de taille de police, aucun montant n'est tronqué
-- Une session expirée pendant un parcours ramène exactement à l'étape quittée
+**Vérification** — **278 tests**, toutes passées (36 de plus qu'au lot 8) :
+
+- **Les deux catalogues sont structurellement identiques** : aucune clé française sans traduction anglaise, aucune clé anglaise orpheline, aucune chaîne vide non intentionnelle, **et les mêmes variables d'interpolation des deux côtés** — une clé `{{count}}` d'un côté et `{{n}}` de l'autre passerait tous les autres contrôles
+- La bascule de langue traduit aussi ce qui vit **hors des composants** : libellés d'états, messages d'erreur HTTP, en-têtes de date
+- Un état inconnu reste affiché en clair dans les deux langues — règle R2
+- `system` suit l'appareil, ramène `fr-CI` et `fr_CI` à `fr`, et **replie sur le français, jamais sur l'anglais**
+- Corps, libellés et mono montent à 200 % ; les tailles d'affichage sont plafonnées à 130 % — c'est ce plafond qui empêche un montant d'être tronqué
+- Une session expirée **conserve le statut `authenticated`** : le parcours n'est pas démonté
+- Deux `401` concurrents ne réécrivent pas le chemin de reprise ; celui-ci n'est consommé qu'une fois
+- La biométrie ne verrouille jamais quand le matériel manque, et une empreinte retirée depuis l'installation **libère** un verrou déjà posé
+- Le profil se reconstitue depuis ses trois sources, et se replie sur l'e-mail sans jamais fabriquer de nom
+- Aucun `<Pressable>` de l'application n'est dépourvu de rôle ou de libellé d'accessibilité
+
+**Trois obstacles rencontrés :**
+
+| Obstacle | Résolution |
+|---|---|
+| **`onSessionExpired` appelait `signOut()`**, ce que le §8.1 de `05-screens.md` interdit explicitement : éjecter vers l'écran de connexion détruit la pile, donc le parcours | La session porte désormais un drapeau `expired` **sans changer de statut**. `SessionExpiredSheet` capture la route courante — `lib/http` ne doit rien savoir de la navigation — et `verify-otp` y revient au lieu de l'accueil |
+| **`expo-localization` renvoie la langue de la machine de test.** La suite passait en anglais et 18 assertions de texte tombaient | Mock `fr-FR` dans `jest.setup.ts`. La résolution `system` reste testée pour de vrai, sans couche native, par `resolveLanguage` |
+| **L'occultation dans le sélecteur d'applications n'a pas la même force sur les deux plateformes.** Sur iOS, l'instantané est pris par le système au moment de la désactivation : un rendu JavaScript déclenché par `AppState` peut arriver après | `PrivacyShield` couvre l'écran dès l'état `inactive`. Sur Android, `FLAG_SECURE` neutralise déjà la vignette. Sur iOS, la garantie stricte exigerait une vue native posée sur `applicationWillResignActive`. `CONTOURNEMENT(indéterminé)` — à trancher au lot 10, profilage sur appareil à l'appui |
+
+**Trois choix structurants :**
+
+| Point | Décision |
+|---|---|
+| **Les libellés métier lisent i18next à l'appel, pas au chargement du module** | Une table `const STATE_LABELS = {…}` figée à l'import resterait dans la langue de démarrage. En contrepartie, tout composant qui les rend doit appeler `useTranslation()` — même sans utiliser le `t` renvoyé — pour se re-rendre au changement de langue. La règle est écrite en tête de `features/shared/labels.ts` |
+| **Les noms de mois et de jours viennent de `date-fns`, pas d'une table** | Une liste écrite en français resterait française en anglais. Et la semaine française commence le lundi là où l'anglaise commence le dimanche : `DateRangePicker` dérive ses en-têtes d'une semaine de référence, avec la locale active |
+| **`Toggle` est écrit, pas repris du `Switch` de React Native** | Celui-ci se peint aux couleurs du système sur Android et ignore les jetons du §2. Un réglage qui ne ressemble pas au reste saute aux yeux précisément là où l'utilisateur compare des lignes entre elles |
+
+**Un défaut réel corrigé dans du code des lots 3, 5 et 6** : `height` fixe sur `Button`, `TransactionRow`, les barres de navigation et les cellules d'OTP. À 200 % de taille de police, un libellé passé sur deux lignes était rogné. Remplacé par `minHeight` ; `TextField` a reçu le plafond de mise à l'échelle qui lui manquait.
+
+**Le masquage du solde se règle à deux endroits** — l'œil de la carte héros et la ligne des réglages. Chacun lisait MMKV dans son propre `useState` : l'accueil, monté en permanence par la barre d'onglets, gardait la valeur lue au lancement. Les deux passent maintenant par `lib/preferences.ts`.
+
+**Le mode validation reste en français.** C'est un outil interne, pas un écran produit : le traduire alourdirait les catalogues de clés que personne ne lira dans une autre langue.
+
+**Bundle** : 6,5 Mo. L'encadré `NFR-23` du lot 5 reste d'actualité.
+
+**Non vérifié ici** : le rendu réel à 200 % sur l'appareil socle, et la vignette du sélecteur d'applications sur iOS. Les deux exigent l'appareil.
 
 ---
 
-## Lot 10 — Durcissement
+## Lot 10 — Durcissement ✅ *(sauf ce qui exige l'appareil)*
 
-- [ ] Suppression de `console.*` en production
-- [ ] Épinglage de certificat
-- [ ] Passage complet de `08-quality-bar.md`
-- [ ] Profilage sur l'appareil socle
-- [ ] Analyse du bundle, cible < 4 Mo
-- [ ] Parcours Maestro de bout en bout
-- [ ] Audit d'accessibilité
+- [x] Suppression de `console.*` en production — *déjà en place au lot 0 ; vérifié et documenté*
+- [x] Épinglage de certificat — **mécanisme en place, inactif faute d'empreintes**, voir ci-dessous
+- [x] Passage complet de `08-quality-bar.md` — *les 108 lignes relevées, une par une*
+- [x] Analyse du bundle — *`npm run audit:bundle`. Cible de 4 Mo **dépassée** (4,67 Mo) : arbitrage `NFR-23` ci-dessous*
+- [ ] Profilage sur l'appareil socle — **exige le matériel**
+- [ ] Parcours Maestro de bout en bout — **jamais écrit**
+- [ ] Audit d'accessibilité — *partiel : contraste, libellés, mise à l'échelle et hauteurs sont vérifiés automatiquement. L'audit au lecteur d'écran exige l'appareil*
+
+**Vérification** — **307 tests**, toutes passées (8 de plus qu'au lot 9), plus deux audits de build :
+
+```
+npm run audit:bundle    modules empaquetés 2 976 · bundle 4,67 Mo · modules devtools 0
+npm run audit:pinning   mécanisme en place, INACTIF (aucune empreinte configurée)
+```
+
+- La surface publique du substitut de production est comparée à celle du module réel : une divergence ne se verrait qu'en production, à l'exécution
+- La règle R1 est vérifiée par inspection de la base de code, plus seulement par relecture
+- Aucun `<Pressable>` sans libellé ni rôle d'accessibilité, aucune hauteur fixe sur un conteneur de texte, aucun appel à `/test/**`, aucune écriture de PIN dans un magasin
+- Le cache persisté restitue le solde **et son instant de mise à jour** après un démarrage à froid ; un cache de plus de 24 h est jeté, pas affiché
+- Le plugin d'épinglage refuse une empreinte mal formée, une empreinte unique, un doublon, une URL en guise de domaine
+
+**Quatre défauts réels trouvés par l'audit, tous corrigés :**
+
+| Défaut | Portée |
+|---|---|
+| **Les onze modules de `src/devtools/` étaient dans le bundle de production.** Mesuré, pas supposé : sources map à l'appui | Violation directe de `10-validation-mode.md` §12. Une garde à l'exécution ne suffit pas — Metro construit son graphe à partir de la sortie de Babel, avant minification, donc un `import()` gardé reste une arête du graphe. Corrigé par une redirection de résolution vers un substitut inerte, et **vérifié par un script** |
+| **`useDelayedLoading` était écrit et testé, mais utilisé nulle part.** Tout squelette apparaissait immédiatement | Violation de `03-motion-and-feel.md` §6.5 : une réponse de 80 ms produisait un clignotement de gabarits. Câblé sur l'accueil, l'activité et le détail |
+| **Le cache de requêtes n'était pas persisté.** « Réhydraté avant tout appel réseau » et « consultable hors ligne » étaient faux après un démarrage à froid | L'accueil s'ouvrait vide en mode avion. Persistance MMKV écrite à la main — synchrone, donc réhydratable **avant le premier rendu**, ce que le paquet officiel ne permet pas |
+| **L'haptique n'était désactivable nulle part.** L'API existait depuis le lot 3, sans interface | Ligne §2 de la barre de qualité. Interrupteur ajouté aux réglages. Écart de table corrigé au passage : la copie de référence appelait `tap` là où `03-motion-and-feel.md` §3 impose `select` |
+
+**Deux choix structurants :**
+
+| Point | Décision |
+|---|---|
+| **L'épinglage est déclaratif, sans module natif** | Android par `network_security_config.xml`, iOS par `NSPinnedDomains`. Le système applique alors l'épinglage à **toutes** les connexions, y compris celles des bibliothèques tierces — ce qu'un client HTTP épinglé côté JavaScript ne fait pas. Les constructions sont pures et testées ; le plugin exige **au moins deux empreintes**, service et secours : une seule transforme un incident de certificat en panne du parc installé |
+| **Le cache persisté ne contient que le solde et l'historique** | Deux domaines déjà masqués par le serveur. Rien d'autre n'est écrit, et la déconnexion le purge. Un cache de plus de 24 h est jeté : un solde de la veille présenté comme courant est pire que pas de solde |
+
+**Arbitrage `NFR-23`, ouvert depuis le lot 0** : le bundle pèse 4,67 Mo de JavaScript minifié pour un budget de 4 Mo. Le socle non applicatif en représentait déjà 3,7 Mo au lot 0, sans une ligne de code produit — l'application n'ajoute que ~0,97 Mo. Proposition portée en `08-quality-bar.md` §4 : requalifier le budget en « ≤ 1,5 Mo au-dessus du socle », mesuré par `npm run audit:bundle`. **Décision produit, laissée ouverte.**
+
+**Ce qui reste, et pourquoi :**
+
+| Point | Blocage |
+|---|---|
+| Les 7 mesures de performance du §4 | Exigent l'appareil socle, réseau bridé |
+| Les 23 scénarios de validation manuelle du §10 | Exigent l'appareil **et** un backend en fonctionnement |
+| Les 21 scénarios backend de `10-validation-mode.md` §11 | Exigent un backend en fonctionnement |
+| L'activation de l'épinglage | Exige le domaine de production et ses empreintes SPKI |
+| Les parcours Maestro de bout en bout | Jamais écrits — seul élément de ce tableau qui ne dépende d'aucun matériel |
+| L'audit d'accessibilité au lecteur d'écran | Exige l'appareil, TalkBack et VoiceOver |
+
+Aucun de ces points n'est un défaut de code.
 
 ---
 

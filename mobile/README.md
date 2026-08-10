@@ -44,6 +44,9 @@ Les OTP arrivent dans MailDev sur <http://localhost:1080>.
 | **`npm run verify`** | **typecheck + lint + test — à passer avant tout commit** |
 | `npm run format` | Prettier en écriture |
 | `npm run export:android` | Bundle de production Android dans `dist/` |
+| `npm run audit:bundle` | Vérifie qu'aucun module de `src/devtools/` n'est empaqueté, et pèse le bundle |
+| `npm run audit:pinning` | Rapporte l'état réel de l'épinglage de certificat |
+| **`npm run audit`** | **Les deux audits — à passer avant toute livraison** |
 
 ---
 
@@ -65,20 +68,78 @@ Détail complet dans [`docs/README.md`](./docs/README.md) §Règles d'exécution
 |---|---|---|
 | **0** | **Amorçage** | ✅ **fait** |
 | **1** | **Socle réseau** | ✅ **fait** — 63 tests |
-| 1bis | Mode validation | ⬜ |
+| **1bis** | **Mode validation** | ✅ **fait** — 8 onglets, 340 tests |
 | **2** | **Design system** | ✅ **fait** — 97 tests |
 | **3** | **Mouvement et interaction** | ✅ **fait** — 125 tests |
 | **4** | **Composants monétaires** | ✅ **fait** — 156 tests |
 | **5** | **Authentification** | ✅ **fait** — 177 tests |
 | **6** | **Accueil** | ✅ **fait** — 184 tests |
 | **7** | **Parcours monétaires** | ✅ **fait** — 206 tests |
-| 8 | Historique et détail | ⬜ |
-| 9 | Réglages, i18n, finition | ⬜ |
-| 10 | Durcissement | ⬜ |
+| **8** | **Historique et détail** | ✅ **fait** — 242 tests |
+| **9** | **Réglages, i18n, finition** | ✅ **fait** — 278 tests |
+| **10** | **Durcissement** | ✅ **fait** — 2 audits de build ; profilage appareil, Maestro et audit lecteur d'écran en attente |
 
 Détail des lots : [`docs/07-implementation-plan.md`](./docs/07-implementation-plan.md).
 
 ---
+
+## Notes d'implémentation du lot 1bis — mode validation
+
+**Le masquage des secrets vit dans `src/lib/http/instrumentation.ts`, pas dans les devtools.** Le §3 exige `rawPin` masqué « sans exception, même en développement ». La couche HTTP masque **avant** de transmettre l'entrée au journal : le panneau n'a jamais vu un PIN ni un jeton. Ne jamais déplacer cette logique vers `src/devtools/`.
+
+**`lib/http` ne connaît pas `src/devtools`.** Il expose deux emplacements vides — `registerHttpObserver` et `registerHttpSimulator` — et les devtools s'y branchent, comme `registerTokenProvider`. Inverser cette flèche ramènerait le panneau entier dans le bundle de production.
+
+**`initDevtools()` est appelé au chargement du module racine, pas dans un effet.** Les effets d'un enfant se déclenchent avant ceux de son parent, et le portail de session émet son `/auth/refresh` depuis un effet : un branchement par effet manquerait le parcours d'authentification au lancement.
+
+**Le `cURL` copié n'est pas rejouable tel quel** sur un appel porteur d'un secret : `rawPin` y vaut `****`. C'est la contrepartie assumée de la règle de masquage — l'opérateur remplace à la main.
+
+**Le rejeu est réservé aux `GET`.** Sans idempotence serveur, rejouer une écriture depuis un outil de diagnostic est le meilleur moyen de créer un second débit en croyant observer le premier.
+
+**La secousse passe par le menu développeur de React Native.** Un vrai détecteur exigerait `expo-sensors` et une reconstruction native pour économiser un appui. `CONTOURNEMENT(indéterminé)`. L'appui long sur la salutation d'accueil et l'appui triple sur le numéro de version sont exacts.
+
+**Le journal réseau n'est jamais persisté** — 200 entrées en mémoire, et rien sur disque.
+
+## Notes d'implémentation du lot 10
+
+**Une garde à l'exécution ne suffit pas à exclure les devtools du bundle.** Metro construit son graphe de dépendances à partir de la sortie de Babel, **avant** minification : un `import()` derrière `if (!DEV_MODE)` reste une arête du graphe. Mesuré au lot 10 — les onze modules étaient dans le bundle de production. La seule méthode fiable est la redirection de résolution de `metro.config.js` vers `src/devtools/index.production.tsx`. Ne jamais importer `@/devtools/quelque-chose` en profondeur : cela contournerait la redirection. `npm run audit:bundle` le vérifie.
+
+**L'épinglage de certificat est en place mais INACTIF.** Aucune empreinte n'est configurée — le domaine de production n'existe pas encore. C'est une **condition bloquante avant livraison**, rappelée par `npm run audit:pinning`. Les empreintes se posent dans `app.json` → `extra.certificatePinning`, au format SPKI SHA-256 base64, **au minimum deux** : une en service, une de secours.
+
+**Le cache de requêtes est persisté dans MMKV, à la main.** MMKV est synchrone : c'est ce qui permet de réhydrater **avant le premier rendu**, donc avant tout appel réseau. `@tanstack/react-query-persist-client` impose une phase asynchrone qui ne tiendrait pas cette promesse. Seuls le solde et l'historique sont écrits, jamais les jetons ; un cache de plus de 24 h est jeté.
+
+**`npm run verify` ne suffit plus avant une livraison.** Il ne voit pas le bundle. `npm run audit` exporte réellement et inspecte les sources maps.
+
+**Le budget `NFR-23` est dépassé et sa requalification est proposée**, pas décidée : voir `docs/08-quality-bar.md` §4.
+
+## Notes d'implémentation du lot 9
+
+**Les libellés métier lisent i18next à l'appel, pas au chargement du module.** Une table figée à l'import resterait dans la langue de démarrage. Contrepartie : tout composant qui rend `stateLabel`, `outcomeLabel` ou `transactionTypeLabel` doit appeler `useTranslation()` — même sans utiliser le `t` renvoyé — pour se re-rendre au changement de langue. La règle est écrite en tête de `src/features/shared/labels.ts`.
+
+**`fr.json` et `en.json` sont vérifiés structurellement, pas à l'œil.** Un test compare les deux jeux de clés **et les variables d'interpolation de chaque chaîne** : une clé `{{count}}` d'un côté et `{{n}}` de l'autre passerait tous les autres contrôles et casserait à l'exécution.
+
+**Une session expirée ne déconnecte pas.** `markExpired()` pose un drapeau **sans changer le statut** : la pile de navigation et le parcours en cours restent montés derrière la feuille. Ne jamais rétablir `signOut()` dans `onSessionExpired` — c'est exactement ce que `docs/05-screens.md` §8.1 interdit.
+
+**Le mode validation reste en français.** Outil interne, pas écran produit : le traduire alourdirait les catalogues sans lecteur.
+
+**`expo-localization` est simulé en `fr-FR` dans `jest.setup.ts`.** Sans ce mock, la suite passerait en anglais sur un poste anglophone et les assertions de texte deviendraient dépendantes de l'environnement.
+
+**Aucune hauteur fixe sur un conteneur de texte.** À 200 % de taille de police un libellé passe sur deux lignes : `Button`, `TransactionRow`, les barres de navigation et les cellules d'OTP utilisent `minHeight`. Les tailles d'affichage, elles, sont plafonnées à 130 % — c'est ce plafond qui empêche un montant d'être tronqué.
+
+**L'occultation dans le sélecteur d'applications n'est pas garantie sur iOS.** `PrivacyShield` couvre l'écran dès l'état `inactive`, mais l'instantané système peut être pris avant le rendu JavaScript. Android est couvert par `FLAG_SECURE`. `CONTOURNEMENT(indéterminé)`.
+
+## Notes d'implémentation du lot 8
+
+**La clé de requête de l'historique porte la sélection de filtres, pas les bornes résolues.** `toHistoryQuery` calcule `from` à partir de l'instant : le mettre dans la clé fabriquerait une clé neuve à chaque rendu, donc un rechargement en boucle. La clé passe par `serializeFilters`, et les bornes sont résolues dans le `queryFn`, à granularité du jour.
+
+**Le filtre d'état est un choix unique parmi les onze états concrets.** `TransactionFilter.state` n'accepte qu'une valeur — contrat §6.8. Ne jamais filtrer une famille localement : le total et la pagination viennent du serveur et deviendraient faux. Drapeau `API_CAPABILITIES.multiStateFilter`.
+
+**L'écran de détail rejoue la page d'origine.** Faute de `GET /payments/{id}`, la navigation transporte `page` et `filters`, et le détail rejoue exactement cette requête avec `detail=true`, en élargissant à `page-1` et `page+1` avant d'abandonner. Contrat §6.7, drapeau `API_CAPABILITIES.transactionById`.
+
+**Les transitions d'élément partagé sont indisponibles**, et ce n'est pas un choix : Reanimated 4.5.1 les garde derrière le drapeau statique `ENABLE_SHARED_ELEMENT_TRANSITIONS`, à `false`, et elles restent expérimentales sur la nouvelle architecture. Le repli est une entrée en cascade — 12 dp, 60 ms de décalage par bloc. `CONTOURNEMENT(indéterminé)`.
+
+**Le mode validation s'ouvre depuis les réglages, provisoirement.** Les vrais déclencheurs — secousse, appui long sur le logo, triple appui sur la version — relèvent du lot 1bis. `openDevtools()` est le point d'entrée qu'ils appelleront ; rien d'autre n'est à changer côté panneau.
+
+**Le détecteur de dérive suit les `$ref`, il ne devine aucun nom de schéma.** springdoc nomme ses schémas d'après les classes Java : toute table de noms attendus serait fausse au premier renommage backend.
 
 ## Notes d'implémentation du lot 7
 
