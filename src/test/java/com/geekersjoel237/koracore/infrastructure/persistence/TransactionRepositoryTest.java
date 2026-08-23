@@ -1,6 +1,7 @@
 package com.geekersjoel237.koracore.infrastructure.persistence;
 
 import com.geekersjoel237.koracore.domain.enums.OperationType;
+import com.geekersjoel237.koracore.domain.enums.PaymentMethod;
 import com.geekersjoel237.koracore.domain.enums.TransactionType;
 import com.geekersjoel237.koracore.domain.model.Operation;
 import com.geekersjoel237.koracore.domain.model.Transaction;
@@ -37,7 +38,7 @@ class TransactionRepositoryTest extends AbstractRepositoryTest {
     private Transaction buildTransaction(Id fromId, Id toId) {
         Id txId = Id.generate();
         Transaction tx = Transaction.create(txId, fromId, toId,
-                TransactionType.CASH_IN, "ORANGE_MONEY", AMOUNT_10K);
+                TransactionType.CASH_IN, PaymentMethod.ORANGE_MONEY, AMOUNT_10K);
         tx.recordDoubleEntry(AMOUNT_10K, fromId, toId);
         return tx;
     }
@@ -74,7 +75,7 @@ class TransactionRepositoryTest extends AbstractRepositoryTest {
                 .toId(toId.value())
                 .state(TransactionState.INITIALIZED.name())
                 .type(TransactionType.CASH_IN)
-                .paymentMethod("MTN")
+                .paymentMethod(PaymentMethod.MOBILE_MONEY)
                 .amount(AMOUNT_10K.value())
                 .currency(AMOUNT_10K.currency())
                 .occurredAt(java.time.Instant.now())

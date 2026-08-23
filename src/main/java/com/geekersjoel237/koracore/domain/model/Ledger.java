@@ -1,5 +1,6 @@
 package com.geekersjoel237.koracore.domain.model;
 
+import com.geekersjoel237.koracore.domain.enums.PaymentMethod;
 import com.geekersjoel237.koracore.domain.enums.ResourceType;
 import com.geekersjoel237.koracore.domain.enums.TransactionType;
 import com.geekersjoel237.koracore.domain.exception.InsufficientFundsException;
@@ -43,7 +44,7 @@ public class Ledger {
     // Not used by the authorize/capture payment flow.
 
     public Transaction cashIn(Account customerAccount, Account floatAccount,
-                              Amount amount, String paymentMethod) {
+                              Amount amount, PaymentMethod paymentMethod) {
         requireActive(customerAccount, "Customer account is not active");
         requireActive(floatAccount, "Float account is not active");
         requirePositive(amount);
@@ -63,7 +64,7 @@ public class Ledger {
     }
 
     public Transaction cashOut(Account customerAccount, Account floatAccount,
-                               Amount amount, String paymentMethod) {
+                               Amount amount, PaymentMethod paymentMethod) {
         requireActive(customerAccount, "Customer account is not active");
         requireActive(floatAccount, "Float account is not active");
         requirePositive(amount);
@@ -84,7 +85,7 @@ public class Ledger {
     }
 
     public Transaction transfer(Account accountFrom, Account accountTo,
-                                Amount amount, String paymentMethod) {
+                                Amount amount, PaymentMethod paymentMethod) {
         // SelfTransferException is now enforced in Transaction.create()
         requireActive(accountFrom, "Sender account is not active");
         requireActive(accountTo, "Receiver account is not active");
@@ -118,7 +119,7 @@ public class Ledger {
      * </ol>
      */
     public Transaction initiate(Account fromAccount, Account toAccount,
-                                TransactionType type, String paymentMethod,
+                                TransactionType type, PaymentMethod paymentMethod,
                                 Amount amount) {
         requireActive(fromAccount, "Source account is not active");
         requirePositive(amount);

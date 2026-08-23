@@ -28,9 +28,9 @@ public class JpaTrxHistoricStatesRepository implements TrxHistoricStatesReposito
                 .newState(historic.newState().name())
                 .occurredAt(historic.occurredAt())
                 .triggeredBy(historic.triggeredBy() != null ? historic.triggeredBy().name() : null)
-                .correlationId(historic.correlationId())
+                .correlationId(historic.correlationId() != null ? historic.correlationId().value() : null)
                 .providerRef(historic.providerRef())
-                .actorId(historic.actorId())
+                .actorId(historic.actorId() != null ? historic.actorId().value() : null)
                 .notes(historic.notes())
                 .build();
         entity.setId(historic.id().value());
@@ -49,9 +49,9 @@ public class JpaTrxHistoricStatesRepository implements TrxHistoricStatesReposito
                         TransactionState.fromValue(e.getNewState()),
                         e.getOccurredAt(),
                         e.getTriggeredBy() != null ? TriggerSource.valueOf(e.getTriggeredBy()) : null,
-                        e.getCorrelationId(),
+                        e.getCorrelationId() != null ? new Id(e.getCorrelationId()) : null,
                         e.getProviderRef(),
-                        e.getActorId(),
+                        e.getActorId() != null ? new Id(e.getActorId()) : null,
                         e.getNotes()
                 ))
                 .toList();

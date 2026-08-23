@@ -196,9 +196,9 @@ public class JpaTransactionRepository implements TransactionRepository {
                         TransactionState.fromValue(h.getNewState()),
                         h.getOccurredAt(),
                         h.getTriggeredBy() != null ? TriggerSource.valueOf(h.getTriggeredBy()) : null,
-                        h.getCorrelationId(),
+                        h.getCorrelationId() != null ? new Id(h.getCorrelationId()) : null,
                         h.getProviderRef(),
-                        h.getActorId(),
+                        h.getActorId() != null ? new Id(h.getActorId()) : null,
                         h.getNotes()
                 ))
                 .toList();

@@ -1,6 +1,7 @@
 package com.geekersjoel237.koracore.web.api.payment.cashOut;
 
 import com.geekersjoel237.koracore.application.command.CashOutCommand;
+import com.geekersjoel237.koracore.domain.enums.PaymentMethod;
 import com.geekersjoel237.koracore.domain.vo.Amount;
 import com.geekersjoel237.koracore.domain.vo.Id;
 import jakarta.validation.constraints.DecimalMin;
@@ -26,6 +27,7 @@ public record CashOutRequest(
         String paymentMethod
 ) {
     public CashOutCommand toCommand(Id customerId) {
-        return new CashOutCommand(customerId, rawPin, new Amount(amount, currency), paymentMethod);
+        return new CashOutCommand(customerId, rawPin, new Amount(amount, currency),
+                PaymentMethod.fromValue(paymentMethod));
     }
 }

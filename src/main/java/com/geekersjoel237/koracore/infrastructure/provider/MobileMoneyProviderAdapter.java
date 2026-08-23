@@ -1,13 +1,10 @@
 package com.geekersjoel237.koracore.infrastructure.provider;
 
+import com.geekersjoel237.koracore.domain.enums.PaymentMethod;
 import com.geekersjoel237.koracore.domain.enums.ProviderOperationType;
 import com.geekersjoel237.koracore.domain.exception.ProviderException;
 import com.geekersjoel237.koracore.domain.port.ProviderPort;
-import com.geekersjoel237.koracore.domain.vo.Amount;
-import com.geekersjoel237.koracore.domain.vo.AuthorizationResult;
-import com.geekersjoel237.koracore.domain.vo.CaptureResult;
-import com.geekersjoel237.koracore.domain.vo.PhoneNumber;
-import com.geekersjoel237.koracore.domain.vo.ReverseResult;
+import com.geekersjoel237.koracore.domain.vo.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -42,6 +39,7 @@ public class MobileMoneyProviderAdapter implements ProviderPort {
     private final long authorizeMs;
     private final long captureMs;
     private final long timeoutThresholdMs;
+
     public MobileMoneyProviderAdapter(
             @Value("${kora.provider.behavior:SUCCESS}") String behavior,
             @Value("${kora.provider.simulate-latency:true}") boolean simulateLatency,
@@ -59,12 +57,13 @@ public class MobileMoneyProviderAdapter implements ProviderPort {
 
     @Override
     public AuthorizationResult authorize(Amount amount,
-                                          String paymentMethod,
-                                          String correlationId,
-                                          ProviderOperationType operationType,
-                                          PhoneNumber customerPhone) {
+                                         PaymentMethod paymentMethod,
+                                         Id correlationId,
+                                         ProviderOperationType operationType,
+                                         PhoneNumber customerPhone) {
         log.debug("authorize — operationType={} amount={} currency={} method={} correlationId={}",
-                operationType, amount.value(), amount.currency(), paymentMethod, correlationId);
+                operationType, amount.value(), amount.currency(),
+                paymentMethod.value(), correlationId.value());
         // customerPhone intentionally excluded from logs — PII
 
         checkBehavior(Checkpoint.AUTHORIZE);
@@ -85,8 +84,8 @@ public class MobileMoneyProviderAdapter implements ProviderPort {
     }
 
     @Override
-    public CaptureResult capture(String authorizationReference, String correlationId) {
-        log.debug("capture — authRef={} correlationId={}", authorizationReference, correlationId);
+    public CaptureResult capture(String authorizationReference, Id correlationId) {
+        log.debug("capture — authRef={} correlationId={}", authorizationReference, correlationId.value());
         checkBehavior(Checkpoint.CAPTURE);
         simulateLatency(captureMs);
         return new CaptureResult(UUID.randomUUID().toString(), true);
@@ -96,8 +95,8 @@ public class MobileMoneyProviderAdapter implements ProviderPort {
     // ── Authorize ─────────────────────────────────────────────────────────────
 
     @Override
-    public ReverseResult reverse(String reference, Amount amount, String correlationId) {
-        log.debug("reverse — ref={} amount={} correlationId={}", reference, amount.value(), correlationId);
+    public ReverseResult reverse(String reference, Amount amount, Id correlationId) {
+        log.debug("reverse — ref={} amount={} correlationId={}", reference, amount.value(), correlationId.value());
         checkBehavior(Checkpoint.REVERSE);
         simulateLatency(captureMs);
         return new ReverseResult(UUID.randomUUID().toString(), true);

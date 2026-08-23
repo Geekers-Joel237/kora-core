@@ -4,7 +4,8 @@ import com.geekersjoel237.koracore.domain.vo.Id;
 
 public record ReversePaymentCommand(
         Id transactionId,
-        String actorId,
+        Id actorId,
         String actorRole,
         String reason,
-        String correlationId) {}
+        Id correlationId) {
+}

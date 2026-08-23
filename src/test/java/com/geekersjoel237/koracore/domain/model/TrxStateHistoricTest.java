@@ -24,7 +24,7 @@ class TrxStateHistoricTest {
                         TX_ID,
                         TransactionState.AUTHORIZED, TransactionState.REVERSED,
                         TriggerSource.OPERATOR_ACTION,
-                        "corr-001", "prov-ref-001", "operator-42",
+                        new Id("corr-001"), "prov-ref-001", new Id("operator-42"),
                         "Reversal approved by compliance team"));
     }
 
@@ -35,7 +35,7 @@ class TrxStateHistoricTest {
                         TX_ID,
                         TransactionState.AUTHORIZED, TransactionState.REVERSED,
                         TriggerSource.OPERATOR_ACTION,
-                        "corr-001", "prov-ref-001", "operator-42",
+                        new Id("corr-001"), "prov-ref-001", new Id("operator-42"),
                         null));
     }
 
@@ -46,7 +46,7 @@ class TrxStateHistoricTest {
                         TX_ID,
                         TransactionState.AUTHORIZED, TransactionState.REVERSED,
                         TriggerSource.OPERATOR_ACTION,
-                        "corr-001", "prov-ref-001", "operator-42",
+                        new Id("corr-001"), "prov-ref-001", new Id("operator-42"),
                         "   "));
     }
 
@@ -57,7 +57,7 @@ class TrxStateHistoricTest {
                         TX_ID,
                         TransactionState.INITIALIZED, TransactionState.AUTHORIZED,
                         TriggerSource.USER_ACTION,
-                        "corr-002", null, "user-99",
+                        new Id("corr-002"), null, new Id("user-99"),
                         null));
     }
 
@@ -67,7 +67,7 @@ class TrxStateHistoricTest {
                 TX_ID,
                 TransactionState.CAPTURED, TransactionState.SETTLEMENT_PENDING,
                 TriggerSource.PROVIDER_CALLBACK,
-                "corr-abc", "prov-xyz", "actor-1",
+                new Id("corr-abc"), "prov-xyz", new Id("actor-1"),
                 "Settlement triggered by callback");
 
         TrxStateHistoric.Snapshot snap = historic.snapshot();

@@ -9,6 +9,7 @@ import com.geekersjoel237.koracore.application.service.PaymentService;
 import com.geekersjoel237.koracore.application.service.PaymentTransactionalExecutor;
 import com.geekersjoel237.koracore.application.service.TransactionHistoryService;
 import com.geekersjoel237.koracore.domain.enums.Direction;
+import com.geekersjoel237.koracore.domain.enums.PaymentMethod;
 import com.geekersjoel237.koracore.domain.enums.Role;
 import com.geekersjoel237.koracore.domain.enums.TransactionType;
 import com.geekersjoel237.koracore.domain.exception.AccountNotFoundException;
@@ -43,7 +44,7 @@ class TransactionHistoryServiceTest {
     private static final String EMAIL_A = "a@koracore.com";
     private static final String EMAIL_B = "b@koracore.com";
     private static final String RAW_PIN = "123456";
-    private static final String PAYMENT_METHOD = "ORANGE_MONEY";
+    private static final PaymentMethod PAYMENT_METHOD = PaymentMethod.ORANGE_MONEY;
     private static final Amount AMOUNT_10K = Amount.of(BigDecimal.valueOf(10_000), "XOF");
     private static final Amount AMOUNT_5K  = Amount.of(BigDecimal.valueOf(5_000), "XOF");
 

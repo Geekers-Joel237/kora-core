@@ -7,6 +7,7 @@ import com.geekersjoel237.koracore.application.command.TransferCommand;
 import com.geekersjoel237.koracore.application.service.AuthService;
 import com.geekersjoel237.koracore.application.service.PaymentService;
 import com.geekersjoel237.koracore.application.service.PaymentTransactionalExecutor;
+import com.geekersjoel237.koracore.domain.enums.PaymentMethod;
 import com.geekersjoel237.koracore.domain.enums.OperationType;
 import com.geekersjoel237.koracore.domain.enums.ProviderOperationType;
 import com.geekersjoel237.koracore.domain.enums.Role;
@@ -49,7 +50,7 @@ class PaymentUseCaseTest {
     private static final String EMAIL_A = "a@koracore.com";
     private static final String EMAIL_B = "b@koracore.com";
     private static final String RAW_PIN = "123456";
-    private static final String PAYMENT_METHOD = "MOBILE_MONEY";
+    private static final PaymentMethod PAYMENT_METHOD = PaymentMethod.MOBILE_MONEY;
     private static final Amount AMOUNT_10K = Amount.of(BigDecimal.valueOf(10_000), "XOF");
     private static final Amount AMOUNT_5K = Amount.of(BigDecimal.valueOf(5_000), "XOF");
     private static final Amount AMOUNT_ZERO = Amount.of(BigDecimal.ZERO, "XOF");
@@ -451,7 +452,7 @@ class PaymentUseCaseTest {
             assertTrue(AMOUNT_10K.equals(before.snapshot().balance().solde()));
 
             paymentService.reversePayment(new ReversePaymentCommand(
-                    tx.snapshot().transactionId(), "op-001", "OPERATOR", "chargeback", "corr-001"));
+                    tx.snapshot().transactionId(), new Id("op-001"), "OPERATOR", "chargeback", new Id("corr-001")));
 
             Account after = accountRepo.findByCustomerId(CUST_ID_A).orElseThrow();
             assertTrue(AMOUNT_ZERO.equals(after.snapshot().balance().solde()));
@@ -467,7 +468,7 @@ class PaymentUseCaseTest {
             assertTrue(AMOUNT_5K.equals(midway.snapshot().balance().solde()));
 
             paymentService.reversePayment(new ReversePaymentCommand(
-                    cashOut.snapshot().transactionId(), "op-001", "OPERATOR", "dispute", "corr-002"));
+                    cashOut.snapshot().transactionId(), new Id("op-001"), "OPERATOR", "dispute", new Id("corr-002")));
 
             Account after = accountRepo.findByCustomerId(CUST_ID_A).orElseThrow();
             assertTrue(AMOUNT_10K.equals(after.snapshot().balance().solde()));
@@ -481,7 +482,7 @@ class PaymentUseCaseTest {
                     CUST_ID_A, RAW_PIN, AMOUNT_5K, phoneNumberB().fullNumber()));
 
             paymentService.reversePayment(new ReversePaymentCommand(
-                    transfer.snapshot().transactionId(), "op-001", "OPERATOR", "fraud", "corr-003"));
+                    transfer.snapshot().transactionId(), new Id("op-001"), "OPERATOR", "fraud", new Id("corr-003")));
 
             Account accountA = accountRepo.findByCustomerId(CUST_ID_A).orElseThrow();
             Account accountB = accountRepo.findByCustomerId(CUST_ID_B).orElseThrow();
@@ -497,7 +498,7 @@ class PaymentUseCaseTest {
                     new CashInCommand(CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
 
             paymentService.reversePayment(new ReversePaymentCommand(
-                    tx.snapshot().transactionId(), "op-001", "OPERATOR", "test", "corr-004"));
+                    tx.snapshot().transactionId(), new Id("op-001"), "OPERATOR", "test", new Id("corr-004")));
 
             assertDoubleEntryInvariant();
         }
@@ -508,13 +509,13 @@ class PaymentUseCaseTest {
                     new CashInCommand(CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
 
             paymentService.reversePayment(new ReversePaymentCommand(
-                    tx.snapshot().transactionId(), "op-001", "OPERATOR", "first", "corr-005"));
+                    tx.snapshot().transactionId(), new Id("op-001"), "OPERATOR", "first", new Id("corr-005")));
 
             Transaction reversed = transactionRepo.findById(tx.snapshot().transactionId()).orElseThrow();
             assertEquals(REVERSED, reversed.snapshot().state());
 
             assertThatThrownBy(() -> paymentService.reversePayment(new ReversePaymentCommand(
-                    tx.snapshot().transactionId(), "op-001", "OPERATOR", "second", "corr-006")))
+                    tx.snapshot().transactionId(), new Id("op-001"), "OPERATOR", "second", new Id("corr-006"))))
                     .isInstanceOf(InvalidStateTransitionException.class);
         }
     }

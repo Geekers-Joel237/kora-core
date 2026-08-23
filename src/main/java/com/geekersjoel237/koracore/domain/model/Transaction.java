@@ -1,6 +1,7 @@
 package com.geekersjoel237.koracore.domain.model;
 
 import com.geekersjoel237.koracore.domain.enums.OperationType;
+import com.geekersjoel237.koracore.domain.enums.PaymentMethod;
 import com.geekersjoel237.koracore.domain.enums.TransactionType;
 import com.geekersjoel237.koracore.domain.exception.SelfTransferException;
 import com.geekersjoel237.koracore.domain.model.state.TransactionState;
@@ -22,7 +23,7 @@ public class Transaction {
     private final Id fromId;
     private final Id toId;
     private final TransactionType type;
-    private final String paymentMethod;
+    private final PaymentMethod paymentMethod;
     private final Amount amount;
     private final Instant createdAt;
     private final List<Operation> operations;
@@ -30,7 +31,7 @@ public class Transaction {
     private TransactionState state;
 
     private Transaction(Id transactionId, String transactionNumber, Id fromId, Id toId,
-                        TransactionType type, String paymentMethod, Amount amount) {
+                        TransactionType type, PaymentMethod paymentMethod, Amount amount) {
         this.transactionId = transactionId;
         this.transactionNumber = transactionNumber;
         this.fromId = fromId;
@@ -47,7 +48,7 @@ public class Transaction {
 
     public static Transaction create(Id transactionId,
                                      Id fromId, Id toId, TransactionType type,
-                                     String paymentMethod, Amount amount) {
+                                     PaymentMethod paymentMethod, Amount amount) {
         if (transactionId == null) throw new IllegalArgumentException("Transaction id cannot be null");
         if (fromId == null) throw new IllegalArgumentException("Transaction fromId cannot be null");
         if (toId == null) throw new IllegalArgumentException("Transaction toId cannot be null");
@@ -179,7 +180,7 @@ public class Transaction {
             Id toId,
             TransactionState state,
             TransactionType type,
-            String paymentMethod,
+            PaymentMethod paymentMethod,
             Amount amount,
             Instant createdAt,
             List<Operation.Snapshot> operations,

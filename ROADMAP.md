@@ -1,7 +1,7 @@
 # 🏦 KORA CORE
 
 
-**Produit simulé** : Wallet néobanque (Mobile Money + Card-ready) :
+**Produit** : Wallet néobanque (Mobile Money + Card-ready) :
 
 P2P, cash-in/out, paiement marchand, multi-provider, settlement différé, réconciliation, risk, observabilité, cloud orchestration.
 

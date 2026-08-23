@@ -1,6 +1,9 @@
 package com.geekersjoel237.koracore.application.service;
 
 import com.geekersjoel237.koracore.application.port.in.TransactionHistoryUseCase;
+import com.geekersjoel237.koracore.domain.query.PageRequest;
+import com.geekersjoel237.koracore.domain.query.PageResult;
+import com.geekersjoel237.koracore.domain.query.TransactionFilter;
 import com.geekersjoel237.koracore.application.query.TransactionSummary;
 import com.geekersjoel237.koracore.domain.enums.Direction;
 import com.geekersjoel237.koracore.domain.enums.TransactionType;
@@ -10,9 +13,6 @@ import com.geekersjoel237.koracore.domain.model.Transaction;
 import com.geekersjoel237.koracore.domain.port.AccountRepository;
 import com.geekersjoel237.koracore.domain.port.CustomerRepository;
 import com.geekersjoel237.koracore.domain.port.TransactionRepository;
-import com.geekersjoel237.koracore.domain.query.PageRequest;
-import com.geekersjoel237.koracore.domain.query.PageResult;
-import com.geekersjoel237.koracore.domain.query.TransactionFilter;
 import com.geekersjoel237.koracore.domain.vo.Id;
 import com.geekersjoel237.koracore.domain.vo.PhoneNumber;
 import org.springframework.stereotype.Service;
@@ -36,9 +36,18 @@ public class TransactionHistoryService implements TransactionHistoryUseCase {
         this.customerRepository = customerRepository;
     }
 
+    private static String maskPhone(PhoneNumber phoneNumber) {
+        String local = phoneNumber.number();
+        if (local.length() <= 6) return phoneNumber.fullNumber();
+        return phoneNumber.prefix()
+                + local.substring(0, 3)
+                + "***"
+                + local.substring(local.length() - 3);
+    }
+
     @Override
     public PageResult<TransactionSummary> execute(Id customerId, TransactionFilter filter,
-                                                   int page, int size) {
+                                                  int page, int size) {
         if (size > 100)
             throw new IllegalArgumentException("Page size cannot exceed 100, got: " + size);
 
@@ -106,14 +115,5 @@ public class TransactionHistoryService implements TransactionHistoryUseCase {
                 })
                 .map(customer -> maskPhone(customer.snapshot().phoneNumber()))
                 .orElse(null);
-    }
-
-    private static String maskPhone(PhoneNumber phoneNumber) {
-        String local = phoneNumber.number();
-        if (local.length() <= 6) return phoneNumber.fullNumber();
-        return phoneNumber.prefix()
-                + local.substring(0, 3)
-                + "***"
-                + local.substring(local.length() - 3);
     }
 }

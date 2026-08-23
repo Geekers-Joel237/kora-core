@@ -1,5 +1,6 @@
 package com.geekersjoel237.koracore.infrastructure.persistence.entities;
 
+import com.geekersjoel237.koracore.domain.enums.PaymentMethod;
 import com.geekersjoel237.koracore.domain.enums.TransactionType;
 import jakarta.persistence.*;
 import lombok.*;
@@ -39,8 +40,9 @@ public class TransactionEntity extends VersionedEntity {
     @Column(name = "type", nullable = false)
     private TransactionType type;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "payment_method", nullable = false)
-    private String paymentMethod;
+    private PaymentMethod paymentMethod;
 
     @Column(name = "amount", nullable = false, precision = 19, scale = 4)
     private BigDecimal amount;

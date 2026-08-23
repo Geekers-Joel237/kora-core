@@ -1,6 +1,7 @@
 package com.geekersjoel237.koracore.application.query;
 
 import com.geekersjoel237.koracore.domain.enums.Direction;
+import com.geekersjoel237.koracore.domain.enums.PaymentMethod;
 import com.geekersjoel237.koracore.domain.enums.TransactionType;
 import com.geekersjoel237.koracore.domain.vo.Amount;
 
@@ -18,7 +19,7 @@ public record TransactionSummary(
         Direction direction,
         String state,
         Amount amount,
-        String paymentMethod,
+        PaymentMethod paymentMethod,
         String counterpart,          // null for CASH_IN / CASH_OUT; masked phone for P2P_TRANSFER
         Instant createdAt,
         List<StateEntry> stateHistory

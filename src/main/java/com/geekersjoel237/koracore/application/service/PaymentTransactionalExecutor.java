@@ -6,10 +6,7 @@ import com.geekersjoel237.koracore.application.command.ReversePaymentCommand;
 import com.geekersjoel237.koracore.application.command.TransferCommand;
 import com.geekersjoel237.koracore.application.port.in.AuthUseCase;
 import com.geekersjoel237.koracore.domain.SystemConstants;
-import com.geekersjoel237.koracore.domain.enums.ProviderOperationType;
-import com.geekersjoel237.koracore.domain.enums.ResourceType;
-import com.geekersjoel237.koracore.domain.enums.TransactionType;
-import com.geekersjoel237.koracore.domain.enums.TriggerSource;
+import com.geekersjoel237.koracore.domain.enums.*;
 import com.geekersjoel237.koracore.domain.exception.*;
 import com.geekersjoel237.koracore.domain.model.*;
 import com.geekersjoel237.koracore.domain.model.state.TransactionState;
@@ -73,18 +70,19 @@ public class PaymentTransactionalExecutor {
     // ── Cash In ───────────────────────────────────────────────────────────────
 
     public Transaction executeCashIn(CashInCommand cmd) {
-        final String correlationId = Id.generate().value();
+        final Id correlationId = Id.generate();
 
         // BCrypt (~200ms) runs outside any DB transaction — holds zero connections.
         authUseCase.validatePin(cmd.customerId(), cmd.rawPin());
 
         // ── TX-1: validate context, persist INITIALIZED ───────────────────
-        record Tx1Context(Transaction tx, PhoneNumber phone) {}
+        record Tx1Context(Transaction tx, PhoneNumber phone) {
+        }
 
         Tx1Context ctx = Objects.requireNonNull(txTemplate.execute(status -> {
             ValidatedPayer payer = validatePayerNoLock(cmd.customerId());
             Account floatAccount = getSystemFloatAccount();
-            Ledger ledger        = ledgerRepository.findFirst();
+            Ledger ledger = ledgerRepository.findFirst();
 
             Transaction tx = ledger.initiate(floatAccount, payer.account(),
                     TransactionType.CASH_IN, cmd.paymentMethod(), cmd.amount());
@@ -136,7 +134,7 @@ public class PaymentTransactionalExecutor {
                     .orElseThrow(() -> new AccountNotFoundException(
                             "Account not found for customer: " + cmd.customerId().value()));
             Account floatAccount = getSystemFloatAccount();
-            Ledger ledger        = ledgerRepository.findFirst();
+            Ledger ledger = ledgerRepository.findFirst();
 
             AuthorizationRecord authRecord = AuthorizationRecord.create(
                     tx.snapshot().transactionId(), authResult.providerReference(),
@@ -163,20 +161,21 @@ public class PaymentTransactionalExecutor {
     // ── Cash Out ──────────────────────────────────────────────────────────────
 
     public Transaction executeCashOut(CashOutCommand cmd) {
-        final String correlationId = Id.generate().value();
+        final Id correlationId = Id.generate();
 
         // BCrypt (~200ms) runs outside any DB transaction — holds zero connections.
         authUseCase.validatePin(cmd.customerId(), cmd.rawPin());
 
         // ── TX-1: validate context (ledger.initiate checks sufficient funds),
         //          persist INITIALIZED ──────────────────────────────────────
-        record Tx1Context(Transaction tx, PhoneNumber phone) {}
+        record Tx1Context(Transaction tx, PhoneNumber phone) {
+        }
 
         Tx1Context ctx = Objects.requireNonNull(txTemplate.execute(status -> {
             ValidatedPayer payer = validatePayerNoLock(cmd.customerId());
             Account floatAccount = getSystemFloatAccount();
-            Ledger ledger        = ledgerRepository.findFirst();
-            PhoneNumber phone    = payer.customer().snapshot().phoneNumber();
+            Ledger ledger = ledgerRepository.findFirst();
+            PhoneNumber phone = payer.customer().snapshot().phoneNumber();
 
             // ledger.initiate() calls requireSufficientFunds for CUSTOMER_ACCOUNT —
             // throws InsufficientFundsException before persistInitialState if balance < amount.
@@ -230,7 +229,7 @@ public class PaymentTransactionalExecutor {
                     .orElseThrow(() -> new AccountNotFoundException(
                             "Account not found for customer: " + cmd.customerId().value()));
             Account floatAccount = getSystemFloatAccount();
-            Ledger ledger        = ledgerRepository.findFirst();
+            Ledger ledger = ledgerRepository.findFirst();
 
             AuthorizationRecord authRecord = AuthorizationRecord.create(
                     tx.snapshot().transactionId(), authResult.providerReference(),
@@ -263,11 +262,11 @@ public class PaymentTransactionalExecutor {
         // No provider I/O — single TX with both account locks (short hold, no I/O).
         return txTemplate.execute(status -> {
             ValidatedPayer payer = validatePayerWithLock(cmd.customerId());
-            Account toAccount    = validateRecipientAndGetAccount(cmd.toPhoneNumber());
-            Ledger  ledger       = ledgerRepository.findFirst();
+            Account toAccount = validateRecipientAndGetAccount(cmd.toPhoneNumber());
+            Ledger ledger = ledgerRepository.findFirst();
 
             Transaction tx = ledger.initiate(payer.account(), toAccount,
-                    TransactionType.P2P_TRANSFER, "WALLET", cmd.amount());
+                    TransactionType.P2P_TRANSFER, PaymentMethod.WALLET, cmd.amount());
 
             return executeInternalTransfer(tx, ledger, payer.account(), toAccount, cmd.amount());
         });
@@ -368,7 +367,7 @@ public class PaymentTransactionalExecutor {
                                 TransactionState.AUTHORIZED,
                                 TransactionState.AUTHORIZATION_FAILED,
                                 TriggerSource.SYSTEM_JOB,
-                                null, null, "system-ttl-job", "Authorization TTL expired"));
+                                null, null, new Id("system-ttl-job"), "Authorization TTL expired"));
                         transactionRepository.save(tx);
                     });
         }
@@ -522,5 +521,6 @@ public class PaymentTransactionalExecutor {
                         "Float account not found for provider: " + SystemConstants.PROVIDER_ID.value()));
     }
 
-    private record ValidatedPayer(Customer customer, Account account) {}
+    private record ValidatedPayer(Customer customer, Account account) {
+    }
 }

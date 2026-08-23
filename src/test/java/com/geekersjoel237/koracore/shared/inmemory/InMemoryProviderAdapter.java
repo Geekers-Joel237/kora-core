@@ -1,11 +1,13 @@
 package com.geekersjoel237.koracore.shared.inmemory;
 
+import com.geekersjoel237.koracore.domain.enums.PaymentMethod;
 import com.geekersjoel237.koracore.domain.enums.ProviderOperationType;
 import com.geekersjoel237.koracore.domain.exception.ProviderException;
 import com.geekersjoel237.koracore.domain.port.ProviderPort;
 import com.geekersjoel237.koracore.domain.vo.Amount;
 import com.geekersjoel237.koracore.domain.vo.AuthorizationResult;
 import com.geekersjoel237.koracore.domain.vo.CaptureResult;
+import com.geekersjoel237.koracore.domain.vo.Id;
 import com.geekersjoel237.koracore.domain.vo.PhoneNumber;
 import com.geekersjoel237.koracore.domain.vo.ReverseResult;
 
@@ -37,10 +39,10 @@ public class InMemoryProviderAdapter implements ProviderPort {
 
     @Override
     public AuthorizationResult authorize(Amount amount,
-                                          String paymentMethod,
-                                          String correlationId,
-                                          ProviderOperationType operationType,
-                                          PhoneNumber customerPhone) {
+                                         PaymentMethod paymentMethod,
+                                         Id correlationId,
+                                         ProviderOperationType operationType,
+                                         PhoneNumber customerPhone) {
         this.lastOperationType = operationType;
         this.lastCustomerPhone = customerPhone;
 
@@ -54,14 +56,14 @@ public class InMemoryProviderAdapter implements ProviderPort {
     }
 
     @Override
-    public CaptureResult capture(String authorizationReference, String correlationId) {
+    public CaptureResult capture(String authorizationReference, Id correlationId) {
         if (behavior == Behavior.FAIL_ON_CAPTURE)
             throw new ProviderException("Provider simulated capture failure");
         return new CaptureResult(UUID.randomUUID().toString(), true);
     }
 
     @Override
-    public ReverseResult reverse(String reference, Amount amount, String correlationId) {
+    public ReverseResult reverse(String reference, Amount amount, Id correlationId) {
         return new ReverseResult(UUID.randomUUID().toString(), true);
     }
 

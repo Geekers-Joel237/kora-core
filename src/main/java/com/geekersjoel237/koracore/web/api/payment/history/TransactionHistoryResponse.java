@@ -58,7 +58,7 @@ public record TransactionHistoryResponse(
                     tx.state(),
                     tx.amount().value(),
                     tx.amount().currency(),
-                    tx.paymentMethod(),
+                    tx.paymentMethod().name(),
                     tx.counterpart(),
                     tx.createdAt(),
                     history

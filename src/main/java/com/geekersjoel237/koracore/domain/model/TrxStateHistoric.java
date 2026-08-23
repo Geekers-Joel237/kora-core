@@ -13,9 +13,9 @@ public record TrxStateHistoric(
         TransactionState newState,
         Instant occurredAt,
         TriggerSource triggeredBy,
-        String correlationId,
+        Id correlationId,
         String providerRef,
-        String actorId,
+        Id actorId,
         String notes
 ) {
 
@@ -40,9 +40,9 @@ public record TrxStateHistoric(
             TransactionState oldState,
             TransactionState newState,
             TriggerSource triggeredBy,
-            String correlationId,
+            Id correlationId,
             String providerRef,
-            String actorId,
+            Id actorId,
             String notes) {
         return new TrxStateHistoric(
                 Id.generate(), transactionId, oldState, newState, Instant.now(),
@@ -57,9 +57,9 @@ public record TrxStateHistoric(
                 newState.name(),
                 occurredAt,
                 triggeredBy,
-                correlationId,
+                correlationId != null ? correlationId.value() : null,
                 providerRef,
-                actorId,
+                actorId != null ? actorId.value() : null,
                 notes);
     }
 

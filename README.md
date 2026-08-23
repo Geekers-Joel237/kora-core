@@ -1,6 +1,6 @@
 # 🚀 KORA Core
 
-**KORA Core** is a production-grade digital wallet engine designed to simulate the real engineering challenges faced by modern neobanks operating in emerging markets.
+**KORA Core** is a production-grade digital wallet engine designed to engage the real engineering challenges faced by modern neobanks operating in emerging markets.
 
 It is built under real constraints:
 

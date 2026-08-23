@@ -18,6 +18,7 @@ public record ReverseRequest(
         String correlationId
 ) {
     public ReversePaymentCommand toCommand(Id transactionId) {
-        return new ReversePaymentCommand(transactionId, actorId, actorRole, reason, correlationId);
+        return new ReversePaymentCommand(transactionId, new Id(actorId), actorRole, reason,
+                new Id(correlationId));
     }
 }
