@@ -15,7 +15,8 @@ test suite, and understand the development conventions in use.
 6. [Load testing](#6-load-testing)
 7. [Code conventions](#7-code-conventions)
 8. [Commit conventions](#8-commit-conventions)
-9. [Architecture decisions](#9-architecture-decisions)
+9. [Database migrations](#9-database-migrations)
+10. [Architecture decisions](#10-architecture-decisions)
 
 ---
 
@@ -447,7 +448,94 @@ Microservice extraction (Step 7) → `v1.0.0`
 
 ---
 
-## 9. Architecture decisions
+## 9. Database migrations
+
+Flyway owns the schema. Hibernate runs `ddl-auto=validate` in
+`application.properties` and `none` in the test properties — it never emits DDL.
+
+### Naming
+
+Migrations are versioned by **timestamp**, not by sequence:
+
+```
+V<yyyyMMddHHmm>__snake_case_name.sql
+```
+
+- Valid — `V202605270702__initial_schema.sql`
+- Invalid — `V2__add_idempotency_keys.sql` (sequential version)
+- Invalid — `V202605270702__addIdempotencyKeys.sql` (not `snake_case`)
+
+A sequential version collides as soon as two branches add a migration in
+parallel: both claim the next integer, and the clash only surfaces at merge.
+
+Generate the timestamp for a new migration:
+
+```bash
+date -u +%Y%m%d%H%M
+```
+
+`MigrationNamingConventionTest` scans `src/main/resources/db/migration/` on every
+`./gradlew test` and fails on any file that breaks the pattern.
+
+### Never modify an applied migration
+
+Add a new one instead. Flyway stores a checksum of each migration's content in
+`flyway_schema_history`; editing a file already applied anywhere invalidates that
+checksum and blocks startup on every database that holds it.
+
+### Ordering across branches — `out-of-order` is off
+
+`spring.flyway.out-of-order=false`, on every profile. A migration whose version is
+lower than the highest already applied is never inserted retroactively.
+
+**The cost we accept**: a branch opened Monday and merged Friday can carry a
+timestamp older than a migration already applied on `develop`. Startup then fails:
+
+```
+Detected resolved migration not applied to database: 202605270702
+```
+
+**The fix**: before merging, `git mv` the migration to a fresh timestamp so its
+version is the highest. On the feature branch — never after the merge.
+
+`out-of-order=true` was rejected: it makes the applied order a property of each
+environment's history rather than of the repository, so two databases that
+received the same migrations in a different order can diverge with nothing in the
+repo to arbitrate.
+
+### Realigning an existing database
+
+`V1__initial_schema.sql` became `V202605270702__initial_schema.sql`. The version
+changed, so a database that already applied `V1` hits two problems: an applied
+migration missing from disk, and a higher pending version it would replay over
+tables that already exist.
+
+One statement fixes both. The checksum covers file **content**, which did not
+change, so it stays valid:
+
+```bash
+docker compose exec postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c \
+  "UPDATE flyway_schema_history
+      SET version = '202605270702',
+          script  = 'V202605270702__initial_schema.sql'
+    WHERE version = '1' AND script = 'V1__initial_schema.sql';"
+```
+
+`flyway repair` does not help: it matches by version, and version `1` no longer
+exists on disk.
+
+If the database holds nothing worth keeping, drop it instead:
+
+```bash
+docker compose down -v && docker compose up -d postgres
+```
+
+Testcontainers-backed tests need neither: each run starts an empty database and
+replays every migration.
+
+---
+
+## 10. Architecture decisions
 
 All significant architectural decisions are recorded in `docs/adr/`.
 
@@ -468,7 +556,7 @@ A decision is "significant" if it affects:
 
 ---
 
-## 10. Client vs admin surface separation
+## 11. Client vs admin surface separation
 
 KORA Core exposes two distinct API surfaces with separate role requirements.
 
