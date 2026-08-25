@@ -1,7 +1,7 @@
 package com.geekersjoel237.koracore.e2e;
 
 import com.geekersjoel237.koracore.domain.vo.Id;
-import com.geekersjoel237.koracore.infrastructure.config.SecurityProperties;
+import com.geekersjoel237.koracore.application.config.SecurityProperties;
 import com.geekersjoel237.koracore.web.api.payment.cashIn.CashInRequest;
 import com.geekersjoel237.koracore.web.api.payment.cashOut.CashOutRequest;
 import com.geekersjoel237.koracore.web.api.payment.shared.TransactionResponse;

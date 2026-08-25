@@ -12,7 +12,7 @@ import com.geekersjoel237.koracore.domain.port.CustomerPinEncoder;
 import com.geekersjoel237.koracore.domain.vo.Id;
 import com.geekersjoel237.koracore.domain.vo.PhoneNumber;
 import com.geekersjoel237.koracore.domain.vo.Tokens;
-import com.geekersjoel237.koracore.infrastructure.config.SecurityProperties;
+import com.geekersjoel237.koracore.application.config.SecurityProperties;
 import com.geekersjoel237.koracore.infrastructure.security.BCryptCustomerPinEncoder;
 import com.geekersjoel237.koracore.shared.inmemory.*;
 import org.junit.jupiter.api.BeforeEach;

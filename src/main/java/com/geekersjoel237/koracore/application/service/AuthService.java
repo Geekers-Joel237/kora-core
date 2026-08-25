@@ -13,7 +13,7 @@ import com.geekersjoel237.koracore.domain.vo.Id;
 import com.geekersjoel237.koracore.domain.vo.Otp;
 import com.geekersjoel237.koracore.domain.vo.PhoneNumber;
 import com.geekersjoel237.koracore.domain.vo.Tokens;
-import com.geekersjoel237.koracore.infrastructure.config.SecurityProperties;
+import com.geekersjoel237.koracore.application.config.SecurityProperties;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;

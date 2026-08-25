@@ -1,81 +1,150 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code and for the automated review agents that audit diffs
+against this file. Every statement describes code present on this branch.
 
-## Project Overview
+## 1. Project overview
 
-Kora Core is a fintech-grade wallet backend (neobank / Mobile Money) built with Java 21 and Spring Boot 4.0.3. It simulates a production wallet system: P2P transfers, cash-in/out, merchant payments, multi-provider orchestration, settlement, reconciliation, and risk management. The project evolves progressively from a transactional monolith through modular monolith, hexagonal architecture, event-driven patterns, and eventually microservice extraction (see ROADMAP.md for the full 10-stage plan).
+Kora Core is a Spring Boot wallet backend for mobile-money operations: cash-in,
+cash-out, P2P transfer, balance, history, operator reversal. Money moves as
+immutable double-entry operations on a transaction walking an 11-state
+lifecycle. Provider calls hit a configurable stub, not a real provider.
 
-## Build & Run Commands
+## 2. Build & run
 
 ```bash
-# Build the project
-./gradlew build
-
-# Run the application (starts PostgreSQL via Docker Compose automatically)
-./gradlew bootRun
-
-# Run all tests
-./gradlew test
-
-# Run a single test class
-./gradlew test --tests "com.geekersjoel237.koracore.SomeTestClass"
-
-# Run a single test method
-./gradlew test --tests "com.geekersjoel237.koracore.SomeTestClass.someMethod"
-
-# Clean build
-./gradlew clean build
+./gradlew build                                    # compile + full test suite
+./gradlew test --tests "com.geekersjoel237.koracore.domain.model.LedgerTest"
+./gradlew bootRun   # :8081, starts docker-compose.yml (postgres, maildev, influx, grafana)
 ```
 
-Docker Compose (`compose.yaml`) provides PostgreSQL locally. Spring Boot Docker Compose support auto-starts it during `bootRun`.
+Tests ignore compose and start their own Testcontainers. `compose.yaml` does not
+exist. Load tests: `perf/*.js`, run via `perf/*-run.sh`.
 
-## Tech Stack
+## 3. Stack
 
-- **Java 21** — use records, sealed types, pattern matching where they improve modeling
-- **Spring Boot 4.0.3** — Web (REST), Data JPA, Data JDBC, Actuator, DevTools
-- **PostgreSQL** — primary database (via Docker Compose locally)
-- **Lombok** — compile-time boilerplate reduction
-- **springdoc-openapi** — API documentation (Swagger UI)
-- **JUnit 5** — testing framework (with Testcontainers for integration tests)
+Java 21 · Spring Boot 4.0.3 · PostgreSQL + Flyway · springdoc-openapi 3.0.1 · jjwt 0.12.6 · Lombok · JUnit 5 + Testcontainers 1.20.4.
+Starters: webmvc, data-jpa, data-jdbc, security, validation, mail, actuator, flyway.
 
-## Architecture & Design Principles
+## 4. Layers & packages
 
-The architecture evolves with the roadmap, currently starting as a monolith with strict separation:
+Root `com.geekersjoel237.koracore`. Dependencies point inward only.
 
-- **Domain layer**: Pure Java, no Spring annotations. Contains entities, value objects, domain services, and invariants.
-- **Application layer**: Use cases/command handlers and port interfaces.
-- **Infrastructure layer**: Adapters for DB, messaging, and external providers.
-- **Web/API layer**: Controllers only — no business logic.
+| Layer | Package | May depend on |
+|---|---|---|
+| Domain | `domain/` — `model`, `model/state`, `vo`, `enums`, `port`, `query`, `exception` | JDK only; zero Spring imports today |
+| Application | `application/` — `service`, `command`, `query`, `config`, `port/in` | domain; uses Spring `@Service`, `@Transactional`, `TransactionTemplate` |
+| Infrastructure | `infrastructure/` — `persistence`, `provider`, `security`, `mail`, `otp`, `config`, `bootstrap`, `scheduler` | domain + application |
+| Web | `web/api/**`, `web/exception` | application + domain |
 
-### Bounded Contexts (DDD)
+## 5. Domain vocabulary
 
-Four primary domains emerge through the roadmap: **Payments**, **Ledger**, **Risk**, **Reconciliation**. Each has explicit boundaries and ownership.
+Use these names. `Order`, `PaymentPart`, `LedgerEntry`, `Money`, `ProviderReference` and `IdempotencyKey` do not exist here.
 
-### Key Domain Concepts
+| Type | Role |
+|---|---|
+| `Transaction` | Aggregate root of a money movement; owns operations, state, history |
+| `Operation` | One ledger entry, `DEBIT` or `CREDIT`; append-only |
+| `Ledger` | Domain service creating transactions (`initiate`, `writeEntries`, `reverse`, `cashIn`, `cashOut`, `transfer`) |
+| `Account` | Balance holder; `CUSTOMER_ACCOUNT` or `FLOAT_ACCOUNT` |
+| `TrxStateHistoric` | Immutable audit row emitted on every state transition |
+| `AuthorizationRecord` | Provider authorization with TTL, used when capture fails |
+| `Customer`, `User` | Identity and credentials |
+| `Amount` | `record(BigDecimal value, String currency)` — the money type; `Balance` wraps one and returns new instances from `credit()` / `debit()` |
+| `Id`, `PhoneNumber`, `Otp`, `AccountType` | Value objects; `Id` is the business identifier |
+| `PaymentMethod` | Enum `CARD`, `ORANGE_MONEY` (`OM`), `MOBILE_MONEY` (`MOMO`), `WALLET` |
+| `TransactionState` | Interface with 11 singletons: `INITIALIZED`, `AUTHORIZED`, `CAPTURED`, `SETTLEMENT_PENDING`, `SETTLED`, `COMPLETED`, `FAILED`, `AUTHORIZATION_FAILED`, `CAPTURE_FAILED`, `SETTLEMENT_FAILED`, `REVERSED` |
 
-- **Double-entry ledger**: Immutable entries, balance is always derived (never updated directly). Invariant: `sum(debits) == sum(credits)`.
-- **Payment lifecycle state machine**: `INITIATED → AUTHORIZED → CAPTURED → SETTLED` (+ `FAILED`/`REVERSED`). Transitions must be validated — no illegal state changes.
-- **Idempotency**: All financial operations must be idempotent (deduplicated via idempotency keys).
-- **Value objects**: `Money(amount, currency)`, `ProviderReference`, `IdempotencyKey` — use records.
+Every aggregate exposes `snapshot()` returning an inner record, plus a static `createFromSnapshot(...)` for reconstruction from persistence.
 
-### Naming Conventions
+## 6. Non-negotiable invariants
 
-- Use business names in the domain: `Order`, `PaymentPart`, `LedgerEntry`
-- Avoid technical suffixes in domain types (no "Entity", "DTO" in domain layer)
-- Domain errors are explicit typed exceptions, mapped at boundaries
+| Invariant | Enforced today |
+|---|---|
+| `SUM(DEBIT) == SUM(CREDIT)` per transaction and currency | Domain: `Transaction.verifyDoubleEntry()` runs after every `recordDoubleEntry()`. No DB constraint. Asserted in `FinancialInvariantsDbTest` and `MoneyIntegrityE2ETest` |
+| Ledger operations are append-only; a correction is a compensating entry | Application: `Ledger.reverse()` writes a mirrored pair; `JpaTransactionRepository.save()` only appends to the operations collection. No DB trigger |
+| Ledger operations are the source of truth for balance | Domain + ADR-001. `accounts.balance_amount` is a denormalized read cache updated in the same transaction as the ledger write; on divergence, `Operation` rows win. It is **not** derived on read |
+| Float account is unbounded | `Account.debit()` is a no-op for `FLOAT_ACCOUNT`, so its `balance_amount` stays 0; audit it through `operations` |
+| Money is `BigDecimal`, never `double` or `float` | `Amount.value` is `BigDecimal`; all money columns are `NUMERIC(19,4)` |
+| Currency is mandatory; cross-currency arithmetic forbidden | `Amount` compact constructor rejects a blank currency; `add` / `subtract` / `isGreaterThan*` throw `CurrencyMismatchException` |
+| No illegal state transition | Each `*State` class validates its own successors and throws `InvalidStateTransitionException`. Legal edges: INITIALIZED to AUTHORIZED, FAILED, AUTHORIZATION_FAILED; AUTHORIZED to CAPTURED, FAILED, AUTHORIZATION_FAILED, CAPTURE_FAILED, REVERSED; CAPTURED to SETTLEMENT_PENDING, CAPTURE_FAILED, REVERSED; SETTLEMENT_PENDING to SETTLED, SETTLEMENT_FAILED, REVERSED; SETTLED to COMPLETED, REVERSED; COMPLETED to REVERSED |
+| No provider network call inside a DB transaction | `PaymentTransactionalExecutor` splits cash-in and cash-out into TX-1 (~10 ms) / provider I/O (~1 400 ms, zero connections held) / TX-2 (~20 ms). Per ADR-004, the previous class-level `@Transactional` produced p95 60 000 ms and a 73.93 % error rate at 25 req/s through HikariCP pool exhaustion |
 
-## Testing Strategy (TDD, 3 Layers)
+## 7. Review rules
 
-1. **Unit tests** — Domain model, domain services, use cases with mocked ports. No Spring context, no DB, no network. Must run in seconds.
-2. **Integration tests** — Repository adapters, DB constraints, transaction behavior. Use Testcontainers and `@DataJpaTest` sliced context.
-3. **E2E tests** — Full app + DB via Testcontainers. Test real business flows over HTTP.
+Assertions to apply to a diff. Each one is decidable by reading the diff alone.
 
-## Definition of Done
+1. A file under `domain/` that imports `org.springframework.*` is a defect.
+2. A file under `domain/` or `application/` that imports `koracore.infrastructure.*`
+   or `koracore.web.*` is a defect. There is currently no exception.
+3. A call to `ProviderPort.authorize` / `capture` / `reverse` placed inside a
+   `txTemplate.execute(...)` lambda, or inside a method annotated
+   `@Transactional`, is a defect.
+4. Adding `@Transactional` to `PaymentService` or `PaymentTransactionalExecutor`
+   at class level is a defect — both are non-transactional by design.
+5. A `double` or `float` used for a monetary value, anywhere, is a defect.
+6. Comparing or combining two `Amount` values through `.value()` instead of the
+   `Amount` methods bypasses the currency check and is a defect.
+7. A state change written as a direct field assignment instead of going through
+   the named methods on `Transaction` (`authorize()`, `capture()`, `settle()`,
+   `markCompleted()`, `reverse()`, `fail*()`) is a defect.
+8. Any `UPDATE` or `DELETE` on `operations` or `trx_state_historics`, and any
+   `clear()` or `remove()` on the operations collection of `Transaction` or
+   `TransactionEntity`, is a defect.
+9. A change to `accounts.balance_amount` not paired with `Operation` rows written
+   in the same transaction is a defect.
+10. An `*Action` class in `web/api/**` containing branching on domain state,
+    arithmetic, or repository access is a defect — it may only build a command,
+    delegate to a `*UseCase`, and map the result.
+11. A command, port, or domain type accepting a raw `String` where a domain type
+    exists (`Id`, `Amount`, `PaymentMethod`, `PhoneNumber`) is a defect.
+    Conversion happens once, in `Request.toCommand()` at the web layer.
+12. A new or altered table column without a new `V<n>__*.sql` under
+    `src/main/resources/db/migration/` is a defect. `ddl-auto` must stay
+    `validate` in `application.properties` and `none` in the test properties.
+13. A new domain exception without a matching `@ExceptionHandler` entry in
+    `GlobalExceptionHandler` is a defect.
+14. New domain behaviour without a Spring-free unit test is a defect.
 
-Every change must have: tests (unit + integration), domain invariants captured, no business logic in controllers/adapters, observability for money movement operations.
+## 8. Testing strategy
 
-## Key Files
+38 test classes under `src/test/java`, three levels:
 
-- `ROADMAP.md` — 10-stage progressive evolution plan with volume targets
-- `HELP.md` — Engineering standards, methodology, testing strategy, DDD/SOLID rules, and project conventions
+- **Unit** — `domain/**`, `application/**`. Plain JUnit 5, no Spring context; ports faked by the hand-written doubles in `shared/inmemory/`.
+- **Integration** — `infrastructure/persistence/**` extends `AbstractRepositoryTest`: `@SpringBootTest` + `@Transactional` + `@ActiveProfiles("test")` + `@Import(TestMailConfig.class)`, with a static `PostgreSQLContainer<>("postgres:16-alpine")` wired via `@DynamicPropertySource`. `@DataJpaTest` and `@AutoConfigureTestDatabase` are gone in Spring Boot 4 — do not reintroduce them.
+- **E2E** — `e2e/**` extends `AbstractE2ETest`: `@SpringBootTest(RANDOM_PORT)` over real HTTP with `RestTemplate`; isolation by `TRUNCATE` in `@BeforeEach`, not by rollback. `KoraCoreApplicationTests` is the only class using `@Testcontainers` + `@ServiceConnection`.
+
+Flyway owns the schema in tests exactly as in production.
+
+## 9. Known gaps — do not report
+
+Deliberate and tracked. Do not raise them on a PR.
+
+- `AuthService` signs JWTs with `io.jsonwebtoken` directly instead of through a
+  `TokenIssuer` port. It imports no `koracore.infrastructure` type, so rule 2
+  still holds; the port extraction is a Step 2 target alongside
+  `TransactionBoundary`.
+- `PaymentTransactionalExecutor` uses Spring's `TransactionTemplate` directly.
+  The `TransactionBoundary` port that removes it is deferred (ADR-004, Step 2).
+- No idempotency store: a client retry can create duplicate `INITIALIZED`
+  transactions (ADR-004 G-5, Step 3).
+- No recovery for a crash between TX-1 and TX-2, and no TX-2 retry after provider
+  success; `AuthorizationRecord` exists only to make these auditable
+  (ADR-004 G-1 to G-4, Step 3).
+- `MobileMoneyProviderAdapter` is a latency-simulating stub, not an HTTP client,
+  and has no circuit breaker (Step 3).
+- `OtpStoreAdapter` is a `ConcurrentHashMap`, single-instance only; Redis is Step 2.
+- `SETTLEMENT_PENDING` to `SETTLED` is not automated; the reconciliation engine
+  is Step 6.
+- The double-entry and append-only invariants have no database-level constraint.
+- No CQRS split: `domain/query/` holds `PageRequest`, `PageResult` and
+  `TransactionFilter` for the single `TransactionRepository` (Step 5).
+
+## 10. Key files
+
+- `ROADMAP.md` — 10-step evolution plan
+- `HELP.md` — engineering standards, DDD/SOLID rules, project conventions
+- `docs/kora-core-state-of-view.md` — engineering retrospective
+- `docs/adr/` — ADR-001 immutable ledger and balance cache · ADR-002 payment lifecycle and locking · ADR-003 single-call payment API · ADR-004 micro-transaction model · ADR-005 load-test calibration
+- `src/main/resources/db/migration/V1__initial_schema.sql` — the whole schema
+- `perf/PERF.md`, `perf/SIMULATION.md` — load-test procedure

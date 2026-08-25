@@ -1,6 +1,6 @@
 package com.geekersjoel237.koracore.infrastructure.security;
 
-import com.geekersjoel237.koracore.infrastructure.config.SecurityProperties;
+import com.geekersjoel237.koracore.application.config.SecurityProperties;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
