@@ -146,5 +146,5 @@ Deliberate and tracked. Do not raise them on a PR.
 - `HELP.md` — engineering standards, DDD/SOLID rules, project conventions
 - `docs/kora-core-state-of-view.md` — engineering retrospective
 - `docs/adr/` — ADR-001 immutable ledger and balance cache · ADR-002 payment lifecycle and locking · ADR-003 single-call payment API · ADR-004 micro-transaction model · ADR-005 load-test calibration
-- `src/main/resources/db/migration/V1__initial_schema.sql` — the whole schema
+- `src/main/resources/db/migration/V202605270702__initial_schema.sql` — the whole schema
 - `perf/PERF.md`, `perf/SIMULATION.md` — load-test procedure
