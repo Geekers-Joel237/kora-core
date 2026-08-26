@@ -1,6 +1,5 @@
 # Load testing — same topology as dev, different numbers.
 #
-#   set -a && source .env && set +a
 #   SPRING_PROFILES_ACTIVE=perf ./gradlew bootRun
 #
 # This profile declares no secret of its own. The JWT key, the datasource and

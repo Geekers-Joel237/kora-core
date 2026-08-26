@@ -210,21 +210,21 @@ Switching to a load test therefore means moving **both** axes together:
 
 ```bash
 COMPOSE_PROFILES=mail,observability docker compose up -d
-set -a && source .env && set +a
 SPRING_PROFILES_ACTIVE=perf ./gradlew bootRun
 ```
 
 The Compose files and the Spring profiles meet in exactly one place: `.env`.
-Compose reads it directly; the application reads the same variables only because
-`set -a && source .env` exported them into the shell first.
+Both read it directly, so there is a single source of truth rather than a
+convention that the two are kept aligned by hand. A real environment variable
+still overrides the file, which is how CI and a secrets manager inject values.
 
 ### 3.3 Verify the database connection
 
-Docker Compose reads `.env` on its own. The Spring application does **not** —
-export the variables into your shell first, or every `${VAR}` will be unresolved:
+Both Docker Compose and the application read `.env` — Compose natively, the
+application through `spring.config.import` in `application.yaml`. No shell
+preparation, and no second copy of the values to drift:
 
 ```bash
-set -a && source .env && set +a
 ./gradlew bootRun &
 curl -s http://localhost:8081/actuator/health | python -m json.tool
 # Expected: "status": "UP", "db": { "status": "UP" }, "mail": { "status": "UP" }
@@ -284,19 +284,16 @@ with no `.env` and no exported variable.
 
 ### 3.6 Running from an IDE
 
-`docker compose` reads `.env` by itself; nothing else does. A Run Configuration
-that starts `KoraCoreApplication` directly will fail on the first unresolved
-`${VAR}` unless you give it the same file:
+Nothing to configure. `application.yaml` imports `.env` itself, so a Run
+Configuration that starts `KoraCoreApplication` picks up the same values as
+`docker compose up` — no EnvFile plugin, no variables pasted into the run
+configuration, no second copy to drift.
 
-- **IntelliJ IDEA** — install the *EnvFile* plugin, then in the Run Configuration
-  open the **EnvFile** tab, enable it and add `.env`. One setting, and the IDE run
-  and `docker compose up` stay on the same file.
-- **Without a plugin** — run `./gradlew bootRun` from the IDE terminal after
-  `set -a && source .env && set +a`, or paste the variables into the
-  *Environment variables* field of the Run Configuration. Pasting means a second
-  copy that will drift; prefer the plugin.
-- **Tests need none of this.** `@ActiveProfiles("test")` is self-contained, so
-  running a test class from the IDE works on a clean clone.
+One condition: the **working directory** must be the project root, which is the
+IntelliJ default. `spring.config.import` resolves `./.env` relative to it.
+
+Tests need even less. `@ActiveProfiles("test")` is self-contained, so running a
+test class from the IDE works on a clean clone with no `.env` at all.
 
 ### 3.5 When a variable is missing
 
@@ -331,7 +328,6 @@ fallback, or if a `${VAR}` is referenced without being listed in `.env.example`.
 
 ```bash
 docker compose up -d
-set -a && source .env && set +a
 ./gradlew bootRun
 ```
 

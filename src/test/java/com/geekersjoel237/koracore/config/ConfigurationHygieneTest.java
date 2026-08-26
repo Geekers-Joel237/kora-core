@@ -36,10 +36,24 @@ class ConfigurationHygieneTest {
 
     private static final Path MAIN_RESOURCES = Path.of("src", "main", "resources");
     private static final Path ENV_EXAMPLE = Path.of(".env.example");
+    private static final Path ENV_PROD_EXAMPLE = Path.of(".env.prod.example");
+    private static final Path REPOSITORY_ROOT = Path.of(".");
 
-    /** Property keys whose value must never be recoverable from the repository. */
-    private static final Pattern SENSITIVE_KEY =
-            Pattern.compile("(?i).*(secret|password|token|key).*");
+    /**
+     * Keys that carry a credential, matched on the whole key so that
+     * {@code access-token-expiration-minutes} — which merely contains "token" —
+     * is not mistaken for one.
+     */
+    private static final Pattern CREDENTIAL_KEY =
+            Pattern.compile("(?i)^(.*[._\\-])?(password|secret|token|api[-_]?key)$");
+
+    /** A value that is exactly one placeholder and nothing else. */
+    private static final Pattern PURE_PLACEHOLDER =
+            Pattern.compile("^['\"]?\\$\\{[A-Za-z0-9_.\\-]+}['\"]?$");
+
+    /** Marks a value in an example file as deliberately unusable. */
+    private static final Pattern OBVIOUS_PLACEHOLDER =
+            Pattern.compile("(?i).*(change_me|replace_me|unused).*");
 
     /** {@code ${VAR:fallback}} — the capture group is non-empty only when a fallback exists. */
     private static final Pattern PLACEHOLDER_WITH_FALLBACK =
@@ -63,7 +77,7 @@ class ConfigurationHygieneTest {
         }
         String key = trimmed.substring(0, separator).strip();
         String value = trimmed.substring(separator + 1).strip();
-        if (!SENSITIVE_KEY.matcher(key).matches()) {
+        if (!CREDENTIAL_KEY.matcher(key).matches()) {
             return Optional.empty();
         }
         Matcher matcher = PLACEHOLDER_WITH_FALLBACK.matcher(value);
@@ -73,6 +87,35 @@ class ConfigurationHygieneTest {
             }
         }
         return Optional.empty();
+    }
+
+    /**
+     * The check that actually protects Compose: a fallback is only one way to leak
+     * a credential, writing it straight into the file is the other.
+     *
+     * @return why this line hard-codes a credential, or empty if it is clean.
+     */
+    static Optional<String> hardcodedCredential(String line) {
+        String trimmed = line.strip();
+        if (trimmed.isEmpty() || trimmed.startsWith("#")) {
+            return Optional.empty();
+        }
+        int separator = indexOfSeparator(trimmed);
+        if (separator < 0) {
+            return Optional.empty();
+        }
+        String key = trimmed.substring(0, separator).strip();
+        // YAML sequence form: - 'PGADMIN_DEFAULT_PASSWORD=${...}'
+        if (key.startsWith("-")) key = key.substring(1).strip();
+        if (key.startsWith("'") || key.startsWith("\"")) key = key.substring(1);
+        String value = trimmed.substring(separator + 1).strip();
+        if (!CREDENTIAL_KEY.matcher(key).matches() || value.isEmpty()) {
+            return Optional.empty();
+        }
+        if (PURE_PLACEHOLDER.matcher(value).matches()) {
+            return Optional.empty();
+        }
+        return Optional.of(key + " holds the literal value '" + value + "'");
     }
 
     private static int indexOfSeparator(String line) {
@@ -173,6 +216,107 @@ class ConfigurationHygieneTest {
                 .isEmpty();
     }
 
+    @Test
+    void no_credential_is_hard_coded() {
+        List<String> offenders = new ArrayList<>();
+        for (Path file : configurationFiles()) {
+            List<String> lines = readLines(file);
+            for (int i = 0; i < lines.size(); i++) {
+                int lineNumber = i + 1;
+                hardcodedCredential(lines.get(i))
+                        .ifPresent(reason -> offenders.add(file + ":" + lineNumber + "  →  " + reason));
+            }
+        }
+
+        assertThat(offenders)
+                .withFailMessage("""
+                        A credential is written directly into a configuration file.
+                        Move the value to .env and reference it as ${VAR} with no default.
+                        Offending lines:
+                          %s""", String.join("\n  ", offenders))
+                .isEmpty();
+    }
+
+    @Test
+    void example_files_carry_no_usable_credential() {
+        List<String> offenders = new ArrayList<>();
+        for (Path file : List.of(ENV_EXAMPLE, ENV_PROD_EXAMPLE)) {
+            List<String> lines = readLines(file);
+            for (int i = 0; i < lines.size(); i++) {
+                String trimmed = lines.get(i).strip();
+                if (trimmed.isEmpty() || trimmed.startsWith("#")) continue;
+                int equals = trimmed.indexOf('=');
+                if (equals <= 0) continue;
+                String key = trimmed.substring(0, equals).strip();
+                String value = trimmed.substring(equals + 1).strip();
+                if (!CREDENTIAL_KEY.matcher(key).matches() || value.isEmpty()) continue;
+                if (!OBVIOUS_PLACEHOLDER.matcher(value).matches()) {
+                    offenders.add(file + ":" + (i + 1) + "  →  " + key + " = '" + value + "'");
+                }
+            }
+        }
+
+        assertThat(offenders)
+                .withFailMessage("""
+                        A versioned example file carries a credential that could be used as-is.
+                        Example values must be obviously unusable — CHANGE_ME, REPLACE_ME — so
+                        nobody ships one by accident.
+                        Offending lines:
+                          %s""", String.join("\n  ", offenders))
+                .isEmpty();
+    }
+
+    @Test
+    void both_example_files_declare_the_same_keys() {
+        Set<String> dev = envKeys(ENV_EXAMPLE);
+        Set<String> prod = envKeys(ENV_PROD_EXAMPLE);
+
+        Set<String> onlyDev = new LinkedHashSet<>(dev);
+        onlyDev.removeAll(prod);
+        Set<String> onlyProd = new LinkedHashSet<>(prod);
+        onlyProd.removeAll(dev);
+
+        assertThat(List.of(onlyDev, onlyProd).stream().flatMap(Set::stream).toList())
+                .withFailMessage("""
+                        The two environment templates have drifted apart.
+                        A variable added for development but missing from production is
+                        discovered on deployment day, which is the worst possible moment.
+                        Only in .env.example:      %s
+                        Only in .env.prod.example: %s""", onlyDev, onlyProd)
+                .isEmpty();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "      PGADMIN_DEFAULT_PASSWORD: root",
+            "      - 'PGADMIN_DEFAULT_PASSWORD=root'",
+            "      POSTGRES_PASSWORD: hunter2",
+            "kora.security.jwt.secret=kora-core-default-secret-key-must-be-32-chars!",
+            "      secret: some-literal-key"
+    })
+    void detects_a_hard_coded_credential(String line) {
+        assertThat(hardcodedCredential(line))
+                .withFailMessage("'%s' should have been flagged.", line)
+                .isPresent();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}",
+            "      - 'POSTGRES_PASSWORD=${POSTGRES_PASSWORD}'",
+            "      secret: ${JWT_SECRET}",
+            "      access-token-expiration-minutes: 15",
+            "      refresh-token-expiration-days: 7",
+            "      spring.mail.password:",
+            "    image: 'postgres:17.7-alpine'",
+            "# PGADMIN_DEFAULT_PASSWORD: root"
+    })
+    void accepts_a_line_without_a_hard_coded_credential(String line) {
+        assertThat(hardcodedCredential(line))
+                .withFailMessage("'%s' should NOT have been flagged.", line)
+                .isEmpty();
+    }
+
     /** Both formats are scanned: the repository is YAML today, and .properties would win if reintroduced. */
     private static boolean isConfigurationFile(Path path) {
         String name = path.getFileName().toString();
@@ -184,23 +328,37 @@ class ConfigurationHygieneTest {
                 .withFailMessage("Resource directory not found at %s — tests must run from the project root.",
                         MAIN_RESOURCES.toAbsolutePath())
                 .isDirectory();
+        List<Path> files = new ArrayList<>();
         try (Stream<Path> paths = Files.walk(MAIN_RESOURCES)) {
-            return paths.filter(Files::isRegularFile)
+            paths.filter(Files::isRegularFile)
                     .filter(ConfigurationHygieneTest::isConfigurationFile)
-                    .sorted()
-                    .toList();
+                    .forEach(files::add);
         } catch (IOException e) {
             throw new UncheckedIOException("Cannot walk " + MAIN_RESOURCES.toAbsolutePath(), e);
         }
+        // The Compose files carry database and pgAdmin credentials. Leaving them
+        // out is how a hard-coded password walks back in unnoticed.
+        try (Stream<Path> paths = Files.list(REPOSITORY_ROOT)) {
+            paths.filter(Files::isRegularFile)
+                    .filter(path -> path.getFileName().toString().matches("docker-compose.*\\.ya?ml"))
+                    .forEach(files::add);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Cannot list " + REPOSITORY_ROOT.toAbsolutePath(), e);
+        }
+        return files.stream().sorted().toList();
     }
 
     private static Set<String> envExampleKeys() {
-        assertThat(ENV_EXAMPLE)
-                .withFailMessage(".env.example not found at %s — it is the contract every clone relies on.",
-                        ENV_EXAMPLE.toAbsolutePath())
+        return envKeys(ENV_EXAMPLE);
+    }
+
+    private static Set<String> envKeys(Path envFile) {
+        assertThat(envFile)
+                .withFailMessage("%s not found — it is the contract every clone relies on.",
+                        envFile.toAbsolutePath())
                 .isRegularFile();
         Set<String> keys = new LinkedHashSet<>();
-        for (String line : readLines(ENV_EXAMPLE)) {
+        for (String line : readLines(envFile)) {
             String trimmed = line.strip();
             if (trimmed.isEmpty() || trimmed.startsWith("#")) continue;
             int equals = trimmed.indexOf('=');

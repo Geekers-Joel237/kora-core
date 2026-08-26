@@ -118,7 +118,39 @@ commande a été vérifiée dans l'image réelle, pas supposée :
 ne le « ré-attend » pas, et Kubernetes ignore la directive. C'est un confort de
 développement, pas une garantie de disponibilité.
 
-### D7 — Images épinglées
+### D7 — Spring ne gère pas la stack Compose
+
+`spring.docker.compose.enabled: false` dans le fichier de base — donc pour tous les
+profils, `perf` compris.
+
+Le découpage D2 casse cette intégration, et c'est instructif : Spring résout **un
+seul** fichier Compose (`docker-compose.yml`) puis invoque `docker compose -f <ce
+fichier>`. Or nommer un fichier avec `-f` supprime le chargement automatique de
+`docker-compose.override.yml` — le mécanisme même sur lequel repose D2. Les ports
+vivant dans l'override, l'application échouait au démarrage :
+
+```
+IllegalStateException: No host port mapping found for container port 5432
+    at DefaultConnectionPorts.get
+    at PostgresJdbcDockerComposeConnectionDetailsFactory
+```
+
+Fournir les deux fichiers à `spring.docker.compose.file` (qui accepte bien une
+`List<File>`) aurait corrigé le symptôme, pas la cause. Deux raisons plus lourdes
+condamnaient l'intégration :
+
+- ses `ConnectionDetails` **priment sur `spring.datasource.*`**. Elle se serait
+  connectée avec le superutilisateur lu dans le bloc `environment:` du conteneur,
+  court-circuitant en silence la séparation `kora_migration` / `kora_app` de D-KC02.
+  Invisible aujourd'hui — les trois rôles valent `postgres` — et actif le jour où
+  KC-05 crée les vrais rôles ;
+- sa sélection de profils (`spring.docker.compose.profiles.active`) serait un
+  second réglage pour la décision déjà portée par `COMPOSE_PROFILES` dans `.env`.
+
+La stack se démarre donc explicitement, `docker compose up -d`, ce que
+`CONTRIBUTING.md` §3.2 documentait déjà.
+
+### D8 — Images épinglées
 
 `postgres:17.7-alpine`, `grafana/grafana:12.3.3`, `influxdb:1.8-alpine`. pgAdmin et
 MailDev n'exposent pas de version exploitable dans leurs métadonnées et sont épinglés

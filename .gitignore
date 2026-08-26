@@ -39,4 +39,5 @@ out/
 .env
 .env.*
 !.env.example
+!.env.prod.example
 /logs/

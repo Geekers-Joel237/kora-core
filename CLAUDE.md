@@ -15,7 +15,7 @@ lifecycle. Provider calls hit a configurable stub, not a real provider.
 ```bash
 ./gradlew build                                    # compile + full test suite
 ./gradlew test --tests "com.geekersjoel237.koracore.domain.model.LedgerTest"
-./gradlew bootRun   # :8081, starts docker-compose.yml (postgres, maildev, influx, grafana)
+./gradlew bootRun   # :8081; reads .env directly. Services come from COMPOSE_PROFILES
 ```
 
 Tests ignore compose and start their own Testcontainers. `compose.yaml` does not
@@ -99,9 +99,10 @@ Assertions to apply to a diff. Each one is decidable by reading the diff alone.
 11. A command, port, or domain type accepting a raw `String` where a domain type
     exists (`Id`, `Amount`, `PaymentMethod`, `PhoneNumber`) is a defect.
     Conversion happens once, in `Request.toCommand()` at the web layer.
-12. A new or altered table column without a new `V<n>__*.sql` under
-    `src/main/resources/db/migration/` is a defect. `ddl-auto` must stay
-    `validate` in `application.properties` and `none` in the test properties.
+12. A new or altered table column without a new
+    `V<yyyyMMddHHmm>__snake_case.sql` under `src/main/resources/db/migration/`
+    is a defect. `ddl-auto` must stay `validate` in `application.yaml` and
+    `none` in `src/test/resources/application-test.yaml`.
 13. A new domain exception without a matching `@ExceptionHandler` entry in
     `GlobalExceptionHandler` is a defect.
 14. New domain behaviour without a Spring-free unit test is a defect.
