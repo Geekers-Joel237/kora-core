@@ -1,0 +1,108 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Base configuration.
+#
+# Two kinds of entry are allowed here, and nothing else:
+#
+#   1. The environment contract — which variables must exist for the application
+#      to run at all. The binding text is identical everywhere; only the injected
+#      values differ, and they come from .env.
+#   2. Policy that is genuinely the same in every environment.
+#
+# Anything an environment could legitimately want to change — monitoring, mail
+# transport, provider behaviour, connection pool sizing — belongs in
+# application-<profile>.yaml. Putting it here would force every environment to
+# inherit a decision that was only ever made for one of them.
+#
+# No entry below carries a default. A missing variable must stop the boot: a
+# silent fallback on a signing key or a database credential is a security
+# defect, not a convenience. The values come from .env, which the block below
+# imports, so `./gradlew bootRun` works with no shell preparation.
+# ─────────────────────────────────────────────────────────────────────────────
+
+spring:
+  # The application reads .env itself, from the working directory, so it and
+  # Docker Compose consume the same file with no shell ceremony in between.
+  # Real environment variables still win — SPRING_PROFILES_ACTIVE=perf and a
+  # CI-injected secret both override what .env says.
+  #
+  # optional: so a deployment that injects plain environment variables — a
+  # container, a CI job — is not forced to carry a file it does not need.
+  #
+  # Known limit: with no .env and no exported variable, an unresolved
+  # ${POSTGRES_APP_PASSWORD} is bound as literal text and surfaces as
+  # "password authentication failed" rather than "variable missing". Only the
+  # JWT key is protected from that, by the @Size constraint on
+  # SecurityProperties. Closing it for the datasource needs an
+  # EnvironmentPostProcessor that rejects any resolved value still containing
+  # "${" — not done.
+  config:
+    import: "optional:file:./.env[.properties]"
+
+  # Spring must not manage the Compose stack. Three reasons, in order of weight:
+  #
+  #   1. Its ConnectionDetails outrank spring.datasource.*, so it would connect
+  #      with the superuser from the container's `environment:` block and quietly
+  #      bypass the POSTGRES_APP_USER / POSTGRES_MIGRATION_USER split above.
+  #   2. It resolves a single Compose file — docker-compose.yml — and invoking
+  #      `docker compose -f <file>` suppresses docker-compose.override.yml. The
+  #      ports live there, so it fails with "No host port mapping found for
+  #      container port 5432".
+  #   3. Its profile selection is a second setting next to COMPOSE_PROFILES in
+  #      .env, for the same decision.
+  #
+  # The stack is started explicitly instead: `docker compose up -d`.
+  # See CONTRIBUTING.md section 3.2 and ADR-006.
+  docker:
+    compose:
+      enabled: false
+
+  application:
+    name: kora-core
+  profiles:
+    default: dev
+
+  # Two roles, two jobs. The application never needs DDL rights, and the
+  # migration runner never serves traffic. Splitting them means a SQL injection
+  # that reaches the connection pool still cannot DROP a table.
+  #
+  # Until KC-05 creates the roles in PostgreSQL, both pairs point at the same
+  # superuser in .env and behaviour is unchanged. KC-05 then creates
+  # kora_migration (owner, DDL) and kora_app (DML only, no CREATE/DROP) and
+  # updates .env — no file here changes.
+  datasource:
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${POSTGRES_DB}
+    username: ${POSTGRES_APP_USER}
+    password: ${POSTGRES_APP_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  mail:
+    host: ${MAIL_HOST}
+    port: ${MAIL_SMTP_PORT}
+
+  # Flyway owns the schema in every environment; Hibernate only checks that the
+  # entities match it and never emits DDL. Out-of-order stays off everywhere:
+  # a migration older than the highest applied one is re-stamped before merge,
+  # never inserted retroactively. See CONTRIBUTING.md section 9.
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    # No url: Spring derives it from spring.datasource.url and only swaps the
+    # credentials, so the two roles cannot drift onto different databases.
+    user: ${POSTGRES_MIGRATION_USER}
+    password: ${POSTGRES_MIGRATION_PASSWORD}
+    out-of-order: false
+
+server:
+  port: ${SERVER_PORT}
+
+# Token and OTP lifetimes are product policy, not environment tuning: the same
+# numbers hold on a laptop and under load. A profile may still override them.
+kora:
+  security:
+    jwt:
+      secret: ${JWT_SECRET}
+      access-token-expiration-minutes: 15
+      refresh-token-expiration-days: 7
+    otp:
+      expiration-minutes: 5

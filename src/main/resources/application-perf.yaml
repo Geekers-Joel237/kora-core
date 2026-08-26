@@ -1,0 +1,60 @@
+# Load testing — same topology as dev, different numbers.
+#
+#   SPRING_PROFILES_ACTIVE=perf ./gradlew bootRun
+#
+# This profile declares no secret of its own. The JWT key, the datasource and
+# the mail host all come from the base contract, so a missing variable fails
+# here exactly as it does in dev — which is the point: perf must not be the
+# environment where a fallback quietly keeps things running.
+
+spring:
+  mail:
+    from: noreply@kora.dev
+    properties:
+      mail:
+        smtp:
+          auth: false
+          starttls:
+            enable: false
+
+  # Sized from ADR-005. minimum-idle equals maximum-pool-size so the pool is
+  # fully warm before the first k6 iteration and ramp-up does not measure
+  # connection creation.
+  datasource:
+    hikari:
+      maximum-pool-size: 30
+      minimum-idle: 30
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+# Realistic African mobile-money round-trips (ADR-004: ~1 400 ms median).
+kora:
+  provider:
+    behavior: SUCCESS
+    simulate-latency: true
+    latency:
+      authorize-ms: 800
+      capture-ms: 600
+      timeout-threshold-ms: 5000
+
+# Monitoring: health is a hard dependency here, not a convenience —
+# perf/*-run.sh polls GET /actuator/health to decide the application is ready
+# before starting k6. show-details is required for the same reason: the scripts
+# read the "mail" component to catch a missing MailDev. Metrics go to InfluxDB
+# for the Grafana panels (JVM heap, HikariCP, HTTP server).
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+  influx:
+    metrics:
+      export:
+        enabled: true
+        uri: http://${INFLUXDB_HOST}:${INFLUXDB_PORT}
+        db: kora_metrics
+        step: 10s

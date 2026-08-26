@@ -1,0 +1,38 @@
+# Local development — the default profile (spring.profiles.default in the base file).
+# Overrides only what differs from the base contract.
+
+spring:
+  # MailDev, started by docker-compose. It accepts anything and stores it in RAM,
+  # so no credentials and no TLS. A deployed environment must not inherit this.
+  mail:
+    from: noreply@kora.dev
+    properties:
+      mail:
+        smtp:
+          auth: false
+          starttls:
+            enable: false
+
+# Provider stub: fast and deterministic, so a local run is not spent waiting.
+# Realistic latencies belong to the perf profile.
+kora:
+  provider:
+    behavior: SUCCESS
+    simulate-latency: true
+    latency:
+      authorize-ms: 200
+      capture-ms: 150
+      timeout-threshold-ms: 3000
+
+# Monitoring: wide open, because this runs on your machine and the whole point
+# is to see why something is DOWN. show-details puts the datasource URL and the
+# SMTP host in the /actuator/health payload, and env/configprops expose the
+# resolved configuration — useful here, unacceptable anywhere reachable.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,env,configprops
+  endpoint:
+    health:
+      show-details: always

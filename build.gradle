@@ -1,3 +1,5 @@
+import org.gradle.api.tasks.PathSensitivity
+
 plugins {
     id 'java'
     id 'org.springframework.boot' version '4.0.3'
@@ -53,4 +55,17 @@ dependencies {
 
 tasks.named('test') {
     useJUnitPlatform()
+
+    // ConfigurationHygieneTest reads these files from the working directory, and
+    // Gradle cannot see that on its own: without declaring them, `./gradlew test`
+    // reports UP-TO-DATE after a Compose file gains a hard-coded password, and the
+    // guard never runs. Verified — it happened.
+    inputs.files(
+            'docker-compose.yml',
+            'docker-compose.override.yml',
+            'docker-compose.prod.yml',
+            '.env.example',
+            '.env.prod.example')
+            .withPropertyName('configurationGuardInputs')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
 }

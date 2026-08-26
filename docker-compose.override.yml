@@ -1,0 +1,59 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Development. Loaded automatically by `docker compose` — you never pass -f.
+#
+# Holds only operational decisions: what is reachable from the host, under what
+# name, and what happens when a container dies. Adding a *service* here would
+# make the architecture invisible in docker-compose.yml, so services stay there
+# and are selected with COMPOSE_PROFILES.
+#
+#     docker compose up -d          # profiles from .env
+#     docker compose ps
+#     docker compose logs -f
+#     docker compose stop           # keeps containers and data
+#     docker compose down           # removes containers and network, keeps volumes
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  postgres:
+    container_name: kora-postgres
+    # Loopback only. '${DB_PORT}:5432' would bind 0.0.0.0 and [::], putting the
+    # database on every interface of the machine — reachable by anyone on the
+    # same café or office network. The application runs on the host, so
+    # loopback is all it needs, here and in production alike.
+    ports:
+      - '127.0.0.1:${DB_PORT}:5432'
+    # "no", not unless-stopped: a database that silently comes back every time
+    # Docker Desktop starts keeps running for days after you stopped working,
+    # and hides the fact that you never started it deliberately. Production
+    # wants the opposite and says so in docker-compose.prod.yml.
+    restart: "no"
+
+  maildev:
+    container_name: kora-maildev
+    ports:
+      - '127.0.0.1:${MAIL_SMTP_PORT}:1025'   # SMTP — Spring Boot mail target
+      - '127.0.0.1:${MAIL_UI_PORT}:1080'     # Web UI — read the OTP mails here
+    restart: "no"
+
+  pgadmin:
+    container_name: kora-db-admin
+    ports:
+      - '127.0.0.1:${DB_ADMIN_PORT}:80'
+    restart: "no"
+
+  influxdb:
+    container_name: kora-influxdb
+    ports:
+      - '127.0.0.1:${INFLUXDB_PORT}:8086'
+    restart: "no"
+
+  grafana:
+    container_name: kora-grafana
+    ports:
+      - '127.0.0.1:${GRAFANA_PORT}:3000'
+    restart: "no"
+    # Host path, therefore an environment decision. Provisions the InfluxDB
+    # datasource and the k6 dashboard so a fresh Grafana is useful immediately.
+    volumes:
+      - './perf/grafana/provisioning:/etc/grafana/provisioning'

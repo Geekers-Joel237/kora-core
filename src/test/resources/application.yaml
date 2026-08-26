@@ -1,0 +1,25 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Test-classpath base file.
+#
+# Its only job is to shadow src/main/resources/application.yaml: Spring resolves
+# classpath:/application.yaml to the FIRST match, and test resources come first.
+# The environment contract is therefore never loaded, which is what lets
+# ./gradlew test run with no .env and no exported variable.
+#
+# It stays almost empty on purpose. Everything the suite actually configures
+# lives in application-test.yaml, activated by @ActiveProfiles("test") — the same
+# base/profile split the main tree uses.
+#
+# The shadowing is load-bearing, so it is left observable: this file deliberately
+# declares no spring.mail.* and no spring.datasource.*. If it ever stopped
+# shadowing the base file, the unresolvable ${MAIL_HOST} there would fail the
+# build loudly instead of the suite quietly depending on a developer's shell.
+# ─────────────────────────────────────────────────────────────────────────────
+
+spring:
+  application:
+    name: kora-core-test
+  main:
+    # Quoted on purpose: YAML 1.1 reads a bare off as the boolean false, which
+    # does not bind to the Banner.Mode enum.
+    banner-mode: "off"

@@ -1,0 +1,49 @@
+# Production posture.
+#
+# No deployment targets this profile yet. It exists so the restrictive direction
+# of the override system is written down rather than improvised the day it is
+# needed — and so that "monitoring is per-environment" is demonstrable in both
+# directions, not just the permissive one.
+#
+# NOT production-ready as it stands: MobileMoneyProviderAdapter is still a stub,
+# and the real HTTP client with a circuit breaker is Step 3. Review this file
+# before any first deployment.
+
+spring:
+  mail:
+    from: ${MAIL_FROM}
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+  # minimum-idle below maximum-pool-size: a deployed instance should release
+  # connections when idle, unlike the perf profile which keeps the pool warm on
+  # purpose. connection-timeout is short so a saturated pool fails fast instead
+  # of queueing requests behind a exhausted resource.
+  datasource:
+    hikari:
+      maximum-pool-size: 30
+      minimum-idle: 10
+      connection-timeout: 3000
+
+kora:
+  provider:
+    simulate-latency: false
+
+# Monitoring: closed. Only health is reachable, and it carries no details —
+# the payload would otherwise hand the datasource URL and the SMTP host to
+# anyone who can reach the port. This is the same knob dev sets to "always",
+# which is precisely why it cannot live in the base file.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
