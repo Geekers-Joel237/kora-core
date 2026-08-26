@@ -26,10 +26,18 @@ spring:
   profiles:
     default: dev
 
+  # Two roles, two jobs. The application never needs DDL rights, and the
+  # migration runner never serves traffic. Splitting them means a SQL injection
+  # that reaches the connection pool still cannot DROP a table.
+  #
+  # Until KC-05 creates the roles in PostgreSQL, both pairs point at the same
+  # superuser in .env and behaviour is unchanged. KC-05 then creates
+  # kora_migration (owner, DDL) and kora_app (DML only, no CREATE/DROP) and
+  # updates .env — no file here changes.
   datasource:
     url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${POSTGRES_DB}
-    username: ${POSTGRES_USER}
-    password: ${POSTGRES_PASSWORD}
+    username: ${POSTGRES_APP_USER}
+    password: ${POSTGRES_APP_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
   mail:
@@ -44,6 +52,10 @@ spring:
     hibernate:
       ddl-auto: validate
   flyway:
+    # No url: Spring derives it from spring.datasource.url and only swaps the
+    # credentials, so the two roles cannot drift onto different databases.
+    user: ${POSTGRES_MIGRATION_USER}
+    password: ${POSTGRES_MIGRATION_PASSWORD}
     out-of-order: false
 
 server:

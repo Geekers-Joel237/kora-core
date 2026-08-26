@@ -1,60 +1,25 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# Test configuration — deliberately standalone.
+# Test-classpath base file.
 #
-# On the test classpath this file shadows src/main/resources/application.yaml:
-# Spring resolves classpath:/application.yaml to the FIRST match, and test
-# resources come first. The base contract is therefore never loaded here, which
-# is what lets ./gradlew test run with no .env and no exported variable.
+# Its only job is to shadow src/main/resources/application.yaml: Spring resolves
+# classpath:/application.yaml to the FIRST match, and test resources come first.
+# The environment contract is therefore never loaded, which is what lets
+# ./gradlew test run with no .env and no exported variable.
 #
-# That shadowing is load-bearing, so it is left observable: this file
-# deliberately does NOT declare spring.mail.*. If the base file ever stops being
-# shadowed, its ${MAIL_HOST} becomes unresolvable and the suite fails loudly
-# instead of quietly depending on the developer's shell.
+# It stays almost empty on purpose. Everything the suite actually configures
+# lives in application-test.yaml, activated by @ActiveProfiles("test") — the same
+# base/profile split the main tree uses.
 #
-# The datasource is absent for the same reason it is not needed: every
-# integration and E2E class injects it at runtime through @DynamicPropertySource
-# or @ServiceConnection, both of which outrank any properties file.
+# The shadowing is load-bearing, so it is left observable: this file deliberately
+# declares no spring.mail.* and no spring.datasource.*. If it ever stopped
+# shadowing the base file, the unresolvable ${MAIL_HOST} there would fail the
+# build loudly instead of the suite quietly depending on a developer's shell.
 # ─────────────────────────────────────────────────────────────────────────────
 
 spring:
   application:
     name: kora-core-test
-
-  # Flyway creates the schema on the Testcontainers database from the same SQL
-  # as production. none rather than validate: Flyway is the single owner and
-  # Hibernate is not asked to re-check its work on every context start.
-  jpa:
-    hibernate:
-      ddl-auto: none
-    show-sql: true
-    properties:
-      hibernate:
-        format_sql: true
-
   main:
     # Quoted on purpose: YAML 1.1 reads a bare off as the boolean false, which
     # does not bind to the Banner.Mode enum.
     banner-mode: "off"
-
-logging:
-  level:
-    "org.hibernate.SQL": DEBUG
-    "org.hibernate.orm.jdbc.bind": TRACE
-
-kora:
-  security:
-    # Fixed, literal, and worthless outside the test classpath. The suite must
-    # not depend on an environment variable, so this is the one place where a
-    # signing key is written down. Long enough to satisfy the @Size(min = 32)
-    # constraint on SecurityProperties.Jwt.
-    jwt:
-      secret: kora-core-test-signing-key-not-used-anywhere-else
-      access-token-expiration-minutes: 15
-      refresh-token-expiration-days: 7
-    otp:
-      expiration-minutes: 5
-
-  # No artificial latency: the stub answers immediately so the suite stays fast.
-  provider:
-    behavior: SUCCESS
-    simulate-latency: false

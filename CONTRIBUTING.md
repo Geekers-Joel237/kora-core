@@ -254,7 +254,10 @@ is `always` in dev and `never` in prod, so no single value could be correct for 
 
 | Variable | Consumed by | Profile |
 |---|---|---|
-| `POSTGRES_DB` `POSTGRES_USER` `POSTGRES_PASSWORD` `DB_HOST` `DB_PORT` | Compose + `application.yaml` | all |
+| `POSTGRES_DB` `DB_HOST` `DB_PORT` | Compose + `application.yaml` | all |
+| `POSTGRES_USER` `POSTGRES_PASSWORD` | Compose only — superuser, initialises a fresh volume | — |
+| `POSTGRES_MIGRATION_USER` `POSTGRES_MIGRATION_PASSWORD` | `application.yaml` → `spring.flyway.*` | all |
+| `POSTGRES_APP_USER` `POSTGRES_APP_PASSWORD` | `application.yaml` → `spring.datasource.*` | all |
 | `JWT_SECRET` | `application.yaml` | all |
 | `SERVER_PORT` | `application.yaml` | all |
 | `MAIL_HOST` `MAIL_SMTP_PORT` | Compose + `application.yaml` | all |
@@ -265,9 +268,35 @@ is `always` in dev and `never` in prod, so no single value could be correct for 
 | `COMPOSE_PROFILES` | Compose — selects which services run | — |
 | `PGADMIN_DEFAULT_EMAIL` `PGADMIN_DEFAULT_PASSWORD` | Compose | — |
 
-Profiles: `dev` (default), `perf` (load testing), `prod` (documented posture, not
-yet deployed). Tests are standalone in `src/test/resources/application.yaml` and
-read no environment variable at all — `./gradlew test` passes without a `.env`.
+Four profiles, one file each:
+
+| Profile | File | Activated by |
+|---|---|---|
+| `dev` | `src/main/resources/application-dev.yaml` | nothing — `spring.profiles.default` |
+| `perf` | `src/main/resources/application-perf.yaml` | `SPRING_PROFILES_ACTIVE=perf` |
+| `prod` | `src/main/resources/application-prod.yaml` | `SPRING_PROFILES_ACTIVE=prod` |
+| `test` | `src/test/resources/application-test.yaml` | `@ActiveProfiles("test")` |
+
+The `test` profile sits in `src/test/resources` so it never ships in the
+production jar. Alongside it, `src/test/resources/application.yaml` shadows the
+base contract on the test classpath — which is what lets `./gradlew test` pass
+with no `.env` and no exported variable.
+
+### 3.6 Running from an IDE
+
+`docker compose` reads `.env` by itself; nothing else does. A Run Configuration
+that starts `KoraCoreApplication` directly will fail on the first unresolved
+`${VAR}` unless you give it the same file:
+
+- **IntelliJ IDEA** — install the *EnvFile* plugin, then in the Run Configuration
+  open the **EnvFile** tab, enable it and add `.env`. One setting, and the IDE run
+  and `docker compose up` stay on the same file.
+- **Without a plugin** — run `./gradlew bootRun` from the IDE terminal after
+  `set -a && source .env && set +a`, or paste the variables into the
+  *Environment variables* field of the Run Configuration. Pasting means a second
+  copy that will drift; prefer the plugin.
+- **Tests need none of this.** `@ActiveProfiles("test")` is self-contained, so
+  running a test class from the IDE works on a clean clone.
 
 ### 3.5 When a variable is missing
 
