@@ -1,0 +1,54 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Production. Passed explicitly — never loaded automatically:
+#
+#     docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Naming -f at all suppresses the automatic pickup of docker-compose.override.yml,
+# so none of the development bindings can reach a server by accident. Forgetting
+# the flags is the one mistake that matters here; the deploy runbook must carry
+# the full command, never a bare `docker compose up`.
+#
+# Only Postgres is configured below. maildev, pgadmin, influxdb and grafana are
+# deliberately absent: with COMPOSE_PROFILES empty they never start, and by not
+# describing them here they cannot inherit a development port binding even if a
+# profile is switched on by mistake — they would fall back to the architecture
+# file, which publishes nothing.
+#
+# The application is not a container. It runs on the host and reaches Postgres
+# on 127.0.0.1, which is why the port is still published — bound to loopback,
+# so it is reachable from the host and from nowhere else. Operator access to the
+# database goes through an SSH tunnel onto that same loopback port.
+#
+# Server day: copy .env.example to .env, fill in the real values, leave
+# COMPOSE_PROFILES empty, run the command above. No file below needs editing.
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  postgres:
+    container_name: kora-postgres
+    ports:
+      - '127.0.0.1:${DB_PORT}:5432'
+
+    # unless-stopped, not always: the two differ only after a deliberate
+    # `docker stop`. With `always`, a daemon restart during maintenance brings
+    # the database back under the operator's hands. `unless-stopped` respects
+    # the stop and still survives a reboot, which is what we want.
+    restart: unless-stopped
+
+    # Docker gives a container 64 MB of /dev/shm. Postgres uses it for parallel
+    # workers and large sorts, and fails with "could not resize shared memory
+    # segment" under load well before it fails for any legitimate reason.
+    shm_size: '256mb'
+
+    # A clean shutdown flushes buffers and closes WAL properly. The 10 s default
+    # can cut that short on a busy instance and force recovery on next start.
+    stop_grace_period: 60s
+
+    # Container logs are unbounded by default and will fill the disk of a
+    # long-running server. Rotation is not optional on a machine nobody watches.
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '10m'
+        max-file: '3'

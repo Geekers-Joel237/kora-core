@@ -1,0 +1,61 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Base configuration.
+#
+# Two kinds of entry are allowed here, and nothing else:
+#
+#   1. The environment contract — which variables must exist for the application
+#      to run at all. The binding text is identical everywhere; only the injected
+#      values differ, and they come from .env.
+#   2. Policy that is genuinely the same in every environment.
+#
+# Anything an environment could legitimately want to change — monitoring, mail
+# transport, provider behaviour, connection pool sizing — belongs in
+# application-<profile>.yaml. Putting it here would force every environment to
+# inherit a decision that was only ever made for one of them.
+#
+# No entry below carries a default. A missing variable must stop the boot: a
+# silent fallback on a signing key or a database credential is a security
+# defect, not a convenience. Export the variables before running:
+#
+#     set -a && source .env && set +a && ./gradlew bootRun
+# ─────────────────────────────────────────────────────────────────────────────
+
+spring:
+  application:
+    name: kora-core
+  profiles:
+    default: dev
+
+  datasource:
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${POSTGRES_DB}
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  mail:
+    host: ${MAIL_HOST}
+    port: ${MAIL_SMTP_PORT}
+
+  # Flyway owns the schema in every environment; Hibernate only checks that the
+  # entities match it and never emits DDL. Out-of-order stays off everywhere:
+  # a migration older than the highest applied one is re-stamped before merge,
+  # never inserted retroactively. See CONTRIBUTING.md section 9.
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    out-of-order: false
+
+server:
+  port: ${SERVER_PORT}
+
+# Token and OTP lifetimes are product policy, not environment tuning: the same
+# numbers hold on a laptop and under load. A profile may still override them.
+kora:
+  security:
+    jwt:
+      secret: ${JWT_SECRET}
+      access-token-expiration-minutes: 15
+      refresh-token-expiration-days: 7
+    otp:
+      expiration-minutes: 5

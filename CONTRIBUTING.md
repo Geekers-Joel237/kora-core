@@ -25,7 +25,7 @@ test suite, and understand the development conventions in use.
 | Tool | Version | Purpose |
 |---|---|---|
 | Java | 21+ | Runtime and compilation |
-| Docker Desktop | Latest | PostgreSQL, Redis, MailDev, monitoring stack |
+| Docker Desktop | Latest | PostgreSQL, MailDev, monitoring stack |
 | Gradle | via wrapper (`./gradlew`) | Build, test, run |
 | Git | Any | Version control |
 
@@ -61,7 +61,9 @@ kora-core/
 ├── perf/                       # k6 load tests, Grafana dashboards, runbook
 ├── docs/
 │   └── adr/                    # Architecture Decision Records
-├── docker-compose.yml          # PostgreSQL, Redis, MailDev, InfluxDB, Grafana
+├── docker-compose.yml          # Architecture: PostgreSQL, MailDev, pgAdmin, InfluxDB, Grafana
+├── docker-compose.override.yml # Development overrides (auto-loaded)
+├── docker-compose.prod.yml     # Production overrides (explicit -f)
 └── CONTRIBUTING.md             # This file
 ```
 
@@ -87,59 +89,210 @@ Infrastructure implements those ports and is wired by Spring.
 cp .env.example .env
 ```
 
-If `.env.example` does not exist yet, create `.env` at the project root with:
+`.env.example` is the authoritative list of every variable the application and
+Docker Compose can consume. It is versioned; `.env` is not, and must never be
+committed.
 
-```env
-# PostgreSQL
-POSTGRES_DB=kora_dev
-POSTGRES_USER=kora
-POSTGRES_PASSWORD=kora_secret
-DB_PORT=5432
-DB_ADMIN_PORT=5050
+Then generate your own JWT signing key and put it in `.env`:
 
-# Redis
-CACHE_PORT=6379
-
-# Mail (MailDev)
-MAIL_SMTP_PORT=1025
-MAIL_UI_PORT=1080
-
-# JWT — change this in any environment where security matters
-JWT_SECRET=kora-core-default-secret-key-must-be-32-chars!
+```bash
+openssl rand -base64 48
 ```
 
-> **Security note**: `JWT_SECRET` must be at least 32 characters.
-> Never commit a real secret. Use a secrets manager in any non-local environment.
+> **Security note**: `JWT_SECRET` must be at least 32 characters — HMAC-SHA256
+> rejects anything shorter, and `SecurityProperties` refuses to start on it.
+> The placeholder shipped in `.env.example` is deliberately non-functional.
+> Never commit a real secret; use a secrets manager outside local development.
 
 ### 3.2 Start the infrastructure services
 
 ```bash
-docker compose up -d postgres redis maildev
+docker compose up -d
 ```
 
-Wait a few seconds, then verify:
+Which services start is decided by `COMPOSE_PROFILES` in your `.env`, not by
+listing them on the command line. Postgres always runs; the rest is opt-in:
+
+| Profile | Services | When |
+|---|---|---|
+| *(none)* | postgres | always |
+| `mail` | maildev | day-to-day development, load testing |
+| `tooling` | pgadmin | when you want a database GUI |
+| `observability` | influxdb, grafana | load-test campaigns only |
+
+`.env.example` ships `COMPOSE_PROFILES=mail,tooling`. For a load test, switch it
+to `mail,observability` — or override it for one command:
 
 ```bash
-# PostgreSQL
-docker compose ps postgres       # should show "healthy"
-
-# MailDev web UI
-open http://localhost:1080        # or curl -s http://localhost:1080
+COMPOSE_PROFILES=mail,observability docker compose up -d
 ```
+
+Then verify — every service declares a healthcheck, so `healthy` means ready,
+not merely started:
+
+```bash
+docker compose ps                 # STATUS column must read "healthy"
+open http://localhost:1080        # MailDev — read the OTP mails here
+```
+
+pgAdmin takes about a minute on a first boot; `health: starting` until then is
+expected.
+
+All ports are published on `127.0.0.1` only. The database is reachable from this
+machine and from nowhere else on the network — the same posture production uses,
+where operators reach it through an SSH tunnel onto that loopback port.
+
+### 3.2.1 The three Compose files
+
+| File | Loaded | Answers | Holds | Never holds |
+|---|---|---|---|---|
+| `docker-compose.yml` | always | *What is this service?* | image and tag, `environment`, `healthcheck`, named volumes, network, `depends_on`, `profiles` | `ports`, `restart`, `container_name`, host bind mounts |
+| `docker-compose.override.yml` | automatically, unless `-f` is used | *How do I run it on my machine?* | loopback port bindings, `container_name`, `restart: "no"`, the Grafana provisioning mount | any service declaration |
+| `docker-compose.prod.yml` | only when named with `-f` | *How does it run on a server?* | loopback binding, `restart: unless-stopped`, `shm_size`, `stop_grace_period`, log rotation | any service declaration, any secret |
+
+```bash
+docker compose up -d                                              # base + override
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d   # base + prod
+```
+
+Naming any file with `-f` suppresses the automatic pickup of
+`docker-compose.override.yml`. That is the mechanism that keeps development port
+bindings off a server — and it is also the one mistake worth guarding against, so
+a deploy runbook must carry the full command, never a bare `docker compose up`.
+
+Two rules keep the files from drifting:
+
+- **A service is declared once, in `docker-compose.yml`.** An override changes how
+  an existing service is operated; it never introduces one. Otherwise the
+  architecture becomes invisible in the file that is supposed to describe it.
+- **The base file must stay environment-agnostic**, which is testable:
+
+  ```bash
+  docker compose -f docker-compose.yml config | grep -E "^\s+(ports|restart|container_name):"
+  ```
+
+  It must print nothing. Anything it prints is a decision that every environment
+  now inherits, including ones that do not exist yet.
+
+### 3.2.2 Compose profiles and Spring profiles are two different things
+
+They are frequently confused because both are called "profiles" and both are
+switched per environment. They control different layers and never read each other.
+
+| | `COMPOSE_PROFILES` | Spring profile |
+|---|---|---|
+| Decides | which **containers** run | which **application configuration** applies |
+| Read by | the `docker compose` CLI | the Spring application |
+| Set in | `.env` (per machine) | `SPRING_PROFILES_ACTIVE`, or `spring.profiles.default: dev` |
+| Values | `mail`, `tooling`, `observability` | `dev`, `perf`, `prod`, `test` |
+| Files | `docker-compose*.yml` | `src/main/resources/application-<profile>.yaml` |
+
+Nothing enforces agreement between them, so a Spring profile that needs a
+container will start happily without it and fail later:
+
+| Spring profile | Requires these Compose profiles | Because |
+|---|---|---|
+| `dev` (default) | `mail` | `SmtpMailAdapter` sends OTP mail to `MAIL_HOST:MAIL_SMTP_PORT` — MailDev |
+| `perf` | `mail`, `observability` | Micrometer pushes to InfluxDB every 10 s, and `perf/*-run.sh` waits on `/actuator/health`, whose `mail` component probes SMTP |
+| `prod` | *(none)* | a real SMTP relay, no metrics export, no database GUI |
+| `test` | *(none — Compose is not used at all)* | every test starts its own PostgreSQL through Testcontainers and reads no `.env` |
+
+What a mismatch looks like:
+
+- `perf` without `observability` — `InfluxMeterRegistry` logs a failed push every
+  ten seconds and the Grafana panels stay empty, while the load test itself runs
+  and reports normal-looking results.
+- `dev` or `perf` without `mail` — `/actuator/health` reports `mail` as DOWN, so
+  `perf/*-run.sh` never considers the application ready, and registration fails
+  when it tries to send an OTP.
+
+Switching to a load test therefore means moving **both** axes together:
+
+```bash
+COMPOSE_PROFILES=mail,observability docker compose up -d
+set -a && source .env && set +a
+SPRING_PROFILES_ACTIVE=perf ./gradlew bootRun
+```
+
+The Compose files and the Spring profiles meet in exactly one place: `.env`.
+Compose reads it directly; the application reads the same variables only because
+`set -a && source .env` exported them into the shell first.
 
 ### 3.3 Verify the database connection
 
+Docker Compose reads `.env` on its own. The Spring application does **not** —
+export the variables into your shell first, or every `${VAR}` will be unresolved:
+
 ```bash
-./gradlew bootRun --args='--spring.profiles.active=dev' &
+set -a && source .env && set +a
+./gradlew bootRun &
 curl -s http://localhost:8081/actuator/health | python -m json.tool
 # Expected: "status": "UP", "db": { "status": "UP" }, "mail": { "status": "UP" }
 ```
+
+No `--spring.profiles.active` is needed: `spring.profiles.default` is `dev`.
 
 Stop the background process before running tests:
 
 ```bash
 pkill -f "KoraCoreApplication" 2>/dev/null || true
 ```
+
+### 3.4 Where configuration lives
+
+Every value has exactly one legitimate home.
+
+| Support | Holds | Never holds |
+|---|---|---|
+| `.env` (git-ignored, mirrored by `.env.example`) | secrets, credentials, host-specific values: passwords, the JWT key, exposed ports | anything that is the same on every machine |
+| `src/main/resources/application.yaml` | the environment contract (`${VAR}` bindings) and policy identical in every environment | monitoring, mail transport, pool sizing, provider behaviour |
+| `src/main/resources/application-<profile>.yaml` | technical configuration for that environment only | secrets, and any fallback for one |
+
+The base file answers *what must exist*; a profile answers *how it behaves here*.
+That is why monitoring is never in the base file: `management.endpoint.health.show-details`
+is `always` in dev and `never` in prod, so no single value could be correct for both.
+
+| Variable | Consumed by | Profile |
+|---|---|---|
+| `POSTGRES_DB` `POSTGRES_USER` `POSTGRES_PASSWORD` `DB_HOST` `DB_PORT` | Compose + `application.yaml` | all |
+| `JWT_SECRET` | `application.yaml` | all |
+| `SERVER_PORT` | `application.yaml` | all |
+| `MAIL_HOST` `MAIL_SMTP_PORT` | Compose + `application.yaml` | all |
+| `MAIL_UI_PORT` | Compose | — |
+| `MAIL_FROM` `MAIL_USERNAME` `MAIL_PASSWORD` | `application-prod.yaml` | prod |
+| `INFLUXDB_HOST` `INFLUXDB_PORT` | Compose + `application-perf.yaml` | perf |
+| `GRAFANA_PORT` `DB_ADMIN_PORT` | Compose | — |
+| `COMPOSE_PROFILES` | Compose — selects which services run | — |
+| `PGADMIN_DEFAULT_EMAIL` `PGADMIN_DEFAULT_PASSWORD` | Compose | — |
+
+Profiles: `dev` (default), `perf` (load testing), `prod` (documented posture, not
+yet deployed). Tests are standalone in `src/test/resources/application.yaml` and
+read no environment variable at all — `./gradlew test` passes without a `.env`.
+
+### 3.5 When a variable is missing
+
+No configuration entry carries a fallback, so the boot stops. For the signing key:
+
+```
+APPLICATION FAILED TO START
+
+Description:
+
+Binding to target com.geekersjoel237.koracore.application.config.SecurityProperties failed:
+
+    Property: kora.security.jwt.secret
+    Value: "${JWT_SECRET}"
+    Reason: must be at least 32 characters for HMAC-SHA256
+```
+
+Read `Value` carefully: Spring binds the unresolved text `${JWT_SECRET}` rather
+than failing on the placeholder itself. A bare `${VAR}` is therefore *not* enough
+on a `@ConfigurationProperties` target — the `@Size` constraint on
+`SecurityProperties` is what turns a 14-character literal into a refusal to start
+instead of a weak key discovered at the first token issuance.
+
+`ConfigurationHygieneTest` fails the build if a sensitive property regains a
+fallback, or if a `${VAR}` is referenced without being listed in `.env.example`.
 
 ---
 
@@ -148,7 +301,8 @@ pkill -f "KoraCoreApplication" 2>/dev/null || true
 ### Default (development)
 
 ```bash
-docker compose up -d postgres redis maildev
+docker compose up -d
+set -a && source .env && set +a
 ./gradlew bootRun
 ```
 
@@ -160,7 +314,7 @@ class changes without a full restart.
 ### Perf profile (required for load tests)
 
 ```bash
-docker compose up -d postgres redis maildev influxdb grafana
+COMPOSE_PROFILES=mail,observability docker compose up -d
 SPRING_PROFILES_ACTIVE=perf ./gradlew bootRun
 ```
 
@@ -192,7 +346,7 @@ curl -s "http://localhost:8081/test/otp/anyone%40test.com"
 ## 5. Running the tests
 
 All test commands assume the infrastructure services are up
-(`docker compose up -d postgres redis maildev`).
+(`docker compose up -d`).
 
 ### Unit tests (no Docker required)
 
@@ -239,11 +393,16 @@ threshold — check `build.gradle` for the current gate value.
 
 ### Test profiles
 
-Tests run with `@ActiveProfiles("test")`, which loads
-`src/test/resources/application.properties`. This profile:
-- Uses a dedicated JWT secret independent from the perf/dev secret
+Tests run with `@ActiveProfiles("test")` and read
+`src/test/resources/application.yaml`, which shadows the base file on the test
+classpath. That is deliberate: the suite reads no environment variable and needs
+no `.env`. This configuration:
+- Uses a fixed, literal JWT key, independent from any environment
 - Disables real SMTP (`TestMailConfig` replaces `SmtpMailAdapter` with an in-memory stub)
-- Sets `ddl-auto=create-drop` so each test class gets a clean schema
+- Sets `ddl-auto: none` — Flyway creates the schema on the Testcontainers database
+  and stays its single owner
+- Declares no datasource: every integration and E2E class injects one at runtime
+  through `@DynamicPropertySource` or `@ServiceConnection`
 
 ---
 
@@ -598,8 +757,7 @@ curl http://localhost:8081/actuator/health | python -m json.tool
 | Component DOWN | Likely cause | Fix |
 |---|---|---|
 | `db` | PostgreSQL not running | `docker compose up -d postgres` |
-| `mail` | MailDev not running | `docker compose up -d maildev` |
-| `redis` | Redis not running | `docker compose up -d redis` |
+| `mail` | MailDev not running | check `COMPOSE_PROFILES` includes `mail`, then `docker compose up -d` |
 
 ### `jwt.secret` too short
 
