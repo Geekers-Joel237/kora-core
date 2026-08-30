@@ -110,6 +110,9 @@ openssl rand -base64 48
 docker compose up -d
 ```
 
+Or press **Run** in your IDE and skip this step entirely — the `dev` profile
+lets Spring bring the same stack up itself (section 3.6).
+
 That starts **two** containers: Postgres and MailDev. MailDev is not optional in
 development — registration and login send an OTP by mail, so without it those
 flows fail and `/actuator/health` reports `mail` as DOWN.
@@ -315,13 +318,35 @@ with no `.env` and no exported variable.
 
 ### 3.6 Running from an IDE
 
-Nothing to configure. `application.yaml` imports `.env` itself, so a Run
-Configuration that starts `KoraCoreApplication` picks up the same values as
-`docker compose up` — no EnvFile plugin, no variables pasted into the run
-configuration, no second copy to drift.
+Nothing to configure, and nothing to start beforehand. A Run Configuration on
+`KoraCoreApplication` is enough: `application.yaml` imports `.env` itself — no
+EnvFile plugin, no variables pasted into the run configuration, no second copy to
+drift — and the `dev` profile has Spring bring the Compose stack up on its own.
 
 One condition: the **working directory** must be the project root, which is the
-IntelliJ default. `spring.config.import` resolves `./.env` relative to it.
+IntelliJ default. Both `spring.config.import` (for `./.env`) and the Compose file
+paths resolve relative to it.
+
+The stack **stays up when you stop the application** — `lifecycle-management:
+start-only`. Stopping a run must not stop the database; you bring the stack down
+with `docker compose down` when you actually mean to.
+
+`COMPOSE_PROFILES` works here exactly as in a terminal: the `docker compose`
+subprocess inherits the working directory and reads the same `.env`, so setting
+it to `observability` makes the IDE run start InfluxDB and Grafana too.
+
+Two things make this safe, and both are load-bearing — see ADR-006 D7 before
+touching either:
+
+- `spring.docker.compose.file` names **both** Compose files. Left to itself the
+  integration resolves only `docker-compose.yml` and runs `docker compose -f` on
+  it, which suppresses the override where the ports live — the failure is
+  `No host port mapping found for container port 5432`.
+- The dev `postgres` service carries the label `org.springframework.boot.ignore`.
+  Without it, Spring derives `ConnectionDetails` from the container's
+  `environment:` block, and those **outrank `spring.datasource.*`** — the
+  application would connect as the superuser and bypass the
+  `kora_migration` / `kora_app` split, silently.
 
 Tests need even less. `@ActiveProfiles("test")` is self-contained, so running a
 test class from the IDE works on a clean clone with no `.env` at all.

@@ -180,16 +180,21 @@ commande a été vérifiée dans l'image réelle, pas supposée :
 ne le « ré-attend » pas, et Kubernetes ignore la directive. C'est un confort de
 développement, pas une garantie de disponibilité.
 
-### D7 — Spring ne gère pas la stack Compose
+### D7 — Spring gère le cycle de vie Compose, en développement seulement (révisée)
 
-`spring.docker.compose.enabled: false` dans le fichier de base — donc pour tous les
-profils, `perf` compris.
+*Première rédaction : `spring.docker.compose.enabled: false` partout. Révisée le
+2026-08-30 : activée dans le profil `dev` uniquement, sous trois conditions
+vérifiées. Motif : pouvoir lancer l'application depuis l'IDE sans passer d'abord
+par un terminal.*
 
-Le découpage D2 casse cette intégration, et c'est instructif : Spring résout **un
-seul** fichier Compose (`docker-compose.yml`) puis invoque `docker compose -f <ce
-fichier>`. Or nommer un fichier avec `-f` supprime le chargement automatique de
-`docker-compose.override.yml` — le mécanisme même sur lequel repose D2. Les ports
-vivant dans l'override, l'application échouait au démarrage :
+Le refus initial reposait sur trois défauts réels. Aucun n'a disparu ; chacun est
+neutralisé par une contre-mesure, et chaque contre-mesure a été vérifiée plutôt
+que supposée.
+
+**1. L'intégration ne résout qu'un seul fichier.** Elle invoque
+`docker compose -f docker-compose.yml`, et nommer un fichier avec `-f` supprime le
+chargement automatique de `docker-compose.override.yml`. Les ports y vivant,
+l'application échouait au démarrage :
 
 ```
 IllegalStateException: No host port mapping found for container port 5432
@@ -197,21 +202,55 @@ IllegalStateException: No host port mapping found for container port 5432
     at PostgresJdbcDockerComposeConnectionDetailsFactory
 ```
 
-Fournir les deux fichiers à `spring.docker.compose.file` (qui accepte bien une
-`List<File>`) aurait corrigé le symptôme, pas la cause. Deux raisons plus lourdes
-condamnaient l'intégration :
+*Contre-mesure* : `spring.docker.compose.file` est déclarée
+`java.util.List<java.io.File>` dans le `spring-configuration-metadata.json` de
+la 4.0.3 — les deux fichiers sont nommés. Le log le confirme au pluriel :
+« Using Docker Compose file**s** ..., ... », et les conteneurs portent alors leurs
+vrais noms (`kora-postgres`) avec `5432/tcp -> 127.0.0.1:5432`.
 
-- ses `ConnectionDetails` **priment sur `spring.datasource.*`**. Elle se serait
-  connectée avec le superutilisateur lu dans le bloc `environment:` du conteneur,
-  court-circuitant en silence la séparation `kora_migration` / `kora_app` de D-KC02.
-  Invisible aujourd'hui — les trois rôles valent `postgres` — et actif le jour où
-  KC-05 crée les vrais rôles ;
-- sa sélection de profils (`spring.docker.compose.profiles.active`) serait un
-  second mécanisme de sélection, à côté de `COMPOSE_PROFILES` (D4), pour la même
-  décision.
+**2. Ses `ConnectionDetails` priment sur `spring.datasource.*`.** Elles sont
+construites à partir du bloc `environment:` du conteneur, c'est-à-dire du
+superutilisateur.
 
-La stack se démarre donc explicitement, `docker compose up -d`, ce que
-`CONTRIBUTING.md` §3.2 documentait déjà.
+*Contre-mesure* : le label `org.springframework.boot.ignore` sur le service
+postgres dans `docker-compose.override.yml`. `DockerComposeLifecycleManager.isIgnored()`
+teste `labels().containsKey(...)` — la présence de la clé suffit, la valeur n'est
+pas lue (vérifié au bytecode de la 4.0.3). Le service est exclu du
+`DockerComposeServicesReadyEvent`, donc aucune `ConnectionDetails` n'est produite,
+pendant que `docker compose up` continue de le démarrer.
+
+Vérification par falsification, avec
+`--spring.datasource.url=jdbc:postgresql://localhost:59999/kora-db` :
+
+| Label | Résultat observé | Conclusion |
+|---|---|---|
+| présent | `Connection to localhost:59999 refused` | la propriété gagne |
+| retiré | `Started KoraCoreApplication`, health UP | l'URL est ignorée — le détournement est réel |
+
+Le second cas est le plus instructif : sans le label, l'application démarre en
+bonne santé **en ignorant silencieusement sa propre configuration de datasource**.
+Le jour où KC-05 crée `kora_migration` et `kora_app`, elle se connecterait en
+superutilisateur sans qu'aucune ligne de log ne le signale.
+
+**3. Elle introduirait un second sélecteur de profils.** *Contre-mesure* : ne pas
+renseigner `spring.docker.compose.profiles.active`. Le sous-processus
+`docker compose` hérite du répertoire de travail et lit le même `.env` ; vérifié
+en posant `COMPOSE_PROFILES=observability`, ce qui a fait démarrer influxdb et
+grafana par le seul run IDE. `COMPOSE_PROFILES` reste la source unique (D4).
+
+**Portée.** `enabled: false` dans le fichier de base, `true` dans
+`application-dev.yaml` et nulle part ailleurs. Un serveur a déjà démarré sa stack ;
+une campagne de charge la démarre depuis `perf/*-run.sh`. Faire monter des
+conteneurs est une commodité de poste de développement, pas une politique
+d'architecture — elle appartient donc à un profil, comme le monitoring.
+
+**`lifecycle-management: start-only`**, et non le défaut `start-and-stop` :
+arrêter l'application ne doit pas arrêter la base. C'est le pendant de
+`restart: "no"` — la stack monte et descend parce qu'on l'a décidé, pas comme
+effet de bord d'une configuration de run.
+
+Le démarrage explicite en terminal, `docker compose up -d`, reste valable et
+inchangé ; les deux chemins produisent les mêmes conteneurs.
 
 ### D8 — Images épinglées
 

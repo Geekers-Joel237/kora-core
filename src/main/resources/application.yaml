@@ -38,20 +38,14 @@ spring:
   config:
     import: "optional:file:./.env[.properties]"
 
-  # Spring must not manage the Compose stack. Three reasons, in order of weight:
+  # Off by default, on in the dev profile only. Starting containers is a
+  # developer-machine convenience: a server has already started them, and a perf
+  # run starts them from perf/*-run.sh. Enabling it here would make every
+  # environment inherit a decision taken for one of them.
   #
-  #   1. Its ConnectionDetails outrank spring.datasource.*, so it would connect
-  #      with the superuser from the container's `environment:` block and quietly
-  #      bypass the POSTGRES_APP_USER / POSTGRES_MIGRATION_USER split above.
-  #   2. It resolves a single Compose file — docker-compose.yml — and invoking
-  #      `docker compose -f <file>` suppresses docker-compose.override.yml. The
-  #      ports live there, so it fails with "No host port mapping found for
-  #      container port 5432".
-  #   3. Its profile selection is a second setting next to COMPOSE_PROFILES in
-  #      .env, for the same decision.
-  #
-  # The stack is started explicitly instead: `docker compose up -d`.
-  # See CONTRIBUTING.md section 3.2 and ADR-006.
+  # application-dev.yaml turns it on, and does the two things that make it safe:
+  # it names BOTH Compose files, and the dev postgres service carries the
+  # org.springframework.boot.ignore label. See ADR-006 D7 for why each is needed.
   docker:
     compose:
       enabled: false

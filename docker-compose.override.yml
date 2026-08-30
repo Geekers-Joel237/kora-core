@@ -42,6 +42,19 @@ services:
     # is all it needs, here and in production alike.
     ports:
       - '127.0.0.1:${DB_PORT}:5432'
+    # Keeps Spring's Compose integration to a lifecycle role only. Without it,
+    # PostgresJdbcDockerComposeConnectionDetails reads the container's
+    # `environment:` block and produces url/username/password beans that OUTRANK
+    # spring.datasource.* — the application would silently connect as the
+    # superuser and bypass the kora_migration / kora_app split.
+    #
+    # DockerComposeLifecycleManager.isIgnored() tests containsKey, not the value:
+    # the key alone disables service-connection detection for this service, while
+    # `docker compose up` still starts it. Verified in the 4.0.3 bytecode.
+    # No equivalent is needed on maildev — spring-boot-mail ships no
+    # docker-compose factory, so nothing is ever derived from it.
+    labels:
+      org.springframework.boot.ignore: "true"
     # "no", not unless-stopped: a database that silently comes back every time
     # Docker Desktop starts keeps running for days after you stopped working, and
     # hides the fact that you never started it deliberately. Production wants the

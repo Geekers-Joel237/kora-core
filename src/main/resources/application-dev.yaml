@@ -2,6 +2,40 @@
 # Overrides only what differs from the base contract.
 
 spring:
+  # Press Run in the IDE and the stack comes up on its own — no terminal, no
+  # `docker compose up -d` to remember. Enabled here and nowhere else.
+  #
+  # Three things had to be true for this to be safe. All three are verified,
+  # none is assumed (ADR-006 D7):
+  #
+  #   1. BOTH files must be named. The integration resolves a single Compose
+  #      file by default and then runs `docker compose -f <that file>`, which
+  #      suppresses the automatic pickup of docker-compose.override.yml. The
+  #      ports live there, so it failed with "No host port mapping found for
+  #      container port 5432". spring.docker.compose.file is a List<File> in
+  #      4.0.3, so both are passed and the invocation matches what a developer
+  #      types by hand.
+  #   2. Postgres must not be auto-wired. Its ConnectionDetails outrank
+  #      spring.datasource.*, and they are built from the container's
+  #      `environment:` block — the superuser. The org.springframework.boot.ignore
+  #      label on the service in docker-compose.override.yml disables that while
+  #      leaving the lifecycle intact.
+  #   3. Profiles must keep a single source of truth. This block deliberately
+  #      does NOT set spring.docker.compose.profiles.active: the `docker compose`
+  #      subprocess inherits the working directory and reads the same .env, so
+  #      COMPOSE_PROFILES governs here exactly as it does in a terminal.
+  #
+  # start-only, not the start-and-stop default: stopping the application must not
+  # stop the database. It matches `restart: "no"` — the stack goes up and down
+  # because you decided so, not as a side effect of a run configuration.
+  docker:
+    compose:
+      enabled: true
+      file:
+        - docker-compose.yml
+        - docker-compose.override.yml
+      lifecycle-management: start-only
+
   # MailDev, started by docker-compose. It accepts anything and stores it in RAM,
   # so no credentials and no TLS. A deployed environment must not inherit this.
   mail:
