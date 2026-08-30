@@ -34,7 +34,7 @@ public class JpaAuthorizationRecordRepository implements AuthorizationRecordRepo
             // Update the managed entity in place so its @Version is preserved.
             // Merging a newly-built detached entity (version=null) into a managed one
             // (version=N) causes Hibernate 6 to throw StaleObjectStateException immediately.
-            entity.setStatus(snap.status().name());
+            entity.setStatus(snap.status());
         }
         jpaRepository.save(entity);
     }
@@ -43,13 +43,13 @@ public class JpaAuthorizationRecordRepository implements AuthorizationRecordRepo
     public Optional<AuthorizationRecord> findActiveByTransactionId(Id transactionId) {
         return jpaRepository
                 .findFirstByTransactionIdAndStatusAndDeletedAtIsNull(
-                        transactionId.value(), AuthorizationStatus.ACTIVE.name())
+                        transactionId.value(), AuthorizationStatus.ACTIVE)
                 .map(this::toDomain);
     }
 
     @Override
     public List<AuthorizationRecord> findExpiredActive(Instant now) {
-        return jpaRepository.findExpiredActive(now)
+        return jpaRepository.findExpiredActive(AuthorizationStatus.ACTIVE, now)
                 .stream()
                 .map(this::toDomain)
                 .toList();
@@ -64,7 +64,7 @@ public class JpaAuthorizationRecordRepository implements AuthorizationRecordRepo
                 .currency(snap.authorizedAmount().currency())
                 .authorizedAt(snap.authorizedAt())
                 .expiresAt(snap.expiresAt())
-                .status(snap.status().name())
+                .status(snap.status())
                 .build();
         entity.setId(snap.id().value());
         return entity;
@@ -78,7 +78,7 @@ public class JpaAuthorizationRecordRepository implements AuthorizationRecordRepo
                 new Amount(entity.getAuthorizedAmount(), entity.getCurrency()),
                 entity.getAuthorizedAt(),
                 entity.getExpiresAt(),
-                AuthorizationStatus.valueOf(entity.getStatus())
+                entity.getStatus()
         ));
     }
 }

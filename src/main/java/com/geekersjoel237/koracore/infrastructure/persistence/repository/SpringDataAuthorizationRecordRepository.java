@@ -1,5 +1,6 @@
 package com.geekersjoel237.koracore.infrastructure.persistence.repository;
 
+import com.geekersjoel237.koracore.domain.model.AuthorizationRecord.AuthorizationStatus;
 import com.geekersjoel237.koracore.infrastructure.persistence.entities.AuthorizationRecordEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -16,11 +17,12 @@ public interface SpringDataAuthorizationRecordRepository
 
     Optional<AuthorizationRecordEntity>
         findFirstByTransactionIdAndStatusAndDeletedAtIsNull(
-            String transactionId, String status);
+            String transactionId, AuthorizationStatus status);
 
     @Query("SELECT a FROM AuthorizationRecordEntity a " +
-           "WHERE a.status = 'ACTIVE' " +
+           "WHERE a.status = :status " +
            "AND a.expiresAt < :now " +
            "AND a.deletedAt IS NULL")
-    List<AuthorizationRecordEntity> findExpiredActive(@Param("now") Instant now);
+    List<AuthorizationRecordEntity> findExpiredActive(
+            @Param("status") AuthorizationStatus status, @Param("now") Instant now);
 }

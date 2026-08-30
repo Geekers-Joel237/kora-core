@@ -1,6 +1,5 @@
 package com.geekersjoel237.koracore.infrastructure.persistence;
 
-import com.geekersjoel237.koracore.domain.enums.TriggerSource;
 import com.geekersjoel237.koracore.domain.model.TrxStateHistoric;
 import com.geekersjoel237.koracore.domain.model.state.TransactionState;
 import com.geekersjoel237.koracore.domain.port.TrxHistoricStatesRepository;
@@ -27,7 +26,7 @@ public class JpaTrxHistoricStatesRepository implements TrxHistoricStatesReposito
                 .oldState(historic.oldState() != null ? historic.oldState().name() : null)
                 .newState(historic.newState().name())
                 .occurredAt(historic.occurredAt())
-                .triggeredBy(historic.triggeredBy() != null ? historic.triggeredBy().name() : null)
+                .triggeredBy(historic.triggeredBy())
                 .correlationId(historic.correlationId() != null ? historic.correlationId().value() : null)
                 .providerRef(historic.providerRef())
                 .actorId(historic.actorId() != null ? historic.actorId().value() : null)
@@ -48,7 +47,7 @@ public class JpaTrxHistoricStatesRepository implements TrxHistoricStatesReposito
                         e.getOldState() != null ? TransactionState.fromValue(e.getOldState()) : null,
                         TransactionState.fromValue(e.getNewState()),
                         e.getOccurredAt(),
-                        e.getTriggeredBy() != null ? TriggerSource.valueOf(e.getTriggeredBy()) : null,
+                        e.getTriggeredBy(),
                         e.getCorrelationId() != null ? new Id(e.getCorrelationId()) : null,
                         e.getProviderRef(),
                         e.getActorId() != null ? new Id(e.getActorId()) : null,

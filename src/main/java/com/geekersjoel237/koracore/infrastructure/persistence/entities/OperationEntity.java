@@ -34,7 +34,7 @@ public class OperationEntity extends BaseEntity {
     @Column(name = "amount", nullable = false, precision = 19, scale = 4)
     private BigDecimal amount;
 
-    @Column(name = "currency", nullable = false)
+    @Column(name = "currency", nullable = false, length = 3)
     private String currency;
 
     @Column(name = "account_id", nullable = false)

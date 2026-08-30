@@ -50,7 +50,7 @@ public class AccountEntity extends VersionedEntity {
     @Column(name = "balance_amount", nullable = false)
     private BigDecimal balanceAmount;
 
-    @Column(name = "balance_currency", nullable = false)
+    @Column(name = "balance_currency", nullable = false, length = 3)
     private String balanceCurrency;
 
     @Column(name = "is_blocked", nullable = false)

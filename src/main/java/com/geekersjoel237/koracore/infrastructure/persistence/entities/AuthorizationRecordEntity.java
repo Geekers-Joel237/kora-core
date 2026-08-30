@@ -1,5 +1,6 @@
 package com.geekersjoel237.koracore.infrastructure.persistence.entities;
 
+import com.geekersjoel237.koracore.domain.model.AuthorizationRecord;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -39,6 +40,7 @@ public class AuthorizationRecordEntity extends VersionedEntity {
     @Column(name = "expires_at", nullable = false)
     private Instant expiresAt;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
-    private String status;
+    private AuthorizationRecord.AuthorizationStatus status;
 }
