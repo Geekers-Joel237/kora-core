@@ -3,7 +3,7 @@
 # Usage : ./perf/smoke-run.sh [BASE_URL]
 #
 # Ce script :
-#   1. Démarre InfluxDB + Grafana + MailDev si nécessaire (docker compose up -d)
+#   1. Démarre le profil « observability » si nécessaire (voir plus bas)
 #   2. Attend que l'app Spring soit prête (GET /actuator/health)
 #   3. Lance smoke.js via le container k6 officiel
 #   4. Affiche les URLs utiles avant et après le run
@@ -12,6 +12,19 @@
 #   SmtpMailAdapter est actif avec le profil "perf" (@Profile("!test")).
 #   Spring Actuator MailHealthIndicator teste la connexion SMTP à chaque /health.
 #   Si MailDev n'est pas up, health = DOWN et le script n'attend jamais l'app.
+#
+# -- PROFIL COMPOSE REQUIS ----------------------------------------------------
+# Ce script exige le profil Compose « observability » en plus du socle.
+# InfluxDB reçoit les métriques k6, Grafana les affiche : sans eux le run
+# s'exécute mais ne produit aucun tableau de bord.
+#
+#   COMPOSE_PROFILES=observability docker compose up -d
+#
+# Le script s'en charge lui-même : nommer explicitement influxdb et grafana
+# active leur profil pour cette commande seule, sans toucher au .env. Aucun -f
+# n'est passé, donc docker-compose.override.yml se charge normalement et
+# Postgres publie bien son port.
+#
 
 set -euo pipefail
 
@@ -61,7 +74,7 @@ start_monitoring() {
   info "Vérification des containers de monitoring…"
 
   local running
-  running=$(docker compose -f "${ROOT_DIR}/docker-compose.yml" ps --services --filter status=running 2>/dev/null || true)
+  running=$(docker compose --project-directory "${ROOT_DIR}" ps --services --filter status=running 2>/dev/null || true)
 
   local need_start=false
   for svc in $COMPOSE_SERVICES; do
@@ -73,7 +86,7 @@ start_monitoring() {
 
   if $need_start; then
     info "Démarrage de InfluxDB + Grafana + MailDev…"
-    docker compose -f "${ROOT_DIR}/docker-compose.yml" up -d $COMPOSE_SERVICES
+    docker compose --project-directory "${ROOT_DIR}" up -d $COMPOSE_SERVICES
 
     # MailDev SMTP doit être prêt avant que l'app démarre.
     # Spring Actuator MailHealthIndicator teste la connexion SMTP à chaque /health.
@@ -147,7 +160,7 @@ run_smoke() {
       export MSYS_NO_PATHCONV=1
     fi
     docker run --rm \
-      --network kora-core_default \
+      --network kora-net \
       -v "${perf_mount}:/perf" \
       -e BASE_URL="${docker_base_url}" \
       "${K6_IMAGE}" \

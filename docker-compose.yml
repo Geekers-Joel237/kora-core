@@ -1,33 +1,32 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# Architecture. What each service IS — nothing about how it is operated.
+# -----------------------------------------------------------------------------
+# Socle - what the application needs to exist at all, in every environment.
 #
-# This file must never contain `ports`, `restart`, `container_name` or a host
-# bind mount. Those are operational decisions and belong to an environment file:
+#   postgres   the ledger
 #
-#   docker-compose.override.yml   loaded automatically — development
-#   docker-compose.prod.yml       passed explicitly    — production
+# And nothing else. A service that only some environments run is declared in the
+# file of the environment that runs it, never here.
+#
+# Architecture only: image and tag, environment, healthcheck, named volume,
+# network. No `ports`, no `restart`, no `container_name`, no host bind mount -
+# those are operational decisions and belong to an environment file.
 #
 # The split is testable:
 #     docker compose -f docker-compose.yml config | grep -E 'ports:|restart:'
-# must print nothing. If it prints something, an environment decision leaked
-# into the architecture and every environment now inherits it.
+# must print nothing.
 #
-# Which services run is chosen per machine through COMPOSE_PROFILES in .env,
-# not by editing this file:
-#     dev    COMPOSE_PROFILES=mail,tooling
-#     perf   COMPOSE_PROFILES=mail,observability
-#     prod   COMPOSE_PROFILES=                    (postgres alone)
+# Two axes, never mixed (ADR-006 D4):
+#   a FILE    answers "which environment am I in"        -> override / prod
+#   a PROFILE answers "what optional group do I want"    -> tooling / observability
 #
-# The application itself is NOT a service here: it runs on the host through
+# The application is not a service here: it runs on the host through
 # ./gradlew bootRun and reaches Postgres over the published port. That is why
-# production still publishes the database port — bound to loopback only — and
-# why DB_HOST exists as a variable: the day the application moves into a
-# container, DB_HOST becomes `postgres` and nothing else changes.
-# ─────────────────────────────────────────────────────────────────────────────
+# production still publishes the database port - bound to loopback only - and
+# why DB_HOST is a variable: the day the application moves into a container,
+# DB_HOST becomes `postgres` and nothing else changes.
+# -----------------------------------------------------------------------------
 
 services:
 
-  # ── Always on ───────────────────────────────────────────────────────────────
   postgres:
     image: 'postgres:17.7-alpine'
     environment:
@@ -49,87 +48,13 @@ services:
       - 'postgres-data:/var/lib/postgresql/data'
     networks: [ kora ]
 
-  # ── profile: mail ───────────────────────────────────────────────────────────
-  # Catches every outgoing mail and shows it in a web UI. Development and load
-  # testing only — production sends through a real relay, configured in
-  # application-prod.yaml, with no container involved.
-  maildev:
-    image: 'maildev/maildev@sha256:180ef51f65eefebb0e7122d8308813c1fd7bff164bc440ce5a3c2feee167a810'
-    profiles: [ mail ]
-    environment:
-      MAILDEV_SMTP_PORT: 1025
-      MAILDEV_WEB_PORT: 1080
-    # No healthcheck declared on purpose: the image ships its own
-    # (wget on /healthz). Redeclaring one here would only risk contradicting it.
-    networks: [ kora ]
-
-  # ── profile: tooling ────────────────────────────────────────────────────────
-  # Never exposed anywhere but a developer machine. Production access to the
-  # database goes through an SSH tunnel to the loopback-bound port.
-  pgadmin:
-    image: 'dpage/pgadmin4@sha256:50700ac17936d0227f9e3e4bb086a91efb67064debc4b4737c35545bf1564088'
-    profiles: [ tooling ]
-    environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
-    # wget only — the image has no curl.
-    healthcheck:
-      test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1:80/misc/ping || exit 1" ]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      # Measured: gunicorn takes about 60 s to accept a connection on a first
-      # boot. 30 s looked reasonable and left the probe counting real failures
-      # while pgAdmin was still legitimately starting.
-      start_period: 90s
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks: [ kora ]
-
-  # ── profile: observability ──────────────────────────────────────────────────
-  # k6 metrics sink and dashboards. Needed for a few hours per load-test
-  # campaign, so it stays off by default rather than costing memory every day.
-  influxdb:
-    image: 'influxdb:1.8-alpine'
-    profiles: [ observability ]
-    environment:
-      INFLUXDB_DB: k6
-      INFLUXDB_HTTP_AUTH_ENABLED: "false"
-    healthcheck:
-      test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1:8086/ping || exit 1" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
-    volumes:
-      - 'influxdb_data:/var/lib/influxdb'
-    networks: [ kora ]
-
-  grafana:
-    image: 'grafana/grafana:12.3.3'
-    profiles: [ observability ]
-    environment:
-      GF_AUTH_ANONYMOUS_ENABLED: "true"
-      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
-    healthcheck:
-      test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health || exit 1" ]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-    volumes:
-      - 'grafana_data:/var/lib/grafana'
-    depends_on:
-      influxdb:
-        condition: service_healthy
-    networks: [ kora ]
-
 volumes:
   postgres-data:
-  influxdb_data:
-  grafana_data:
 
 networks:
   kora:
+    # Fixed name instead of the default <project>_kora. The k6 container joins
+    # this network by name from perf/*-run.sh; deriving it from the directory
+    # name would break the moment the repository is cloned elsewhere.
+    name: kora-net
     driver: bridge

@@ -110,22 +110,44 @@ openssl rand -base64 48
 docker compose up -d
 ```
 
-Which services start is decided by `COMPOSE_PROFILES` in your `.env`, not by
-listing them on the command line. Postgres always runs; the rest is opt-in:
+Or press **Run** in your IDE and skip this step entirely — the `dev` profile
+lets Spring bring the same stack up itself (section 3.6).
+
+That starts **two** containers: Postgres and MailDev. MailDev is not optional in
+development — registration and login send an OTP by mail, so without it those
+flows fail and `/actuator/health` reports `mail` as DOWN.
+
+Everything else is an opt-in **Compose profile**, off by default:
 
 | Profile | Services | When |
 |---|---|---|
-| *(none)* | postgres | always |
-| `mail` | maildev | day-to-day development, load testing |
+| *(none)* | postgres, maildev | always, in development |
 | `tooling` | pgadmin | when you want a database GUI |
 | `observability` | influxdb, grafana | load-test campaigns only |
 
-`.env.example` ships `COMPOSE_PROFILES=mail,tooling`. For a load test, switch it
-to `mail,observability` — or override it for one command:
-
 ```bash
-COMPOSE_PROFILES=mail,observability docker compose up -d
+# For a single command — naming a service enables its profile automatically
+docker compose up -d pgadmin
+docker compose up -d influxdb grafana
+
+# For a whole session — set it once in .env and forget it
+#     COMPOSE_PROFILES=tooling,observability
+docker compose up -d
 ```
+
+`COMPOSE_PROFILES` lives in `.env`, so `up`, `ps`, `logs` and `down` all agree on
+the same set. That is precisely why an optional group is a profile and not a
+separate `-f` file: with files you must repeat the identical `-f` list on the way
+down, and forgetting one silently leaves those containers running.
+
+Keeping the optional groups off by default is worth about 100 seconds every time
+you start work — measured, containers already pulled, waiting for every service to
+report healthy:
+
+| | Containers | Time to healthy |
+|---|---|---|
+| Default | 2 | **12 s** |
+| `tooling,observability` | 5 | **115 s** |
 
 Then verify — every service declares a healthcheck, so `healthy` means ready,
 not merely started:
@@ -142,30 +164,40 @@ All ports are published on `127.0.0.1` only. The database is reachable from this
 machine and from nowhere else on the network — the same posture production uses,
 where operators reach it through an SSH tunnel onto that loopback port.
 
-### 3.2.1 The three Compose files
+### 3.2.1 Files answer *where*, profiles answer *what else*
+
+One rule keeps the layout readable from an `ls` alone:
+
+> **One file = one environment. One profile = one optional group.**
+
+The two axes are independent: `tooling` is not an environment, and `prod` is not
+something you add on top of `dev`.
 
 | File | Loaded | Answers | Holds | Never holds |
 |---|---|---|---|---|
-| `docker-compose.yml` | always | *What is this service?* | image and tag, `environment`, `healthcheck`, named volumes, network, `depends_on`, `profiles` | `ports`, `restart`, `container_name`, host bind mounts |
-| `docker-compose.override.yml` | automatically, unless `-f` is used | *How do I run it on my machine?* | loopback port bindings, `container_name`, `restart: "no"`, the Grafana provisioning mount | any service declaration |
-| `docker-compose.prod.yml` | only when named with `-f` | *How does it run on a server?* | loopback binding, `restart: unless-stopped`, `shm_size`, `stop_grace_period`, log rotation | any service declaration, any secret |
+| `docker-compose.yml` | always | *What does the application need to exist at all?* | postgres: image and tag, `environment`, `healthcheck`, named volume, network | `ports`, `restart`, `container_name`, host bind mounts, any service only some environments run |
+| `docker-compose.override.yml` | automatically, unless `-f` is used | *How do I run it on my machine?* | loopback port bindings, `container_name`, `restart: "no"`, and the development-only services — maildev, pgadmin, influxdb, grafana | anything a server would need |
+| `docker-compose.prod.yml` | only when named with `-f` | *How does it run on a server?* | loopback binding, `restart: unless-stopped`, `shm_size`, `stop_grace_period`, log rotation | any secret |
 
 ```bash
-docker compose up -d                                              # base + override
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d   # base + prod
+docker compose up -d                                                    # socle + dev
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d   # socle + prod
 ```
 
 Naming any file with `-f` suppresses the automatic pickup of
 `docker-compose.override.yml`. That is the mechanism that keeps development port
-bindings off a server — and it is also the one mistake worth guarding against, so
-a deploy runbook must carry the full command, never a bare `docker compose up`.
+bindings off a server, and it is the one mistake worth guarding against: a deploy
+runbook must carry the full command, never a bare `docker compose up`.
+
+It is also what makes production safe by construction. pgAdmin and Grafana are
+declared *only* in the development file, so the production command never sees
+them — there is no service definition to activate, with or without a profile.
+Nothing has to be switched off, because nothing is switched on.
 
 Two rules keep the files from drifting:
 
-- **A service is declared once, in `docker-compose.yml`.** An override changes how
-  an existing service is operated; it never introduces one. Otherwise the
-  architecture becomes invisible in the file that is supposed to describe it.
-- **The base file must stay environment-agnostic**, which is testable:
+- **The socle holds only what every environment runs**, and it stays
+  environment-agnostic. That is testable:
 
   ```bash
   docker compose -f docker-compose.yml config | grep -E "^\s+(ports|restart|container_name):"
@@ -173,28 +205,31 @@ Two rules keep the files from drifting:
 
   It must print nothing. Anything it prints is a decision that every environment
   now inherits, including ones that do not exist yet.
+- **A service that only one environment runs is declared in that environment's
+  file.** An environment file may therefore introduce services; that is the point
+  of the axis. What it must not do is redefine architecture — image, healthcheck
+  and volumes of a socle service stay in the socle.
 
 ### 3.2.2 Compose profiles and Spring profiles are two different things
 
-They are frequently confused because both are called "profiles" and both are
-switched per environment. They control different layers and never read each other.
+They share a name and nothing else. One decides which **containers** run, the
+other which **application configuration** applies, and neither reads the other.
 
-| | `COMPOSE_PROFILES` | Spring profile |
+| | Compose profile | Spring profile |
 |---|---|---|
 | Decides | which **containers** run | which **application configuration** applies |
-| Read by | the `docker compose` CLI | the Spring application |
-| Set in | `.env` (per machine) | `SPRING_PROFILES_ACTIVE`, or `spring.profiles.default: dev` |
-| Values | `mail`, `tooling`, `observability` | `dev`, `perf`, `prod`, `test` |
-| Files | `docker-compose*.yml` | `src/main/resources/application-<profile>.yaml` |
+| Selected by | `COMPOSE_PROFILES` in `.env`, or naming a service on the command line | `SPRING_PROFILES_ACTIVE`, or `spring.profiles.default: dev` |
+| Values | *(none)*, `tooling`, `observability` | `dev`, `perf`, `prod`, `test` |
+| Declared in | `docker-compose*.yml` | `src/main/resources/application-<profile>.yaml` |
 
 Nothing enforces agreement between them, so a Spring profile that needs a
 container will start happily without it and fail later:
 
-| Spring profile | Requires these Compose profiles | Because |
+| Spring profile | Requires which containers | Because |
 |---|---|---|
-| `dev` (default) | `mail` | `SmtpMailAdapter` sends OTP mail to `MAIL_HOST:MAIL_SMTP_PORT` — MailDev |
-| `perf` | `mail`, `observability` | Micrometer pushes to InfluxDB every 10 s, and `perf/*-run.sh` waits on `/actuator/health`, whose `mail` component probes SMTP |
-| `prod` | *(none)* | a real SMTP relay, no metrics export, no database GUI |
+| `dev` (default) | the default set | `SmtpMailAdapter` sends OTP mail to `MAIL_HOST:MAIL_SMTP_PORT` — MailDev, already running |
+| `perf` | default **+ `observability`** | Micrometer pushes to InfluxDB every 10 s, and `perf/*-run.sh` waits on `/actuator/health`, whose `mail` component probes SMTP |
+| `prod` | Postgres only | a real SMTP relay, no metrics export, no database GUI |
 | `test` | *(none — Compose is not used at all)* | every test starts its own PostgreSQL through Testcontainers and reads no `.env` |
 
 What a mismatch looks like:
@@ -202,21 +237,21 @@ What a mismatch looks like:
 - `perf` without `observability` — `InfluxMeterRegistry` logs a failed push every
   ten seconds and the Grafana panels stay empty, while the load test itself runs
   and reports normal-looking results.
-- `dev` or `perf` without `mail` — `/actuator/health` reports `mail` as DOWN, so
-  `perf/*-run.sh` never considers the application ready, and registration fails
-  when it tries to send an OTP.
+- A stack started with `-f` but without naming `docker-compose.override.yml` —
+  Postgres publishes no port, so the application on the host cannot reach the
+  database it is being tested against.
 
 Switching to a load test therefore means moving **both** axes together:
 
 ```bash
-COMPOSE_PROFILES=mail,observability docker compose up -d
-SPRING_PROFILES_ACTIVE=perf ./gradlew bootRun
+docker compose up -d influxdb grafana          # Compose axis
+SPRING_PROFILES_ACTIVE=perf ./gradlew bootRun  # Spring axis
 ```
 
-The Compose files and the Spring profiles meet in exactly one place: `.env`.
-Both read it directly, so there is a single source of truth rather than a
-convention that the two are kept aligned by hand. A real environment variable
-still overrides the file, which is how CI and a secrets manager inject values.
+The two meet in exactly one place: `.env`. Compose and the application both read
+it directly, so there is a single source of truth rather than a convention that
+they are kept aligned by hand. A real environment variable still overrides the
+file, which is how CI and a secrets manager inject values.
 
 ### 3.3 Verify the database connection
 
@@ -265,7 +300,6 @@ is `always` in dev and `never` in prod, so no single value could be correct for 
 | `MAIL_FROM` `MAIL_USERNAME` `MAIL_PASSWORD` | `application-prod.yaml` | prod |
 | `INFLUXDB_HOST` `INFLUXDB_PORT` | Compose + `application-perf.yaml` | perf |
 | `GRAFANA_PORT` `DB_ADMIN_PORT` | Compose | — |
-| `COMPOSE_PROFILES` | Compose — selects which services run | — |
 | `PGADMIN_DEFAULT_EMAIL` `PGADMIN_DEFAULT_PASSWORD` | Compose | — |
 
 Four profiles, one file each:
@@ -284,13 +318,35 @@ with no `.env` and no exported variable.
 
 ### 3.6 Running from an IDE
 
-Nothing to configure. `application.yaml` imports `.env` itself, so a Run
-Configuration that starts `KoraCoreApplication` picks up the same values as
-`docker compose up` — no EnvFile plugin, no variables pasted into the run
-configuration, no second copy to drift.
+Nothing to configure, and nothing to start beforehand. A Run Configuration on
+`KoraCoreApplication` is enough: `application.yaml` imports `.env` itself — no
+EnvFile plugin, no variables pasted into the run configuration, no second copy to
+drift — and the `dev` profile has Spring bring the Compose stack up on its own.
 
 One condition: the **working directory** must be the project root, which is the
-IntelliJ default. `spring.config.import` resolves `./.env` relative to it.
+IntelliJ default. Both `spring.config.import` (for `./.env`) and the Compose file
+paths resolve relative to it.
+
+The stack **stays up when you stop the application** — `lifecycle-management:
+start-only`. Stopping a run must not stop the database; you bring the stack down
+with `docker compose down` when you actually mean to.
+
+`COMPOSE_PROFILES` works here exactly as in a terminal: the `docker compose`
+subprocess inherits the working directory and reads the same `.env`, so setting
+it to `observability` makes the IDE run start InfluxDB and Grafana too.
+
+Two things make this safe, and both are load-bearing — see ADR-006 D7 before
+touching either:
+
+- `spring.docker.compose.file` names **both** Compose files. Left to itself the
+  integration resolves only `docker-compose.yml` and runs `docker compose -f` on
+  it, which suppresses the override where the ports live — the failure is
+  `No host port mapping found for container port 5432`.
+- The dev `postgres` service carries the label `org.springframework.boot.ignore`.
+  Without it, Spring derives `ConnectionDetails` from the container's
+  `environment:` block, and those **outrank `spring.datasource.*`** — the
+  application would connect as the superuser and bypass the
+  `kora_migration` / `kora_app` split, silently.
 
 Tests need even less. `@ActiveProfiles("test")` is self-contained, so running a
 test class from the IDE works on a clean clone with no `.env` at all.
@@ -339,7 +395,7 @@ class changes without a full restart.
 ### Perf profile (required for load tests)
 
 ```bash
-COMPOSE_PROFILES=mail,observability docker compose up -d
+docker compose up -d influxdb grafana
 SPRING_PROFILES_ACTIVE=perf ./gradlew bootRun
 ```
 
@@ -781,8 +837,8 @@ curl http://localhost:8081/actuator/health | python -m json.tool
 
 | Component DOWN | Likely cause | Fix |
 |---|---|---|
-| `db` | PostgreSQL not running | `docker compose up -d postgres` |
-| `mail` | MailDev not running | check `COMPOSE_PROFILES` includes `mail`, then `docker compose up -d` |
+| `db` | PostgreSQL not running | `docker compose up -d` |
+| `mail` | MailDev not running | `docker compose up -d` |
 
 ### `jwt.secret` too short
 

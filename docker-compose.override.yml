@@ -1,59 +1,180 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# Development. Loaded automatically by `docker compose` — you never pass -f.
+# -----------------------------------------------------------------------------
+# Development. Loaded automatically by `docker compose` - you never pass -f.
 #
-# Holds only operational decisions: what is reachable from the host, under what
-# name, and what happens when a container dies. Adding a *service* here would
-# make the architecture invisible in docker-compose.yml, so services stay there
-# and are selected with COMPOSE_PROFILES.
+# Two things live here:
 #
-#     docker compose up -d          # profiles from .env
+#   1. the operational decisions for the socle services - what is reachable from
+#      the host, under what name, what happens when a container dies;
+#   2. the services that only a developer machine runs. MailDev is a mail sink,
+#      not a mail server; pgAdmin, InfluxDB and Grafana are inspection tools.
+#      None of them belongs to the socle, and production must never see them.
+#
+# Optional groups are Compose PROFILES, not separate files. A profile is the
+# primitive Compose provides for "an opt-in group inside a stack", and it leaves
+# the file axis free to mean one thing only: which environment.
+#
+#     docker compose up -d                                   postgres + maildev
+#     COMPOSE_PROFILES=tooling        docker compose up -d    + pgAdmin
+#     COMPOSE_PROFILES=observability  docker compose up -d    + InfluxDB, Grafana
+#     COMPOSE_PROFILES=tooling,observability  ...             everything
+#
+# Set COMPOSE_PROFILES once in .env and every command - up, ps, logs, down -
+# agrees on the same set. That is the decisive argument over a separate -f file:
+# with files you must repeat the identical -f list on `down`, and forgetting one
+# silently leaves those containers running.
+#
+# Naming a service explicitly also enables its profile for that one command:
+#     docker compose up -d influxdb grafana        # no variable needed
+#
 #     docker compose ps
 #     docker compose logs -f
 #     docker compose stop           # keeps containers and data
 #     docker compose down           # removes containers and network, keeps volumes
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 
 services:
 
   postgres:
     container_name: kora-postgres
     # Loopback only. '${DB_PORT}:5432' would bind 0.0.0.0 and [::], putting the
-    # database on every interface of the machine — reachable by anyone on the
-    # same café or office network. The application runs on the host, so
-    # loopback is all it needs, here and in production alike.
+    # database on every interface of the machine - reachable by anyone on the
+    # same cafe or office network. The application runs on the host, so loopback
+    # is all it needs, here and in production alike.
     ports:
       - '127.0.0.1:${DB_PORT}:5432'
+    # Keeps Spring's Compose integration to a lifecycle role only. Without it,
+    # PostgresJdbcDockerComposeConnectionDetails reads the container's
+    # `environment:` block and produces url/username/password beans that OUTRANK
+    # spring.datasource.* — the application would silently connect as the
+    # superuser and bypass the kora_migration / kora_app split.
+    #
+    # DockerComposeLifecycleManager.isIgnored() tests containsKey, not the value:
+    # the key alone disables service-connection detection for this service, while
+    # `docker compose up` still starts it. Verified in the 4.0.3 bytecode.
+    # No equivalent is needed on maildev — spring-boot-mail ships no
+    # docker-compose factory, so nothing is ever derived from it.
+    labels:
+      org.springframework.boot.ignore: "true"
     # "no", not unless-stopped: a database that silently comes back every time
-    # Docker Desktop starts keeps running for days after you stopped working,
-    # and hides the fact that you never started it deliberately. Production
-    # wants the opposite and says so in docker-compose.prod.yml.
+    # Docker Desktop starts keeps running for days after you stopped working, and
+    # hides the fact that you never started it deliberately. Production wants the
+    # opposite and says so in docker-compose.prod.yml.
     restart: "no"
 
+  # --- always on in development ----------------------------------------------
+  # The OTP flow sends mail on registration and on login, so a sink is not
+  # optional here. Production sends through a real relay configured in
+  # application-prod.yaml and never runs this container - which is why MailDev
+  # left the socle: a service the production file has to switch off was in the
+  # wrong file to begin with.
   maildev:
+    image: 'maildev/maildev@sha256:180ef51f65eefebb0e7122d8308813c1fd7bff164bc440ce5a3c2feee167a810'
     container_name: kora-maildev
+    environment:
+      MAILDEV_SMTP_PORT: 1025
+      MAILDEV_WEB_PORT: 1080
+    # No healthcheck declared on purpose: the image ships its own (wget on
+    # /healthz). Redeclaring one here could only contradict it.
     ports:
-      - '127.0.0.1:${MAIL_SMTP_PORT}:1025'   # SMTP — Spring Boot mail target
-      - '127.0.0.1:${MAIL_UI_PORT}:1080'     # Web UI — read the OTP mails here
+      - '127.0.0.1:${MAIL_SMTP_PORT}:1025'   # SMTP - Spring Boot mail target
+      - '127.0.0.1:${MAIL_UI_PORT}:1080'     # Web UI - read the OTP mails here
     restart: "no"
+    networks: [ kora ]
 
+  # --- profile: tooling ------------------------------------------------------
+  # Database GUI. Off by default: gunicorn needs about a minute to answer, which
+  # is most of the gap between a 17 s and a 127 s `up`.
+  #
+  # Development only, and there is no production counterpart by design: a
+  # permanent web console holding database credentials is a standing attack
+  # surface for an occasional need. Operator access on a server is psql through
+  # an SSH tunnel onto the loopback-bound port. A staging environment that wants
+  # a GUI declares its own, with staging-appropriate exposure and restart policy,
+  # in docker-compose.staging.yml.
   pgadmin:
+    profiles: [ "tooling" ]
+    image: 'dpage/pgadmin4@sha256:50700ac17936d0227f9e3e4bb086a91efb67064debc4b4737c35545bf1564088'
     container_name: kora-db-admin
+    environment:
+      # .local is a reserved domain (RFC 6762) and pgAdmin rejects it outright:
+      # "does not appear to be a valid email address". Use a real gTLD.
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+    # wget only - the image has no curl.
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1:80/misc/ping || exit 1" ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      # Measured: gunicorn takes about 60 s to accept a connection on a first
+      # boot. 30 s looked reasonable and left the probe counting real failures
+      # while pgAdmin was still legitimately starting.
+      start_period: 90s
     ports:
       - '127.0.0.1:${DB_ADMIN_PORT}:80'
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: "no"
+    networks: [ kora ]
 
+  # --- profile: observability ------------------------------------------------
+  # InfluxDB is the k6 metrics sink, Grafana reads it. Needed for a load-test
+  # campaign - a few hours a month - so keeping them on cost memory every day
+  # for nothing. perf/*-run.sh name them explicitly, which enables the profile
+  # for that command without touching .env.
   influxdb:
+    profiles: [ "observability" ]
+    image: 'influxdb:1.8-alpine'
     container_name: kora-influxdb
+    environment:
+      INFLUXDB_DB: k6
+      INFLUXDB_HTTP_AUTH_ENABLED: "false"
+    # wget only - the image has no curl.
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1:8086/ping || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     ports:
       - '127.0.0.1:${INFLUXDB_PORT}:8086'
+    volumes:
+      - 'influxdb_data:/var/lib/influxdb'
     restart: "no"
+    networks: [ kora ]
 
   grafana:
+    profiles: [ "observability" ]
+    image: 'grafana/grafana:12.3.3'
     container_name: kora-grafana
+    environment:
+      # Anonymous admin is acceptable because the port is bound to loopback on a
+      # developer machine and the data is throw-away k6 metrics. It would not be
+      # acceptable anywhere a second person can reach the port.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health || exit 1" ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     ports:
       - '127.0.0.1:${GRAFANA_PORT}:3000'
-    restart: "no"
-    # Host path, therefore an environment decision. Provisions the InfluxDB
-    # datasource and the k6 dashboard so a fresh Grafana is useful immediately.
     volumes:
+      - 'grafana_data:/var/lib/grafana'
+      # Provisions the InfluxDB datasource and the k6 dashboard, so a fresh
+      # Grafana is useful immediately instead of asking to be configured.
       - './perf/grafana/provisioning:/etc/grafana/provisioning'
+    # Grafana queries InfluxDB on startup to build its datasource; starting it
+    # before InfluxDB answers leaves the dashboard empty until a manual reload.
+    depends_on:
+      influxdb:
+        condition: service_healthy
+    restart: "no"
+    networks: [ kora ]
+
+volumes:
+  influxdb_data:
+  grafana_data:

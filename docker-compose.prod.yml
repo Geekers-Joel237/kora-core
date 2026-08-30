@@ -1,5 +1,5 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# Production. Passed explicitly — never loaded automatically:
+# -----------------------------------------------------------------------------
+# Production. Passed explicitly - never loaded automatically:
 #
 #     docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 #
@@ -8,20 +8,22 @@
 # the flags is the one mistake that matters here; the deploy runbook must carry
 # the full command, never a bare `docker compose up`.
 #
-# Only Postgres is configured below. maildev, pgadmin, influxdb and grafana are
-# deliberately absent: with COMPOSE_PROFILES empty they never start, and by not
-# describing them here they cannot inherit a development port binding even if a
-# profile is switched on by mistake — they would fall back to the architecture
-# file, which publishes nothing.
+# Only Postgres is configured below, and that is the whole point of the socle
+# rule: maildev, pgadmin, influxdb and grafana are declared in
+# docker-compose.override.yml, which this command does not load. They cannot
+# start here even by mistake - there is no service definition to activate, with
+# or without COMPOSE_PROFILES. Nothing has to be switched off, because nothing
+# is switched on.
 #
 # The application is not a container. It runs on the host and reaches Postgres
-# on 127.0.0.1, which is why the port is still published — bound to loopback,
+# on 127.0.0.1, which is why the port is still published - bound to loopback,
 # so it is reachable from the host and from nowhere else. Operator access to the
-# database goes through an SSH tunnel onto that same loopback port.
+# database goes through an SSH tunnel onto that same loopback port; there is
+# deliberately no database GUI on a server.
 #
-# Server day: copy .env.example to .env, fill in the real values, leave
-# COMPOSE_PROFILES empty, run the command above. No file below needs editing.
-# ─────────────────────────────────────────────────────────────────────────────
+# Server day: copy .env.example to .env, fill in the real values, run the
+# command above. No file below needs editing.
+# -----------------------------------------------------------------------------
 
 services:
 
