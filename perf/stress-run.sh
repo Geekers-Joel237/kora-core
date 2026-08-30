@@ -8,6 +8,19 @@
 #
 # IMPORTANT : ce test va intentionnellement stresser le système.
 #             Ne pas lancer en production.
+#
+# -- PROFIL COMPOSE REQUIS ----------------------------------------------------
+# Ce script exige le profil Compose « observability » en plus du socle.
+# InfluxDB reçoit les métriques k6, Grafana les affiche : sans eux le run
+# s'exécute mais ne produit aucun tableau de bord.
+#
+#   COMPOSE_PROFILES=observability docker compose up -d
+#
+# Le script s'en charge lui-même : nommer explicitement influxdb et grafana
+# active leur profil pour cette commande seule, sans toucher au .env. Aucun -f
+# n'est passé, donc docker-compose.override.yml se charge normalement et
+# Postgres publie bien son port.
+#
 
 set -euo pipefail
 
@@ -75,7 +88,7 @@ start_monitoring() {
   info "Vérification des containers de monitoring…"
 
   local running
-  running=$(docker compose -f "${ROOT_DIR}/docker-compose.yml" ps --services --filter status=running 2>/dev/null || true)
+  running=$(docker compose --project-directory "${ROOT_DIR}" ps --services --filter status=running 2>/dev/null || true)
 
   local need_start=false
   for svc in $COMPOSE_SERVICES; do
@@ -86,7 +99,7 @@ start_monitoring() {
 
   if $need_start; then
     info "Démarrage de InfluxDB + Grafana + MailDev…"
-    docker compose -f "${ROOT_DIR}/docker-compose.yml" up -d $COMPOSE_SERVICES
+    docker compose --project-directory "${ROOT_DIR}" up -d $COMPOSE_SERVICES
 
     info "Attente démarrage MailDev SMTP (port 1025)…"
     local retries=0
@@ -140,7 +153,7 @@ run_stress() {
       export MSYS_NO_PATHCONV=1
     fi
     docker run --rm \
-      --network kora-core_default \
+      --network kora-net \
       -v "${perf_mount}:/perf" \
       -e BASE_URL="${docker_base_url}" \
       "${K6_IMAGE}" \

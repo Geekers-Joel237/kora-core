@@ -3,7 +3,7 @@
 **Date**: 2026-08-26
 **Status**: Accepted
 **Authors**: Kora Core Engineering — Ivan Joël Tchatchoua Bayon
-**Related**: ADR-005 — Calibration des tests de performance · `CONTRIBUTING.md` §3.2 · KC-02 — Séparation stricte de la configuration
+**Related**: ADR-005 — Calibration des tests de performance · `CONTRIBUTING.md` §3.2 · KC-02 — Séparation stricte de la configuration · KC-03 — Socle Compose minimal (amendé, voir D4)
 
 ---
 
@@ -59,6 +59,10 @@ dans l'architecture et tous les environnements en héritent.
 C'est ce critère — et non l'existence du fichier de production — qui garantit qu'un
 nouvel environnement s'ajoute sans réécriture.
 
+Le socle ne décrit pas non plus *tous* les services : seulement ceux que chaque
+environnement exécute — postgres, et rien d'autre aujourd'hui. Un service qu'un
+seul environnement exécute appartient au fichier de cet environnement (D4).
+
 ### D3 — Publication sur la boucle locale uniquement
 
 `127.0.0.1:${DB_PORT}:5432` partout, développement compris, au lieu de
@@ -69,21 +73,79 @@ seule posture compatible avec D1 : l'application, sur l'hôte, atteint la base s
 la boucle locale ; personne d'autre ne le peut. L'accès opérateur passe par un
 tunnel SSH sur ce même port.
 
-### D4 — Deux mécanismes distincts, pas un
+### D4 — Un fichier par environnement, un profil par groupe optionnel
 
-- **Fichiers d'override** (`-f base -f prod`) : *comment* un service est configuré ici.
-- **Profils Compose** (`profiles:`) : *si* un service tourne ici.
+*Historique : profils Compose d'abord ; un fichier par pile
+(`docker-compose.tooling.yml`, `docker-compose.observability.yml`) le
+2026-08-26 ; retour aux profils le 2026-08-30, KC-03 amendé en conséquence.
+Ce va-et-vient fait partie de la décision : la deuxième rédaction a suivi le nom
+de fichier écrit dans le ticket au lieu de suivre le principe, et c'est
+exactement l'erreur que cette version corrige.*
 
-Les confondre produit la dérive qu'on veut éviter. Un service déclaré uniquement
-dans un override rend l'architecture invisible dans le socle. Avec les profils,
-tous les services restent déclarés une fois, et la sélection est une valeur
-d'environnement — `COMPOSE_PROFILES` dans `.env` :
+Deux axes orthogonaux, jamais mélangés :
 
-| Environnement | `COMPOSE_PROFILES` | Services |
+| Axe | Primitive | Répond à | Valeurs |
+|---|---|---|---|
+| environnement | **fichier** | *où est-ce que je tourne ?* | `docker-compose.yml` (socle), `.override.yml` (dev), `.prod.yml` |
+| groupe optionnel | **profil** | *qu'est-ce que je veux en plus ?* | *(aucun)*, `tooling`, `observability` |
+
+| Profil | Services | Fréquence d'usage |
 |---|---|---|
-| dev | `mail,tooling` | postgres, maildev, pgadmin |
-| perf | `mail,observability` | postgres, maildev, influxdb, grafana |
-| prod | *(vide)* | postgres |
+| *(aucun)* | postgres, maildev | tous les jours |
+| `tooling` | pgadmin | quelques minutes par semaine |
+| `observability` | influxdb, grafana | quelques heures par mois |
+
+**Pourquoi le profil et non le fichier.** Trois raisons, par poids décroissant :
+
+1. **Le `down`.** Un groupe optionnel en fichier oblige à répéter la liste `-f`
+   identique à la descente ; en oublier un laisse ces conteneurs tourner sans
+   rien signaler. Le profil, lui, est lu depuis `.env` : `up`, `ps`, `logs` et
+   `down` s'accordent sur le même ensemble. La version en fichiers avait dû
+   documenter ce piège dans `CONTRIBUTING.md` — un design dont l'usage quotidien
+   exige un avertissement est le mauvais design.
+2. **Le plan de fichiers mentait.** `docker-compose.tooling.yml` se lisait comme
+   un pair de `docker-compose.prod.yml` alors qu'il ne l'est pas : `prod` répond
+   « où », `tooling` répond « quoi en plus ». Cinq fichiers côte à côte
+   suggéraient cinq options exclusives là où il y avait deux axes de deux.
+3. **Le contenu démentait le nom.** `docker-compose.tooling.yml` portait
+   `restart: "no"` et une publication sur `127.0.0.1` — des décisions de
+   développement dans un fichier prétendument transverse. Il n'aurait pas été
+   réutilisable tel quel sur un staging, ce qui était pourtant sa raison d'être.
+
+**Ce que le profil coûte.** La sélection passe par une variable d'environnement
+qu'il faut connaître pour comprendre pourquoi `docker compose up` démarre deux
+conteneurs et pas cinq. C'était l'argument de la rédaction précédente et il reste
+juste ; il est payé, pas nié :
+
+- `COMPOSE_PROFILES` est déclarée en tête de `.env.example`, avec ses deux
+  valeurs et leur effet ;
+- `docker compose config --profiles` les énumère ;
+- nommer un service active son profil pour cette commande seule —
+  `docker compose up -d influxdb grafana` ne demande aucune variable, ce dont
+  `perf/*-run.sh` se sert.
+
+Le mot « profil » désigne désormais deux choses dans ce dépôt : les profils
+Compose et les profils Spring. La collision est assumée et traitée explicitement
+en `CONTRIBUTING.md` §3.2.2 ; l'alternative aurait été de renommer l'axe Compose,
+ce que Docker ne permet pas.
+
+**Conséquence : la règle « un service n'est déclaré que dans le socle » tombe.**
+maildev, pgadmin, influxdb et grafana sont déclarés dans
+`docker-compose.override.yml`, le fichier de l'environnement qui les exécute. La
+production ne charge pas ce fichier : leur absence y est *structurelle*, il n'y a
+aucune définition de service à activer, avec ou sans profil.
+
+C'est un gain de sûreté, pas une concession. Avant, maildev vivait dans le socle
+et la production devait l'éteindre avec `profiles: [ "never-in-production" ]` —
+un profil dont le seul rôle était d'annuler le socle. Quand un fichier
+d'environnement doit annuler le socle, la frontière du socle est mal placée. Le
+socle ne contient plus que postgres, et le test de D2 reste vérifié.
+
+**Mesure.** Garder les groupes optionnels éteints fait passer le démarrage de
+développement de **115 s à 12 s** — `docker compose up -d --wait`, images déjà
+présentes, attente que chaque service se déclare *healthy*, 5 conteneurs contre
+2. La majeure partie de la centaine de secondes économisées vient de pgAdmin,
+dont gunicorn met environ une minute à répondre.
 
 **Les profils Compose et les profils Spring restent deux axes indépendants.** Les
 premiers décident quels *conteneurs* tournent, les seconds quelle *configuration
@@ -145,7 +207,8 @@ condamnaient l'intégration :
   Invisible aujourd'hui — les trois rôles valent `postgres` — et actif le jour où
   KC-05 crée les vrais rôles ;
 - sa sélection de profils (`spring.docker.compose.profiles.active`) serait un
-  second réglage pour la décision déjà portée par `COMPOSE_PROFILES` dans `.env`.
+  second mécanisme de sélection, à côté de `COMPOSE_PROFILES` (D4), pour la même
+  décision.
 
 La stack se démarre donc explicitement, `docker compose up -d`, ce que
 `CONTRIBUTING.md` §3.2 documentait déjà.
@@ -159,7 +222,8 @@ qu'une ligne du dépôt ne bouge.
 
 ## Conséquences
 
-- Le développement quotidien démarre **trois** conteneurs au lieu de six.
+- Le développement quotidien démarre **deux** conteneurs au lieu de six, et passe
+  de 115 s à 12 s avant que tout soit *healthy*.
 - `restart: "no"` en développement : une base qui remonte seule masque qu'on ne l'a
   jamais démarrée délibérément. La production utilise `unless-stopped`, qui respecte
   un arrêt de maintenance tout en survivant à un redémarrage de la machine.
@@ -171,7 +235,7 @@ qu'une ligne du dépôt ne bouge.
 ## Trajectoire
 
 **Jour de mise en production** : copier `.env.example` en `.env` sur le serveur,
-renseigner les valeurs réelles, laisser `COMPOSE_PROFILES` vide, lancer
+renseigner les valeurs réelles, puis lancer
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
@@ -196,5 +260,6 @@ l'introduction de `DB_HOST` en KC-02 rendait possible.
 | Conteneuriser l'application dès maintenant | Perte du rechargement à chaud pour un gain de parité faible en Java (D1) |
 | Un seul fichier avec des commentaires par environnement | Illisible, et rien n'empêche une valeur de dev d'atteindre un serveur |
 | Fichiers d'override pour sélectionner les services | Mauvais outil : influx/grafana ne sont pas *configurés* différemment, ils sont *absents* (D4) |
+| Un fichier par pile optionnelle (`docker-compose.tooling.yml`) | Confond l'axe environnement et l'axe groupe optionnel, et oblige à répéter la liste `-f` au `down` (D4) |
 | Créer `docker-compose.staging.yml` maintenant | Infrastructure spéculative, non vérifiable, qui se périme |
 | Réseau `internal: true` pour la base en production | Incompatible avec D1 : la publication de port ne fonctionne pas sur un réseau interne, et l'application est sur l'hôte |

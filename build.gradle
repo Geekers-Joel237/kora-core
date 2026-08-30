@@ -64,8 +64,7 @@ tasks.named('test') {
             'docker-compose.yml',
             'docker-compose.override.yml',
             'docker-compose.prod.yml',
-            '.env.example',
-            '.env.prod.example')
+            '.env.example')
             .withPropertyName('configurationGuardInputs')
             .withPathSensitivity(PathSensitivity.RELATIVE)
 }

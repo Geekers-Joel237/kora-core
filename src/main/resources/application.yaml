@@ -9,7 +9,7 @@
 #   2. Policy that is genuinely the same in every environment.
 #
 # Anything an environment could legitimately want to change — monitoring, mail
-# transport, provider behaviour, connection pool sizing — belongs in
+# transport, provider behavior, connection pool sizing — belongs in
 # application-<profile>.yaml. Putting it here would force every environment to
 # inherit a decision that was only ever made for one of them.
 #
@@ -20,7 +20,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 spring:
-  # The application reads .env itself, from the working directory, so it and
+  # The application reads .env itself from the working directory, so it and
   # Docker Compose consume the same file with no shell ceremony in between.
   # Real environment variables still win — SPRING_PROFILES_ACTIVE=perf and a
   # CI-injected secret both override what .env says.

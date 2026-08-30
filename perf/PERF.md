@@ -49,13 +49,28 @@ P2P transfers and balance checks hit no provider — their latency is purely app
 
 ### Prerequisites
 
-```bash
-# Start the application with the perf profile (realistic latencies)
-SPRING_PROFILES_ACTIVE=perf ./gradlew bootRun
+Load testing needs the **observability** Compose profile on top of the socle.
+`docker compose up -d` alone starts Postgres and MailDev only — the run would
+work but produce no dashboard.
 
-# Start InfluxDB + Grafana for metrics
+```bash
+# 1. Infrastructure. Naming the services explicitly enables their profile for
+#    this command; no -f is passed, so docker-compose.override.yml still loads
+#    and Postgres publishes its port.
 docker compose up -d influxdb grafana
+
+#    Or, to keep it on for the whole campaign, set it once in .env:
+#        COMPOSE_PROFILES=observability
+#    then a bare `docker compose up -d` brings the same four containers, and
+#    `docker compose down` stops all of them — which is the reason profiles are
+#    preferred here over a separate -f file.
+
+# 2. The application, with realistic provider latencies
+SPRING_PROFILES_ACTIVE=perf ./gradlew bootRun
 ```
+
+The `perf/*-run.sh` scripts do step 1 themselves, so in practice you only start
+the application and run the script.
 
 Grafana dashboard: [http://localhost:3000](http://localhost:3000) (admin/admin)
 k6 dashboard ID: **2587** (auto-provisioned)

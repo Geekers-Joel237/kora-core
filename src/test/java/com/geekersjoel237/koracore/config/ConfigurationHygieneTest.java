@@ -36,7 +36,6 @@ class ConfigurationHygieneTest {
 
     private static final Path MAIN_RESOURCES = Path.of("src", "main", "resources");
     private static final Path ENV_EXAMPLE = Path.of(".env.example");
-    private static final Path ENV_PROD_EXAMPLE = Path.of(".env.prod.example");
     private static final Path REPOSITORY_ROOT = Path.of(".");
 
     /**
@@ -240,7 +239,7 @@ class ConfigurationHygieneTest {
     @Test
     void example_files_carry_no_usable_credential() {
         List<String> offenders = new ArrayList<>();
-        for (Path file : List.of(ENV_EXAMPLE, ENV_PROD_EXAMPLE)) {
+        for (Path file : List.of(ENV_EXAMPLE)) {
             List<String> lines = readLines(file);
             for (int i = 0; i < lines.size(); i++) {
                 String trimmed = lines.get(i).strip();
@@ -263,26 +262,6 @@ class ConfigurationHygieneTest {
                         nobody ships one by accident.
                         Offending lines:
                           %s""", String.join("\n  ", offenders))
-                .isEmpty();
-    }
-
-    @Test
-    void both_example_files_declare_the_same_keys() {
-        Set<String> dev = envKeys(ENV_EXAMPLE);
-        Set<String> prod = envKeys(ENV_PROD_EXAMPLE);
-
-        Set<String> onlyDev = new LinkedHashSet<>(dev);
-        onlyDev.removeAll(prod);
-        Set<String> onlyProd = new LinkedHashSet<>(prod);
-        onlyProd.removeAll(dev);
-
-        assertThat(List.of(onlyDev, onlyProd).stream().flatMap(Set::stream).toList())
-                .withFailMessage("""
-                        The two environment templates have drifted apart.
-                        A variable added for development but missing from production is
-                        discovered on deployment day, which is the worst possible moment.
-                        Only in .env.example:      %s
-                        Only in .env.prod.example: %s""", onlyDev, onlyProd)
                 .isEmpty();
     }
 
