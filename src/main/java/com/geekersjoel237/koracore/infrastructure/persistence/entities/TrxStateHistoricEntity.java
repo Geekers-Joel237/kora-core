@@ -1,7 +1,10 @@
 package com.geekersjoel237.koracore.infrastructure.persistence.entities;
 
+import com.geekersjoel237.koracore.domain.enums.TriggerSource;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import lombok.*;
@@ -31,8 +34,9 @@ public class TrxStateHistoricEntity extends BaseEntity {
     @Column(name = "occurred_at", nullable = false)
     private Instant occurredAt;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "triggered_by")
-    private String triggeredBy;
+    private TriggerSource triggeredBy;
 
     @Column(name = "correlation_id")
     private String correlationId;
