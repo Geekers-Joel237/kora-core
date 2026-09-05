@@ -21,14 +21,14 @@ class AccountTest {
     void should_create_customer_account_with_zero_balance() {
         Account account = Account.createCustomerAccount(
                 Id.generate(), CUSTOMER_ID);
-        assertEquals(Amount.of(BigDecimal.ZERO, "XOF"), account.snapshot().balance().solde());
+        assertEquals(Amount.of(BigDecimal.ZERO, "XAF"), account.snapshot().balance().solde());
     }
 
     @Test
     void should_create_float_account_with_zero_balance() {
         Account account = Account.createFloatAccount(
                 Id.generate(), PROVIDER_ID);
-        assertEquals(Amount.of(BigDecimal.ZERO, "XOF"), account.snapshot().balance().solde());
+        assertEquals(Amount.of(BigDecimal.ZERO, "XAF"), account.snapshot().balance().solde());
     }
 
     @Test
@@ -94,8 +94,8 @@ class AccountTest {
     void should_increase_balance_when_credited() {
         Account account = Account.createCustomerAccount(
                 Id.generate(), CUSTOMER_ID);
-        account.credit(Amount.of(BigDecimal.valueOf(100), "XOF"));
-        assertEquals(Amount.of(BigDecimal.valueOf(100), "XOF"),
+        account.credit(Amount.of(BigDecimal.valueOf(100), "XAF"));
+        assertEquals(Amount.of(BigDecimal.valueOf(100), "XAF"),
                 account.snapshot().balance().solde());
     }
 
@@ -103,9 +103,9 @@ class AccountTest {
     void should_allow_multiple_credits() {
         Account account = Account.createCustomerAccount(
                 Id.generate(), CUSTOMER_ID);
-        account.credit(Amount.of(BigDecimal.valueOf(100), "XOF"));
-        account.credit(Amount.of(BigDecimal.valueOf(50), "XOF"));
-        assertEquals(Amount.of(BigDecimal.valueOf(150), "XOF"),
+        account.credit(Amount.of(BigDecimal.valueOf(100), "XAF"));
+        account.credit(Amount.of(BigDecimal.valueOf(50), "XAF"));
+        assertEquals(Amount.of(BigDecimal.valueOf(150), "XAF"),
                 account.snapshot().balance().solde());
     }
 
@@ -115,9 +115,9 @@ class AccountTest {
     void should_decrease_balance_when_customer_account_debited() {
         Account account = Account.createCustomerAccount(
                 Id.generate(), CUSTOMER_ID);
-        account.credit(Amount.of(BigDecimal.valueOf(100), "XOF"));
-        account.debit(Amount.of(BigDecimal.valueOf(40), "XOF"));
-        assertEquals(Amount.of(BigDecimal.valueOf(60), "XOF"),
+        account.credit(Amount.of(BigDecimal.valueOf(100), "XAF"));
+        account.debit(Amount.of(BigDecimal.valueOf(40), "XAF"));
+        assertEquals(Amount.of(BigDecimal.valueOf(60), "XAF"),
                 account.snapshot().balance().solde());
     }
 
@@ -126,7 +126,7 @@ class AccountTest {
         Account account = Account.createCustomerAccount(
                 Id.generate(), CUSTOMER_ID);
         assertThrows(InsufficientFundsException.class,
-                () -> account.debit(Amount.of(BigDecimal.valueOf(100), "XOF")));
+                () -> account.debit(Amount.of(BigDecimal.valueOf(100), "XAF")));
     }
 
     // ── debit — FLOAT_ACCOUNT ─────────────────────────────────────────────────
@@ -136,7 +136,7 @@ class AccountTest {
         Account floatAccount = Account.createFloatAccount(
                 Id.generate(), PROVIDER_ID);
         assertDoesNotThrow(
-                () -> floatAccount.debit(Amount.of(BigDecimal.valueOf(100), "XOF")));
+                () -> floatAccount.debit(Amount.of(BigDecimal.valueOf(100), "XAF")));
     }
 
     @Test
@@ -147,11 +147,11 @@ class AccountTest {
         // Audit of float account movements must go through Operation ledger entries,
         // not through balanceAmount. See ADR-001 and Account.debit() Javadoc.
         Account floatAccount = Account.createFloatAccount(Id.generate(), PROVIDER_ID);
-        Amount largeDebit = Amount.of(BigDecimal.valueOf(1_000_000), "XOF");
+        Amount largeDebit = Amount.of(BigDecimal.valueOf(1_000_000), "XAF");
 
         floatAccount.debit(largeDebit);
 
-        assertEquals(Amount.of(BigDecimal.ZERO, "XOF"),
+        assertEquals(Amount.of(BigDecimal.ZERO, "XAF"),
                 floatAccount.snapshot().balance().solde(),
                 "Float account balance must remain 0 after debit — it is never decremented");
     }

@@ -26,7 +26,7 @@ class CashInE2ETest extends AbstractE2ETest {
 
         ResponseEntity<TransactionResponse> response = postWithToken(
                 "/payments/cash-in",
-                new CashInRequest(PIN, AMOUNT, "XOF", "ORANGE_MONEY"),
+                new CashInRequest(PIN, AMOUNT, "XAF", "ORANGE_MONEY"),
                 ctx.tokens().accessToken(),
                 TransactionResponse.class);
 
@@ -43,7 +43,7 @@ class CashInE2ETest extends AbstractE2ETest {
         SetupData ctx = setupCustomerWithAccount(EMAIL, FULL_NAME, PREFIX, PHONE, PIN);
 
         postWithToken("/payments/cash-in",
-                new CashInRequest(PIN, AMOUNT, "XOF", "ORANGE_MONEY"),
+                new CashInRequest(PIN, AMOUNT, "XAF", "ORANGE_MONEY"),
                 ctx.tokens().accessToken(), TransactionResponse.class);
 
         var account = accountRepository.findByCustomerId(ctx.customerId()).orElseThrow();
@@ -57,7 +57,7 @@ class CashInE2ETest extends AbstractE2ETest {
 
         ResponseEntity<String> response = http.postForEntity(
                 url("/payments/cash-in"),
-                new CashInRequest(PIN, AMOUNT, "XOF", "ORANGE_MONEY"),
+                new CashInRequest(PIN, AMOUNT, "XAF", "ORANGE_MONEY"),
                 String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
@@ -69,7 +69,7 @@ class CashInE2ETest extends AbstractE2ETest {
 
         ResponseEntity<String> response = postWithToken(
                 "/payments/cash-in",
-                new CashInRequest("0000", AMOUNT, "XOF", "ORANGE_MONEY"),
+                new CashInRequest("0000", AMOUNT, "XAF", "ORANGE_MONEY"),
                 ctx.tokens().accessToken(),
                 String.class);
 
@@ -83,7 +83,7 @@ class CashInE2ETest extends AbstractE2ETest {
         SetupData ctx = setupCustomerWithAccount(EMAIL, FULL_NAME, PREFIX, PHONE, PIN);
         ResponseEntity<String> response = postWithToken(
                 "/payments/cash-in",
-                Map.of("rawPin", PIN, "currency", "XOF", "paymentMethod", "ORANGE_MONEY"),
+                Map.of("rawPin", PIN, "currency", "XAF", "paymentMethod", "ORANGE_MONEY"),
                 ctx.tokens().accessToken(), String.class);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(response.getBody()).contains("amount");
@@ -94,7 +94,7 @@ class CashInE2ETest extends AbstractE2ETest {
         SetupData ctx = setupCustomerWithAccount(EMAIL, FULL_NAME, PREFIX, PHONE, PIN);
         ResponseEntity<String> response = postWithToken(
                 "/payments/cash-in",
-                new CashInRequest(PIN, BigDecimal.ZERO, "XOF", "ORANGE_MONEY"),
+                new CashInRequest(PIN, BigDecimal.ZERO, "XAF", "ORANGE_MONEY"),
                 ctx.tokens().accessToken(), String.class);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(response.getBody()).contains("amount");

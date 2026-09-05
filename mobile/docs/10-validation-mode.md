@@ -183,7 +183,7 @@ Le compte à rebours visible transforme la validation du rafraîchissement de je
 Consignation manuelle des observations, avec export en Markdown.
 
 ```
-[2026-08-06 14:22]  Transfert 25 000 XOF, réseau coupé à 800 ms
+[2026-08-06 14:22]  Transfert 25 000 XAF, réseau coupé à 800 ms
   Corrélation  a3f2-...
   Observé      Aucune réponse client. Transaction visible en COMPLETED
                dans l'historique 4 s plus tard.
@@ -235,7 +235,7 @@ Ce que l'application doit permettre de vérifier sur le backend, par ordre de va
 | 15 | Provider en mode `SLOW` puis coupure client | Le comportement combiné |
 | 16 | Provider en mode `FAILURE` | **`ProviderException` non mappée → `500` au corps non conforme** |
 | 17 | Transfert vers un numéro inexistant | Confirme que c'est un `404`, pas un `422` |
-| 18 | Montant `100.5` en `XOF`, injecté depuis le mode validation | **Confirme l'absence de contrôle d'échelle sur `Amount`** |
+| 18 | Montant `100.5` en `XAF`, injecté depuis le mode validation | **Confirme l'absence de contrôle d'échelle sur `Amount`** |
 | 19 | Jeton d'**accès** envoyé à `/auth/refresh` | **Confirme qu'il est accepté** — les deux types ne sont pas distingués |
 | 20 | Compte créé, OTP jamais vérifié, puis `/auth/login` | Confirme que le statut est `VERIFIED` dès l'inscription |
 | 21 | Détail d'une opération figurant en page 12 de l'historique | Le rejeu de page du contrat §6.7 |

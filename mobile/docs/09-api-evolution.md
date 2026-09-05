@@ -242,7 +242,7 @@ Relevées lors de la revue du 2026-08-06. Ce sont des observations, pas des bloc
 | 1 | `ProviderException` n'est mappée par aucun `@ExceptionHandler` → `500` au corps non conforme à RFC 7807 | moyenne |
 | 2 | `/auth/refresh` ne distingue pas jeton d'accès et jeton de rafraîchissement | faible |
 | 3 | `User.create` attribue `VERIFIED` d'emblée ; `UserStatus.PENDING` n'est jamais utilisé | faible |
-| 4 | `Amount` n'impose aucune échelle — `100.5 XOF` serait accepté | moyenne |
+| 4 | `Amount` n'impose aucune échelle — `100.5 XAF` serait accepté | moyenne |
 | 5 | `paymentMethod` n'est pas validé — toute chaîne est acceptée | faible |
 | 6 | Aucun endpoint de renvoi d'OTP ; le renvoi passe par `/auth/login` | faible |
 

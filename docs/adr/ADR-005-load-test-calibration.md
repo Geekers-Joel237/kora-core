@@ -126,13 +126,13 @@ Ces SLOs reflètent ce que l'application contrôle réellement pour chaque type 
 
 ### Décision 3 — Seed cashIn explicite dans setup()
 
-Chaque user reçoit un cashIn de **100 000 XOF** immédiatement après l'obtention de son token, avant d'entrer dans le pool VU.
+Chaque user reçoit un cashIn de **100 000 XAF** immédiatement après l'obtention de son token, avant d'entrer dans le pool VU.
 
 **Calcul de l'amount** :
 
-Pire séquence initiale (avant le premier cashIn du scénario) : N iterations consécutives cashOut (5 000 XOF) ou transfer (2 000 XOF). Sur 10 premières itérations full cashOut : 50 000 XOF. La marge 100 000 XOF couvre 20 cashOuts ou 50 transfers consécutifs avant le premier cashIn.
+Pire séquence initiale (avant le premier cashIn du scénario) : N iterations consécutives cashOut (5 000 XAF) ou transfer (2 000 XAF). Sur 10 premières itérations full cashOut : 50 000 XAF. La marge 100 000 XAF couvre 20 cashOuts ou 50 transfers consécutifs avant le premier cashIn.
 
-Le mix net par itération est positif (+2 550 XOF en moyenne), donc le solde croît indéfiniment après le seed. Le seed n'est utile que pour le bootstrap initial.
+Le mix net par itération est positif (+2 550 XAF en moyenne), donc le solde croît indéfiniment après le seed. Le seed n'est utile que pour le bootstrap initial.
 
 **Coût en temps de setup** (provider I/O ~1.5s par seed) :
 
@@ -155,7 +155,7 @@ Le soak test cherche la dégradation progressive sur la durée (drift de latence
 
 | Fichier | Changement | Impact |
 |---|---|---|
-| `perf/data/setup.js` | Ajout seed cashIn 100 000 XOF après verify-otp | Élimine les échecs 0-solde sur première itération |
+| `perf/data/setup.js` | Ajout seed cashIn 100 000 XAF après verify-otp | Élimine les échecs 0-solde sur première itération |
 | `perf/scenarios/cashIn.js` | `tags: { operation: 'cash' }` sur `http.post()` | Active threshold per-type dans load.js |
 | `perf/scenarios/cashOut.js` | `tags: { operation: 'cash' }` sur `http.post()` | Idem |
 | `perf/scenarios/transfer.js` | `tags: { operation: 'transfer' }` sur `http.post()` | Threshold transfer 200ms |

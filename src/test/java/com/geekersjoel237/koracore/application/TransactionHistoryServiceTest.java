@@ -45,8 +45,8 @@ class TransactionHistoryServiceTest {
     private static final String EMAIL_B = "b@koracore.com";
     private static final String RAW_PIN = "123456";
     private static final PaymentMethod PAYMENT_METHOD = PaymentMethod.ORANGE_MONEY;
-    private static final Amount AMOUNT_10K = Amount.of(BigDecimal.valueOf(10_000), "XOF");
-    private static final Amount AMOUNT_5K  = Amount.of(BigDecimal.valueOf(5_000), "XOF");
+    private static final Amount AMOUNT_10K = Amount.of(BigDecimal.valueOf(10_000), "XAF");
+    private static final Amount AMOUNT_5K  = Amount.of(BigDecimal.valueOf(5_000), "XAF");
 
     private static final SecurityProperties TEST_SECURITY = new SecurityProperties(
             new SecurityProperties.Jwt("test-secret-key-must-be-at-least-32-chars!!", 15, 7),

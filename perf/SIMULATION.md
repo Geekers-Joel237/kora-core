@@ -43,7 +43,7 @@ cashIn 40%  ·  transfer 35%  ·  cashOut 15%  ·  balance 10%
 ```
 
 **Setup** — each user goes through: `register → OTP → verify-otp → seed cashIn`.
-The seed cashIn (100 000 XOF) guarantees a positive initial balance for every VU regardless
+The seed cashIn (100 000 XAF) guarantees a positive initial balance for every VU regardless
 of which operation it draws first. It costs ~2.7s per user due to provider I/O.
 
 ---

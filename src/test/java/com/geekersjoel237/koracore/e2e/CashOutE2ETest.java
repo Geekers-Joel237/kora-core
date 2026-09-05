@@ -25,12 +25,12 @@ class CashOutE2ETest extends AbstractE2ETest {
     void should_cash_out_and_return_completed_transaction() {
         SetupData ctx = setupCustomerWithAccount(EMAIL, FULL_NAME, PREFIX, PHONE, PIN);
         postWithToken("/payments/cash-in",
-                new CashInRequest(PIN, CASH_IN_AMOUNT, "XOF", "ORANGE_MONEY"),
+                new CashInRequest(PIN, CASH_IN_AMOUNT, "XAF", "ORANGE_MONEY"),
                 ctx.tokens().accessToken(), TransactionResponse.class);
 
         ResponseEntity<TransactionResponse> response = postWithToken(
                 "/payments/cash-out",
-                new CashOutRequest(PIN, CASH_OUT_AMOUNT, "XOF", "ORANGE_MONEY"),
+                new CashOutRequest(PIN, CASH_OUT_AMOUNT, "XAF", "ORANGE_MONEY"),
                 ctx.tokens().accessToken(),
                 TransactionResponse.class);
 
@@ -46,11 +46,11 @@ class CashOutE2ETest extends AbstractE2ETest {
     void should_decrease_balance_after_cash_out() {
         SetupData ctx = setupCustomerWithAccount(EMAIL, FULL_NAME, PREFIX, PHONE, PIN);
         postWithToken("/payments/cash-in",
-                new CashInRequest(PIN, CASH_IN_AMOUNT, "XOF", "ORANGE_MONEY"),
+                new CashInRequest(PIN, CASH_IN_AMOUNT, "XAF", "ORANGE_MONEY"),
                 ctx.tokens().accessToken(), TransactionResponse.class);
 
         postWithToken("/payments/cash-out",
-                new CashOutRequest(PIN, CASH_OUT_AMOUNT, "XOF", "ORANGE_MONEY"),
+                new CashOutRequest(PIN, CASH_OUT_AMOUNT, "XAF", "ORANGE_MONEY"),
                 ctx.tokens().accessToken(), TransactionResponse.class);
 
         var account = accountRepository.findByCustomerId(ctx.customerId()).orElseThrow();
@@ -62,14 +62,14 @@ class CashOutE2ETest extends AbstractE2ETest {
     void should_return_balance_consistency_after_cash_in_and_cash_out() {
         SetupData ctx = setupCustomerWithAccount(EMAIL, FULL_NAME, PREFIX, PHONE, PIN);
         postWithToken("/payments/cash-in",
-                new CashInRequest(PIN, CASH_IN_AMOUNT, "XOF", "ORANGE_MONEY"),
+                new CashInRequest(PIN, CASH_IN_AMOUNT, "XAF", "ORANGE_MONEY"),
                 ctx.tokens().accessToken(), TransactionResponse.class);
         postWithToken("/payments/cash-in",
-                new CashInRequest(PIN, CASH_IN_AMOUNT, "XOF", "ORANGE_MONEY"),
+                new CashInRequest(PIN, CASH_IN_AMOUNT, "XAF", "ORANGE_MONEY"),
                 ctx.tokens().accessToken(), TransactionResponse.class);
 
         postWithToken("/payments/cash-out",
-                new CashOutRequest(PIN, CASH_OUT_AMOUNT, "XOF", "ORANGE_MONEY"),
+                new CashOutRequest(PIN, CASH_OUT_AMOUNT, "XAF", "ORANGE_MONEY"),
                 ctx.tokens().accessToken(), TransactionResponse.class);
 
         var account = accountRepository.findByCustomerId(ctx.customerId()).orElseThrow();
@@ -84,7 +84,7 @@ class CashOutE2ETest extends AbstractE2ETest {
 
         ResponseEntity<String> response = postWithToken(
                 "/payments/cash-out",
-                new CashOutRequest(PIN, CASH_OUT_AMOUNT, "XOF", "ORANGE_MONEY"),
+                new CashOutRequest(PIN, CASH_OUT_AMOUNT, "XAF", "ORANGE_MONEY"),
                 ctx.tokens().accessToken(),
                 String.class);
 
@@ -95,12 +95,12 @@ class CashOutE2ETest extends AbstractE2ETest {
     void should_return_401_when_wrong_pin_provided() {
         SetupData ctx = setupCustomerWithAccount(EMAIL, FULL_NAME, PREFIX, PHONE, PIN);
         postWithToken("/payments/cash-in",
-                new CashInRequest(PIN, CASH_IN_AMOUNT, "XOF", "ORANGE_MONEY"),
+                new CashInRequest(PIN, CASH_IN_AMOUNT, "XAF", "ORANGE_MONEY"),
                 ctx.tokens().accessToken(), TransactionResponse.class);
 
         ResponseEntity<String> response = postWithToken(
                 "/payments/cash-out",
-                new CashOutRequest("0000", CASH_OUT_AMOUNT, "XOF", "ORANGE_MONEY"),
+                new CashOutRequest("0000", CASH_OUT_AMOUNT, "XAF", "ORANGE_MONEY"),
                 ctx.tokens().accessToken(),
                 String.class);
 
@@ -111,7 +111,7 @@ class CashOutE2ETest extends AbstractE2ETest {
     void should_return_401_when_no_bearer_token_provided() {
         ResponseEntity<String> response = http.postForEntity(
                 url("/payments/cash-out"),
-                new CashOutRequest(PIN, CASH_OUT_AMOUNT, "XOF", "ORANGE_MONEY"),
+                new CashOutRequest(PIN, CASH_OUT_AMOUNT, "XAF", "ORANGE_MONEY"),
                 String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);

@@ -29,10 +29,10 @@ class MoneyIntegrityE2ETest extends AbstractE2ETest {
         SetupData ctx = setupCustomerWithAccount("mi1@example.com", "MI1", "+225", "07000004001", "1234");
 
         postWithToken("/payments/cash-in",
-                new CashInRequest("1234", amount, "XOF", "ORANGE_MONEY"),
+                new CashInRequest("1234", amount, "XAF", "ORANGE_MONEY"),
                 ctx.tokens().accessToken(), TransactionResponse.class);
         postWithToken("/payments/cash-out",
-                new CashOutRequest("1234", amount, "XOF", "ORANGE_MONEY"),
+                new CashOutRequest("1234", amount, "XAF", "ORANGE_MONEY"),
                 ctx.tokens().accessToken(), TransactionResponse.class);
 
         var account = accountRepository.findByCustomerId(ctx.customerId()).orElseThrow();
@@ -46,7 +46,7 @@ class MoneyIntegrityE2ETest extends AbstractE2ETest {
         SetupData ctx = setupCustomerWithAccount("mi2@example.com", "MI2", "+225", "07000004002", "1234");
 
         postWithToken("/payments/cash-in",
-                new CashInRequest("1234", amount, "XOF", "ORANGE_MONEY"),
+                new CashInRequest("1234", amount, "XAF", "ORANGE_MONEY"),
                 ctx.tokens().accessToken(), TransactionResponse.class);
 
         BigDecimal imbalance = new BigDecimal(Objects.requireNonNull(jdbcTemplate.queryForObject("""
@@ -67,11 +67,11 @@ class MoneyIntegrityE2ETest extends AbstractE2ETest {
         SetupData receiver = setupCustomerWithAccount("mi3r@example.com", "MI3R", "+225", "07000004004", "5678");
 
         postWithToken("/payments/cash-in",
-                new CashInRequest("1234", cashIn, "XOF", "ORANGE_MONEY"),
+                new CashInRequest("1234", cashIn, "XAF", "ORANGE_MONEY"),
                 sender.tokens().accessToken(), TransactionResponse.class);
 
         postWithToken("/payments/transfer",
-                new TransferRequest("1234", transfer, "XOF", "+22507000004004"),
+                new TransferRequest("1234", transfer, "XAF", "+22507000004004"),
                 sender.tokens().accessToken(), TransactionResponse.class);
 
         var senderBalance   = accountRepository.findByCustomerId(sender.customerId()).orElseThrow()
@@ -94,7 +94,7 @@ class MoneyIntegrityE2ETest extends AbstractE2ETest {
         List<Future<Integer>> futures = new ArrayList<>();
         for (int i = 0; i < threadCount; i++) {
             futures.add(pool.submit(() -> postWithToken("/payments/cash-in",
-                    new CashInRequest("1234", perCashIn, "XOF", "ORANGE_MONEY"),
+                    new CashInRequest("1234", perCashIn, "XAF", "ORANGE_MONEY"),
                     token, TransactionResponse.class).getStatusCode().value()));
         }
         List<Integer> statuses = new ArrayList<>();
@@ -115,13 +115,13 @@ class MoneyIntegrityE2ETest extends AbstractE2ETest {
         setupCustomerWithAccount("mi5r@example.com", "MI5R", "+225", "07000004007", "5678");
 
         postWithToken("/payments/cash-in",
-                new CashInRequest("1234", cashIn, "XOF", "ORANGE_MONEY"),
+                new CashInRequest("1234", cashIn, "XAF", "ORANGE_MONEY"),
                 sender.tokens().accessToken(), TransactionResponse.class);
         postWithToken("/payments/cash-out",
-                new CashOutRequest("1234", cashOut, "XOF", "ORANGE_MONEY"),
+                new CashOutRequest("1234", cashOut, "XAF", "ORANGE_MONEY"),
                 sender.tokens().accessToken(), TransactionResponse.class);
         postWithToken("/payments/transfer",
-                new TransferRequest("1234", transfer, "XOF", "+22507000004007"),
+                new TransferRequest("1234", transfer, "XAF", "+22507000004007"),
                 sender.tokens().accessToken(), TransactionResponse.class);
 
         // For every transaction, credits must equal debits

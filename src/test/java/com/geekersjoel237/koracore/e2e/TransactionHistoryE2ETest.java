@@ -32,21 +32,21 @@ class TransactionHistoryE2ETest extends AbstractE2ETest {
 
     private void cashIn(SetupData user, int amount) {
         postWithToken("/payments/cash-in",
-                new CashInRequest(PIN, java.math.BigDecimal.valueOf(amount), "XOF", PM),
+                new CashInRequest(PIN, java.math.BigDecimal.valueOf(amount), "XAF", PM),
                 user.tokens().accessToken(),
                 Object.class);
     }
 
     private void cashOut(SetupData user, int amount) {
         postWithToken("/payments/cash-out",
-                new CashOutRequest(PIN, java.math.BigDecimal.valueOf(amount), "XOF", PM),
+                new CashOutRequest(PIN, java.math.BigDecimal.valueOf(amount), "XAF", PM),
                 user.tokens().accessToken(),
                 Object.class);
     }
 
     private void transfer(SetupData sender, String toPhone, int amount) {
         postWithToken("/payments/transfer",
-                new TransferRequest(PIN, java.math.BigDecimal.valueOf(amount), "XOF", toPhone),
+                new TransferRequest(PIN, java.math.BigDecimal.valueOf(amount), "XAF", toPhone),
                 sender.tokens().accessToken(),
                 Object.class);
     }

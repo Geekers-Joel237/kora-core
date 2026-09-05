@@ -46,14 +46,14 @@ class AccountVersioningTest extends AbstractRepositoryTest {
                 .isEqualTo(0L);
 
         // Second save → UPDATE, version incremented to 1
-        account.credit(Amount.of(BigDecimal.valueOf(100), "XOF"));
+        account.credit(Amount.of(BigDecimal.valueOf(100), "XAF"));
         repository.save(account);
         jpaRepository.flush();
         assertThat(jpaRepository.findById(accountId.value()).orElseThrow().getVersion())
                 .isEqualTo(1L);
 
         // Third save → UPDATE, version incremented to 2
-        account.credit(Amount.of(BigDecimal.valueOf(50), "XOF"));
+        account.credit(Amount.of(BigDecimal.valueOf(50), "XAF"));
         repository.save(account);
         jpaRepository.flush();
         assertThat(jpaRepository.findById(accountId.value()).orElseThrow().getVersion())

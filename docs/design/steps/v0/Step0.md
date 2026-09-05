@@ -98,7 +98,7 @@ solde()        : Amount
 ### Amount (Value Object — record)
 ```java
 value    : BigDecimal   // NEVER Float or Double
-currency : String       // e.g.: "XOF"
+currency : String       // e.g.: "XAF"
 
 add(Amount)          : Amount
 subtract(Amount)     : Amount
@@ -449,25 +449,25 @@ src/test/java/com/koracore/shared/inmemory/
 
 #### AmountTest
 ```java
-[ ] new Amount(BigDecimal.valueOf(100), "XOF")  → valid
-[ ] new Amount(BigDecimal.ZERO, "XOF")          → valid
-[ ] new Amount(BigDecimal.valueOf(-1), "XOF")   → IllegalArgumentException
-[ ] new Amount(null, "XOF")                     → IllegalArgumentException
+[ ] new Amount(BigDecimal.valueOf(100), "XAF")  → valid
+[ ] new Amount(BigDecimal.ZERO, "XAF")          → valid
+[ ] new Amount(BigDecimal.valueOf(-1), "XAF")   → IllegalArgumentException
+[ ] new Amount(null, "XAF")                     → IllegalArgumentException
 [ ] new Amount(BigDecimal.valueOf(100), null)   → IllegalArgumentException
 [ ] new Amount(BigDecimal.valueOf(100), "")     → IllegalArgumentException
 [ ] new BigDecimal("0.1").add(new BigDecimal("0.2"))
     stored in Amount → value exactly 0.3
 
-[ ] Amount(100).add(Amount(50, "XOF"))          → Amount(150, "XOF")
-[ ] Amount(100).subtract(Amount(50, "XOF"))     → Amount(50, "XOF")
+[ ] Amount(100).add(Amount(50, "XAF"))          → Amount(150, "XAF")
+[ ] Amount(100).subtract(Amount(50, "XAF"))     → Amount(50, "XAF")
 [ ] Amount(100).subtract(Amount(150))           → IllegalArgumentException
-[ ] Amount(100,"XOF").add(Amount(50,"EUR"))     → CurrencyMismatchException
+[ ] Amount(100,"XAF").add(Amount(50,"EUR"))     → CurrencyMismatchException
 [ ] add() → original unchanged (immutability)
 
 [ ] Amount(100).isGreaterThan(Amount(50))        → true
 [ ] Amount(50).isGreaterThan(Amount(100))        → false
-[ ] Amount(100,"XOF").equals(Amount(100,"XOF")) → true
-[ ] Amount(100,"XOF").equals(Amount(100,"EUR")) → false
+[ ] Amount(100,"XAF").equals(Amount(100,"XAF")) → true
+[ ] Amount(100,"XAF").equals(Amount(100,"EUR")) → false
 ```
 
 #### PhoneNumberTest
@@ -486,13 +486,13 @@ src/test/java/com/koracore/shared/inmemory/
 
 #### BalanceTest
 ```java
-[ ] new Balance(Amount(0, "XOF"))         → valid
-[ ] new Balance(Amount(-1, "XOF"))        → IllegalArgumentException
+[ ] new Balance(Amount(0, "XAF"))         → valid
+[ ] new Balance(Amount(-1, "XAF"))        → IllegalArgumentException
 
-[ ] balance.credit(Amount(100,"XOF"))     → Balance(100) — original unchanged
-[ ] balance.debit(Amount(50,"XOF"))       → Balance(50)  — original unchanged
-[ ] Balance(100).debit(Amount(200,"XOF")) → InsufficientFundsException
-[ ] balance.solde()                       → Amount(100,"XOF")
+[ ] balance.credit(Amount(100,"XAF"))     → Balance(100) — original unchanged
+[ ] balance.debit(Amount(50,"XAF"))       → Balance(50)  — original unchanged
+[ ] Balance(100).debit(Amount(200,"XAF")) → InsufficientFundsException
+[ ] balance.solde()                       → Amount(100,"XAF")
 ```
 
 #### AccountTest
@@ -529,30 +529,30 @@ Id customerId  = new Id("cust-001");
 Id providerId  = new Id("prov-001");
 Account customerAccount = Account.customer(Id.generate(), customerId, ...);
 Account floatAccount    = Account.float_(Id.generate(), providerId, ...);
-Account accountA        = Account.customer(..., balance: Amount(200,"XOF"));
-Account accountB        = Account.customer(..., balance: Amount(0,"XOF"));
+Account accountA        = Account.customer(..., balance: Amount(200,"XAF"));
+Account accountB        = Account.customer(..., balance: Amount(0,"XAF"));
 
 // ── cashIn ──────────────────────────────────────────
-[ ] cashIn(customerAccount, floatAccount, Amount(100,"XOF"))
+[ ] cashIn(customerAccount, floatAccount, Amount(100,"XAF"))
     → tx.type       == CASH_IN
     → tx.state      == INITIALIZED
     → tx.operations.size() == 2
-    → Op#1 type==DEBIT,  accountId==floatAccount.id,     amount==100 XOF
-    → Op#2 type==CREDIT, accountId==customerAccount.id,  amount==100 XOF
-    → SUM(debits)==SUM(credits)==100 XOF
+    → Op#1 type==DEBIT,  accountId==floatAccount.id,     amount==100 XAF
+    → Op#2 type==CREDIT, accountId==customerAccount.id,  amount==100 XAF
+    → SUM(debits)==SUM(credits)==100 XAF
     → tx.fromId == floatAccount.id
     → tx.toId   == customerAccount.id
 
 [ ] cashIn inactive customerAccount  → InvalidAccountException
 [ ] cashIn inactive floatAccount     → InvalidAccountException
-[ ] cashIn Amount(0,"XOF")           → IllegalArgumentException
+[ ] cashIn Amount(0,"XAF")           → IllegalArgumentException
 [ ] cashIn negative Amount           → IllegalArgumentException
 
 // ── cashOut ─────────────────────────────────────────
-[ ] cashOut(accountA[200], floatAccount, Amount(100,"XOF"))
+[ ] cashOut(accountA[200], floatAccount, Amount(100,"XAF"))
     → tx.type == CASH_OUT
-    → Op#1 DEBIT  accountA     100 XOF
-    → Op#2 CREDIT floatAccount 100 XOF
+    → Op#1 DEBIT  accountA     100 XAF
+    → Op#2 CREDIT floatAccount 100 XAF
     → SUM(debits)==SUM(credits)
 
 [ ] cashOut exact balance (200-200)  → valid, resulting balance == 0
@@ -560,10 +560,10 @@ Account accountB        = Account.customer(..., balance: Amount(0,"XOF"));
 [ ] cashOut inactive account         → InvalidAccountException
 
 // ── transfer ────────────────────────────────────────
-[ ] transfer(accountA[200], accountB, Amount(100,"XOF"))
+[ ] transfer(accountA[200], accountB, Amount(100,"XAF"))
     → tx.type == P2P_TRANSFER
-    → Op#1 DEBIT  accountA 100 XOF
-    → Op#2 CREDIT accountB 100 XOF
+    → Op#1 DEBIT  accountA 100 XAF
+    → Op#2 CREDIT accountB 100 XAF
     → SUM(debits)==SUM(credits)
 
 [ ] transfer from==to                → SelfTransferException
@@ -765,7 +765,7 @@ Account accountB        = Account.customer(..., balance: Amount(0,"XOF"));
 
 #### CashInE2ETest
 ```java
-[ ] POST /payments/cash-in { amount:10000, currency:"XOF", pin:correct }
+[ ] POST /payments/cash-in { amount:10000, currency:"XAF", pin:correct }
     → 200
     → Transaction COMPLETED in DB
     → 2 Operations in DB

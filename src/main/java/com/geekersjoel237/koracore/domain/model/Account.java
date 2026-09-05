@@ -28,7 +28,7 @@ public class Account {
 
     private Account(Id accountId, AccountType accountType) {
         this(accountId, generateAccountNumber(accountId), accountType,
-                Balance.zero("XOF"), false);
+                Balance.zero("XAF"), false);
     }
 
     public static Account createCustomerAccount(Id accountId, Id customerId) {

@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class TransactionTest {
 
-    private static final Amount AMT = Amount.of(BigDecimal.valueOf(100), "XOF");
+    private static final Amount AMT = Amount.of(BigDecimal.valueOf(100), "XAF");
 
     private Transaction createTestTransaction() {
         return Transaction.create(

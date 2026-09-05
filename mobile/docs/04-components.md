@@ -77,7 +77,7 @@ Rendu canonique de tout montant dans l'application. Aucun montant ne s'affiche a
 ```ts
 type AmountProps = {
   minor: number;                        // entier, plus petite unité — jamais un flottant
-  currency: 'XOF' | 'XAF' | 'EUR';
+  currency: 'XAF' | 'XAF' | 'EUR';
   size: 'displayXl'|'displayLg'|'displayMd'|'titleLg'|'bodyLg'|'bodyMd';
   sign?: 'auto' | 'always' | 'never';   // 'auto' : − si négatif, rien sinon
   direction?: 'INBOUND' | 'OUTBOUND';   // pilote la couleur, cf. design system §2.5

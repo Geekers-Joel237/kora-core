@@ -554,7 +554,7 @@ The `Amount` value object enforces this at the type level.
 
 ```java
 // ✅ Correct
-Amount amount = Amount.of(new BigDecimal("10000.00"), "XOF");
+Amount amount = Amount.of(new BigDecimal("10000.00"), "XAF");
 
 // ❌ Wrong — floating point error in financial calculations
 double amount = 10000.00;

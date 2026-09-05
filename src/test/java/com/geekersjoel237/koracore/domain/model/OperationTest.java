@@ -13,7 +13,7 @@ class OperationTest {
 
     private static final Id OP_ID    = new Id("op-001");
     private static final Id ACC_ID   = new Id("acc-001");
-    private static final Amount AMT  = Amount.of(BigDecimal.valueOf(100), "XOF");
+    private static final Amount AMT  = Amount.of(BigDecimal.valueOf(100), "XAF");
 
     // ── Construction valide ───────────────────────────────────────────────────
 
@@ -25,7 +25,7 @@ class OperationTest {
 
     @Test
     void should_create_credit_operation_when_valid_params() {
-        Amount creditAmt = Amount.of(BigDecimal.valueOf(50), "XOF");
+        Amount creditAmt = Amount.of(BigDecimal.valueOf(50), "XAF");
         Operation op = Operation.create(OP_ID, OperationType.CREDIT, creditAmt, ACC_ID);
         assertEquals(creditAmt, op.snapshot().amount());
     }

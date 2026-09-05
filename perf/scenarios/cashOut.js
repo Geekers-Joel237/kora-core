@@ -20,7 +20,7 @@ const BASE_URL = __ENV.BASE_URL || 'http://localhost:8081';
  * Exécute un cash-out complet pour un utilisateur.
  *
  * @param {object} user   objet user complet (email, pin, accessToken, tokenExpiresAt)
- * @param {number} amount montant en XOF (défaut : 5 000)
+ * @param {number} amount montant en XAF (défaut : 5 000)
  * @param {string} method méthode de paiement (défaut : ORANGE_MONEY)
  * @returns {object} réponse JSON du cash-out
  */
@@ -29,7 +29,7 @@ export function scenarioCashOut(user, amount = 5_000, method = 'ORANGE_MONEY') {
 
     const res = http.post(
         `${BASE_URL}/payments/cash-out`,
-        JSON.stringify({ rawPin: user.pin, amount, currency: 'XOF', paymentMethod: method }),
+        JSON.stringify({ rawPin: user.pin, amount, currency: 'XAF', paymentMethod: method }),
         { headers: authHeaders(accessToken), tags: { operation: 'cash' } }
     );
 
