@@ -6,6 +6,8 @@ import com.geekersjoel237.koracore.domain.enums.TransactionType;
 import com.geekersjoel237.koracore.domain.exception.CurrencyMismatchException;
 import com.geekersjoel237.koracore.domain.exception.InsufficientFundsException;
 import com.geekersjoel237.koracore.domain.exception.InvalidAccountException;
+import com.geekersjoel237.koracore.domain.exception.SelfTransferException;
+import com.geekersjoel237.koracore.domain.model.state.TransactionState;
 import com.geekersjoel237.koracore.domain.vo.Amount;
 import com.geekersjoel237.koracore.domain.vo.Id;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,15 +16,31 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/**
+ * Covers the two-phase API that PaymentTransactionalExecutor actually calls:
+ * {@code initiate()} builds the transaction shell, {@code writeEntries()} writes
+ * the ledger operations at capture time, {@code reverse()} writes the
+ * compensating pair.
+ *
+ * <p>The former one-shot API (cashIn / cashOut / transfer) was removed. It was a
+ * second way to build a Transaction — operations and all, in a single step —
+ * which is the shape ADR-004 dismantled. Keeping it left the door open for the
+ * problem to walk back in.
+ */
 class LedgerTest {
 
+    private static final Amount HUNDRED = Amount.of(BigDecimal.valueOf(100), "XAF");
+
     private Ledger ledger;
-    private Account customerAccount;
-    private Account floatAccount;
-    private Account accountA;
-    private Account accountB;
+    private Account customerAccount;   // zero balance
+    private Account floatAccount;      // zero balance, unbounded (ADR-001)
+    private Account accountA;          // 200 XAF
+    private Account accountB;          // zero balance
 
     @BeforeEach
     void setUp() {
@@ -36,271 +54,223 @@ class LedgerTest {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
+    private Id idOf(Account account) {
+        return account.snapshot().accountId();
+    }
+
+    private List<Id> accountsOf(Transaction tx, OperationType type) {
+        return tx.operations().stream()
+                .filter(op -> op.snapshot().type() == type)
+                .map(op -> op.snapshot().accountId())
+                .toList();
+    }
+
     private Amount sumByType(Transaction tx, OperationType type) {
         return tx.operations().stream()
                 .filter(op -> op.snapshot().type() == type)
                 .map(op -> op.snapshot().amount())
-                .reduce(Amount.of(BigDecimal.ZERO, "XAF"), (a, b) -> a.add(b));
+                .reduce(Amount.of(BigDecimal.ZERO, "XAF"), Amount::add);
     }
 
     private boolean isDoubleEntryBalanced(Transaction tx) {
-        Amount debit  = sumByType(tx, OperationType.DEBIT);
-        Amount credit = sumByType(tx, OperationType.CREDIT);
-        return debit.value().compareTo(credit.value()) == 0;
+        return sumByType(tx, OperationType.DEBIT).value()
+                .compareTo(sumByType(tx, OperationType.CREDIT).value()) == 0;
     }
 
-    // ── cashIn ────────────────────────────────────────────────────────────────
+    private Transaction initiateTransfer() {
+        return ledger.initiate(accountA, accountB,
+                TransactionType.P2P_TRANSFER, PaymentMethod.WALLET, HUNDRED);
+    }
+
+    // ── initiate: the shell ───────────────────────────────────────────────────
 
     @Test
-    void should_create_cash_in_transaction_with_correct_type() {
-        Transaction tx = ledger.cashIn(customerAccount, floatAccount,
-                Amount.of(BigDecimal.valueOf(100), "XAF"), PaymentMethod.MOBILE_MONEY);
+    void should_set_the_requested_transaction_type() {
+        Transaction tx = ledger.initiate(floatAccount, customerAccount,
+                TransactionType.CASH_IN, PaymentMethod.MOBILE_MONEY, HUNDRED);
         assertEquals(TransactionType.CASH_IN, tx.snapshot().type());
     }
 
     @Test
-    void should_produce_exactly_two_operations_on_cash_in() {
-        Transaction tx = ledger.cashIn(customerAccount, floatAccount,
-                Amount.of(BigDecimal.valueOf(100), "XAF"), PaymentMethod.MOBILE_MONEY);
-        assertEquals(2, tx.operations().size());
+    void should_set_from_and_to_ids_from_the_accounts() {
+        Transaction tx = ledger.initiate(floatAccount, customerAccount,
+                TransactionType.CASH_IN, PaymentMethod.MOBILE_MONEY, HUNDRED);
+        assertEquals(idOf(floatAccount), tx.snapshot().fromId());
+        assertEquals(idOf(customerAccount), tx.snapshot().toId());
     }
 
     @Test
-    void should_debit_float_account_on_cash_in() {
-        Transaction tx = ledger.cashIn(customerAccount, floatAccount,
-                Amount.of(BigDecimal.valueOf(100), "XAF"), PaymentMethod.MOBILE_MONEY);
-        assertEquals(floatAccount.snapshot().accountId(),
-                tx.operations().get(0).snapshot().accountId());
-        assertEquals(OperationType.DEBIT, tx.operations().get(0).snapshot().type());
-    }
-
-    @Test
-    void should_credit_customer_account_on_cash_in() {
-        Transaction tx = ledger.cashIn(customerAccount, floatAccount,
-                Amount.of(BigDecimal.valueOf(100), "XAF"), PaymentMethod.MOBILE_MONEY);
-        assertEquals(customerAccount.snapshot().accountId(),
-                tx.operations().get(1).snapshot().accountId());
-        assertEquals(OperationType.CREDIT, tx.operations().get(1).snapshot().type());
-    }
-
-    @Test
-    void should_set_from_id_to_float_on_cash_in() {
-        Transaction tx = ledger.cashIn(customerAccount, floatAccount,
-                Amount.of(BigDecimal.valueOf(100), "XAF"), PaymentMethod.MOBILE_MONEY);
-        assertEquals(floatAccount.snapshot().accountId(), tx.snapshot().fromId());
-    }
-
-    @Test
-    void should_set_to_id_to_customer_on_cash_in() {
-        Transaction tx = ledger.cashIn(customerAccount, floatAccount,
-                Amount.of(BigDecimal.valueOf(100), "XAF"), PaymentMethod.MOBILE_MONEY);
-        assertEquals(customerAccount.snapshot().accountId(), tx.snapshot().toId());
-    }
-
-    @Test
-    void should_maintain_double_entry_on_cash_in() {
-        Transaction tx = ledger.cashIn(customerAccount, floatAccount,
-                Amount.of(BigDecimal.valueOf(100), "XAF"), PaymentMethod.MOBILE_MONEY);
-        assertTrue(isDoubleEntryBalanced(tx));
+    void should_start_in_initialized_state() {
+        assertEquals(TransactionState.INITIALIZED, initiateTransfer().snapshot().state());
     }
 
     @Test
     void should_generate_transaction_number_with_correct_format() {
-        Transaction tx = ledger.cashIn(customerAccount, floatAccount,
-                Amount.of(BigDecimal.valueOf(100), "XAF"), PaymentMethod.MOBILE_MONEY);
-        assertTrue(tx.snapshot().transactionNumber().matches("TRX-\\d{8}-[A-Z0-9]{8}"));
+        assertTrue(initiateTransfer().snapshot().transactionNumber()
+                .matches("TRX-\\d{8}-[A-Z0-9]{8}"));
     }
 
+    /**
+     * The two-phase contract itself: a shell carries no ledger entry. Operations
+     * appear only once the provider has captured, so a transaction that dies
+     * between TX-1 and the provider call leaves no money movement behind.
+     */
     @Test
-    void should_throw_when_customer_account_blocked_on_cash_in() {
+    void should_record_no_operation_at_initiate() {
+        assertTrue(initiateTransfer().operations().isEmpty());
+    }
+
+    // ── initiate: guards ──────────────────────────────────────────────────────
+
+    @Test
+    void should_throw_when_source_account_is_blocked() {
         Account blocked = Account.createCustomerAccount(Id.generate(), new Id("b-001"));
         blocked.block();
         assertThrows(InvalidAccountException.class,
-                () -> ledger.cashIn(blocked, floatAccount,
-                        Amount.of(BigDecimal.valueOf(100), "XAF"), PaymentMethod.MOBILE_MONEY));
+                () -> ledger.initiate(blocked, accountB,
+                        TransactionType.P2P_TRANSFER, PaymentMethod.WALLET, HUNDRED));
     }
 
+    /**
+     * On a cash-in the customer account is the DESTINATION, not the source —
+     * the source is the float. initiate() checked only the source, so crediting
+     * a blocked account went through unguarded. The check is symmetric now.
+     */
     @Test
-    void should_throw_when_float_account_blocked_on_cash_in() {
-        Account blockedFloat = Account.createFloatAccount(Id.generate(), new Id("b-prov"));
-        blockedFloat.block();
-        assertThrows(InvalidAccountException.class,
-                () -> ledger.cashIn(customerAccount, blockedFloat,
-                        Amount.of(BigDecimal.valueOf(100), "XAF"), PaymentMethod.MOBILE_MONEY));
-    }
-
-    @Test
-    void should_throw_when_amount_is_zero_on_cash_in() {
-        assertThrows(IllegalArgumentException.class,
-                () -> ledger.cashIn(customerAccount, floatAccount,
-                        Amount.of(BigDecimal.ZERO, "XAF"), PaymentMethod.MOBILE_MONEY));
-    }
-
-    // ── cashOut ───────────────────────────────────────────────────────────────
-
-    @Test
-    void should_create_cash_out_transaction_with_correct_type() {
-        Transaction tx = ledger.cashOut(accountA, floatAccount,
-                Amount.of(BigDecimal.valueOf(100), "XAF"), PaymentMethod.MOBILE_MONEY);
-        assertEquals(TransactionType.CASH_OUT, tx.snapshot().type());
-    }
-
-    @Test
-    void should_produce_exactly_two_operations_on_cash_out() {
-        Transaction tx = ledger.cashOut(accountA, floatAccount,
-                Amount.of(BigDecimal.valueOf(100), "XAF"), PaymentMethod.MOBILE_MONEY);
-        assertEquals(2, tx.operations().size());
-    }
-
-    @Test
-    void should_debit_customer_account_on_cash_out() {
-        Transaction tx = ledger.cashOut(accountA, floatAccount,
-                Amount.of(BigDecimal.valueOf(100), "XAF"), PaymentMethod.MOBILE_MONEY);
-        assertEquals(accountA.snapshot().accountId(),
-                tx.operations().get(0).snapshot().accountId());
-        assertEquals(OperationType.DEBIT, tx.operations().get(0).snapshot().type());
-    }
-
-    @Test
-    void should_credit_float_account_on_cash_out() {
-        Transaction tx = ledger.cashOut(accountA, floatAccount,
-                Amount.of(BigDecimal.valueOf(100), "XAF"), PaymentMethod.MOBILE_MONEY);
-        assertEquals(floatAccount.snapshot().accountId(),
-                tx.operations().get(1).snapshot().accountId());
-        assertEquals(OperationType.CREDIT, tx.operations().get(1).snapshot().type());
-    }
-
-    @Test
-    void should_maintain_double_entry_on_cash_out() {
-        Transaction tx = ledger.cashOut(accountA, floatAccount,
-                Amount.of(BigDecimal.valueOf(100), "XAF"), PaymentMethod.MOBILE_MONEY);
-        assertTrue(isDoubleEntryBalanced(tx));
-    }
-
-    @Test
-    void should_allow_cash_out_with_exact_balance() {
-        assertDoesNotThrow(() -> ledger.cashOut(accountA, floatAccount,
-                Amount.of(BigDecimal.valueOf(200), "XAF"), PaymentMethod.MOBILE_MONEY));
-    }
-
-    @Test
-    void should_throw_when_insufficient_funds_on_cash_out() {
-        assertThrows(InsufficientFundsException.class,
-                () -> ledger.cashOut(accountA, floatAccount,
-                        Amount.of(BigDecimal.valueOf(300), "XAF"), PaymentMethod.MOBILE_MONEY));
-    }
-
-    @Test
-    void should_throw_when_account_blocked_on_cash_out() {
+    void should_throw_when_customer_account_blocked_on_cash_in() {
         Account blocked = Account.createCustomerAccount(Id.generate(), new Id("b-002"));
-        blocked.credit(Amount.of(BigDecimal.valueOf(200), "XAF"));
         blocked.block();
         assertThrows(InvalidAccountException.class,
-                () -> ledger.cashOut(blocked, floatAccount,
-                        Amount.of(BigDecimal.valueOf(100), "XAF"), PaymentMethod.MOBILE_MONEY));
-    }
-
-    // ── transfer ──────────────────────────────────────────────────────────────
-
-    @Test
-    void should_create_p2p_transfer_transaction_with_correct_type() {
-        Transaction tx = ledger.transfer(accountA, accountB,
-                Amount.of(BigDecimal.valueOf(100), "XAF"), PaymentMethod.MOBILE_MONEY);
-        assertEquals(TransactionType.P2P_TRANSFER, tx.snapshot().type());
+                () -> ledger.initiate(floatAccount, blocked,
+                        TransactionType.CASH_IN, PaymentMethod.MOBILE_MONEY, HUNDRED));
     }
 
     @Test
-    void should_produce_exactly_two_operations_on_transfer() {
-        Transaction tx = ledger.transfer(accountA, accountB,
-                Amount.of(BigDecimal.valueOf(100), "XAF"), PaymentMethod.MOBILE_MONEY);
+    void should_throw_when_amount_is_zero() {
+        assertThrows(IllegalArgumentException.class,
+                () -> ledger.initiate(accountA, accountB,
+                        TransactionType.P2P_TRANSFER, PaymentMethod.WALLET,
+                        Amount.of(BigDecimal.ZERO, "XAF")));
+    }
+
+    @Test
+    void should_throw_when_source_customer_account_has_insufficient_funds() {
+        assertThrows(InsufficientFundsException.class,
+                () -> ledger.initiate(accountA, accountB,
+                        TransactionType.P2P_TRANSFER, PaymentMethod.WALLET,
+                        Amount.of(BigDecimal.valueOf(201), "XAF")));
+    }
+
+    @Test
+    void should_allow_initiate_with_the_exact_balance() {
+        assertDoesNotThrow(() -> ledger.initiate(accountA, accountB,
+                TransactionType.P2P_TRANSFER, PaymentMethod.WALLET,
+                Amount.of(BigDecimal.valueOf(200), "XAF")));
+    }
+
+    /**
+     * ADR-001: the float account is unbounded. Its balance_amount stays at zero
+     * because Account.debit() is a no-op for a FLOAT_ACCOUNT, so a funds check
+     * against it would reject every cash-in.
+     */
+    @Test
+    void should_not_check_funds_when_the_source_is_the_float_account() {
+        assertDoesNotThrow(() -> ledger.initiate(floatAccount, customerAccount,
+                TransactionType.CASH_IN, PaymentMethod.MOBILE_MONEY,
+                Amount.of(BigDecimal.valueOf(1_000_000), "XAF")));
+    }
+
+    @Test
+    void should_throw_currency_mismatch_when_amount_currency_differs_from_the_balance() {
+        // accountA holds XAF; the funds check compares two Amounts and refuses
+        // to compare across currencies.
+        assertThrows(CurrencyMismatchException.class,
+                () -> ledger.initiate(accountA, accountB,
+                        TransactionType.P2P_TRANSFER, PaymentMethod.WALLET,
+                        Amount.of(BigDecimal.valueOf(100), "EUR")));
+    }
+
+    /**
+     * Ordering guarantee documented on initiate(): Transaction.create() runs
+     * before requireSufficientFunds, so the aggregate's own invariant wins.
+     * accountB has a zero balance — without that ordering this would surface as
+     * InsufficientFundsException and hide the real defect.
+     */
+    @Test
+    void should_prefer_self_transfer_over_insufficient_funds() {
+        assertThrows(SelfTransferException.class,
+                () -> ledger.initiate(accountB, accountB,
+                        TransactionType.P2P_TRANSFER, PaymentMethod.WALLET, HUNDRED));
+    }
+
+    // ── writeEntries: the ledger write ────────────────────────────────────────
+
+    @Test
+    void should_produce_exactly_two_operations_on_write_entries() {
+        Transaction tx = initiateTransfer();
+        ledger.writeEntries(tx, accountA, accountB, HUNDRED);
         assertEquals(2, tx.operations().size());
     }
 
     @Test
-    void should_debit_sender_on_transfer() {
-        Transaction tx = ledger.transfer(accountA, accountB,
-                Amount.of(BigDecimal.valueOf(100), "XAF"), PaymentMethod.MOBILE_MONEY);
-        assertEquals(accountA.snapshot().accountId(),
-                tx.operations().get(0).snapshot().accountId());
-        assertEquals(OperationType.DEBIT, tx.operations().get(0).snapshot().type());
+    void should_debit_the_source_and_credit_the_destination() {
+        Transaction tx = initiateTransfer();
+        ledger.writeEntries(tx, accountA, accountB, HUNDRED);
+
+        assertEquals(List.of(idOf(accountA)), accountsOf(tx, OperationType.DEBIT));
+        assertEquals(List.of(idOf(accountB)), accountsOf(tx, OperationType.CREDIT));
     }
 
     @Test
-    void should_credit_receiver_on_transfer() {
-        Transaction tx = ledger.transfer(accountA, accountB,
-                Amount.of(BigDecimal.valueOf(100), "XAF"), PaymentMethod.MOBILE_MONEY);
-        assertEquals(accountB.snapshot().accountId(),
-                tx.operations().get(1).snapshot().accountId());
-        assertEquals(OperationType.CREDIT, tx.operations().get(1).snapshot().type());
+    void should_maintain_double_entry_on_write_entries() {
+        Transaction tx = initiateTransfer();
+        ledger.writeEntries(tx, accountA, accountB, HUNDRED);
+        assertTrue(isDoubleEntryBalanced(tx));
+    }
+
+    // ── reverse: the compensating pair ────────────────────────────────────────
+
+    @Test
+    void should_write_the_mirrored_pair_on_reverse() {
+        Transaction tx = initiateTransfer();
+        ledger.writeEntries(tx, accountA, accountB, HUNDRED);
+        ledger.reverse(tx);
+
+        // The reversal debits the original recipient and credits the original sender.
+        assertEquals(List.of(idOf(accountA), idOf(accountB)), accountsOf(tx, OperationType.DEBIT));
+        assertEquals(List.of(idOf(accountB), idOf(accountA)), accountsOf(tx, OperationType.CREDIT));
+    }
+
+    /**
+     * A correction is a compensating entry, never an erasure: the original pair
+     * is still there afterwards.
+     */
+    @Test
+    void should_append_the_compensating_pair_without_removing_the_originals() {
+        Transaction tx = initiateTransfer();
+        ledger.writeEntries(tx, accountA, accountB, HUNDRED);
+        ledger.reverse(tx);
+        assertEquals(4, tx.operations().size());
     }
 
     @Test
-    void should_maintain_double_entry_on_transfer() {
-        Transaction tx = ledger.transfer(accountA, accountB,
-                Amount.of(BigDecimal.valueOf(100), "XAF"), PaymentMethod.MOBILE_MONEY);
+    void should_keep_double_entry_balanced_after_reverse() {
+        Transaction tx = initiateTransfer();
+        ledger.writeEntries(tx, accountA, accountB, HUNDRED);
+        ledger.reverse(tx);
         assertTrue(isDoubleEntryBalanced(tx));
     }
 
     @Test
-    void should_throw_when_insufficient_funds_on_transfer() {
-        assertThrows(InsufficientFundsException.class,
-                () -> ledger.transfer(accountA, accountB,
-                        Amount.of(BigDecimal.valueOf(300), "XAF"), PaymentMethod.MOBILE_MONEY));
-    }
+    void should_reverse_the_transaction_amount() {
+        Transaction tx = initiateTransfer();
+        ledger.writeEntries(tx, accountA, accountB, HUNDRED);
+        ledger.reverse(tx);
 
-    @Test
-    void should_throw_when_receiver_blocked_on_transfer() {
-        accountB.block();
-        assertThrows(InvalidAccountException.class,
-                () -> ledger.transfer(accountA, accountB,
-                        Amount.of(BigDecimal.valueOf(100), "XAF"), PaymentMethod.MOBILE_MONEY));
-    }
-
-    @Test
-    void should_throw_when_sender_blocked_on_transfer() {
-        Account blockedSender = Account.createCustomerAccount(Id.generate(), new Id("b-sender"));
-        blockedSender.block();
-        assertThrows(InvalidAccountException.class,
-                () -> ledger.transfer(blockedSender, accountB,
-                        Amount.of(BigDecimal.valueOf(100), "XAF"), PaymentMethod.MOBILE_MONEY));
-    }
-
-    @Test
-    void should_throw_when_currency_mismatch_on_transfer() {
-        // accountA balance is XAF; trying to transfer EUR triggers CurrencyMismatchException
-        // during the isGreaterThanOrEqual balance check
-        assertThrows(CurrencyMismatchException.class,
-                () -> ledger.transfer(accountA, accountB,
-                        Amount.of(BigDecimal.valueOf(100), "EUR"), PaymentMethod.MOBILE_MONEY));
-    }
-
-    // ── Invariants transversaux ───────────────────────────────────────────────
-
-    @Test
-    void should_always_produce_exactly_two_operations_across_all_types() {
-        Transaction cashIn = ledger.cashIn(customerAccount, floatAccount,
-                Amount.of(BigDecimal.valueOf(100), "XAF"), PaymentMethod.MOBILE_MONEY);
-        Transaction cashOut = ledger.cashOut(accountA, floatAccount,
-                Amount.of(BigDecimal.valueOf(50), "XAF"), PaymentMethod.MOBILE_MONEY);
-        Transaction transfer = ledger.transfer(accountA, accountB,
-                Amount.of(BigDecimal.valueOf(50), "XAF"), PaymentMethod.MOBILE_MONEY);
-
-        assertEquals(2, cashIn.operations().size());
-        assertEquals(2, cashOut.operations().size());
-        assertEquals(2, transfer.operations().size());
-    }
-
-    @Test
-    void should_always_maintain_double_entry_across_all_types() {
-        Transaction cashIn = ledger.cashIn(customerAccount, floatAccount,
-                Amount.of(BigDecimal.valueOf(100), "XAF"), PaymentMethod.MOBILE_MONEY);
-        Transaction cashOut = ledger.cashOut(accountA, floatAccount,
-                Amount.of(BigDecimal.valueOf(50), "XAF"), PaymentMethod.MOBILE_MONEY);
-        Transaction transfer = ledger.transfer(accountA, accountB,
-                Amount.of(BigDecimal.valueOf(50), "XAF"), PaymentMethod.MOBILE_MONEY);
-
-        assertTrue(isDoubleEntryBalanced(cashIn));
-        assertTrue(isDoubleEntryBalanced(cashOut));
-        assertTrue(isDoubleEntryBalanced(transfer));
+        // 100 written, 100 compensated → 200 on each side.
+        assertEquals(0, sumByType(tx, OperationType.DEBIT).value()
+                .compareTo(BigDecimal.valueOf(200)));
+        assertEquals(0, sumByType(tx, OperationType.CREDIT).value()
+                .compareTo(BigDecimal.valueOf(200)));
     }
 }
