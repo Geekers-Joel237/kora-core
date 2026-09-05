@@ -32,8 +32,8 @@ public class InMemoryTransactionRepository implements TransactionRepository {
     @Override
     public List<Transaction> findByAccountId(Id accountId) {
         return store.values().stream()
-                .filter(tx -> tx.snapshot().fromId().equals(accountId)
-                        || tx.snapshot().toId().equals(accountId))
+                .filter(tx -> tx.snapshot().fromAccountId().equals(accountId)
+                        || tx.snapshot().toAccountId().equals(accountId))
                 .toList();
     }
 
@@ -57,9 +57,9 @@ public class InMemoryTransactionRepository implements TransactionRepository {
 
     private boolean matchesAccount(Transaction tx, Id accountId, Direction direction) {
         Transaction.Snapshot snap = tx.snapshot();
-        if (direction == Direction.OUTBOUND) return snap.fromId().equals(accountId);
-        if (direction == Direction.INBOUND)  return snap.toId().equals(accountId);
-        return snap.fromId().equals(accountId) || snap.toId().equals(accountId);
+        if (direction == Direction.OUTBOUND) return snap.fromAccountId().equals(accountId);
+        if (direction == Direction.INBOUND)  return snap.toAccountId().equals(accountId);
+        return snap.fromAccountId().equals(accountId) || snap.toAccountId().equals(accountId);
     }
 
     private boolean matchesFilter(Transaction tx, TransactionFilter f) {

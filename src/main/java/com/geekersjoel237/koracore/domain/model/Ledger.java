@@ -42,7 +42,7 @@ public class Ledger {
     // ── Two-phase payment flow ─────────────────────────────────────────────────
 
     /**
-     * Creates a Transaction shell WITHOUT ledger operations.
+     * Creates a Transaction shell WITHOUT ledger entries.
      * Operations are written later, at capture time, via {@link #writeEntries}.
      *
      * <p>Invariant priority:
@@ -59,17 +59,21 @@ public class Ledger {
         requireActive(toAccount, "Destination account is not active");
         requirePositive(amount);
 
+        // Transaction.create() FIRST — SelfTransferException wins over all other
+        // checks. Keep the local: inlining it into the return moves this call
+        // below requireSufficientFunds and silently flips the priority.
+        Transaction tx = Transaction.create(
+                Id.generate(),
+                fromAccount.snapshot().accountId(),
+                toAccount.snapshot().accountId(),
+                type, paymentMethod, amount);
 
         // requireSufficientFunds AFTER — float accounts are unbounded (ADR-001)
         if (fromAccount.snapshot().accountType().resourceType() != ResourceType.FLOAT_ACCOUNT) {
             requireSufficientFunds(fromAccount, amount);
         }
 
-        return Transaction.create(
-                Id.generate(),
-                fromAccount.snapshot().accountId(),
-                toAccount.snapshot().accountId(),
-                type, paymentMethod, amount);
+        return tx; // NO recordDoubleEntry() — written at capture via writeEntries()
     }
 
     public void writeEntries(Transaction tx, Account fromAccount,
@@ -82,7 +86,7 @@ public class Ledger {
     public Transaction reverse(Transaction tx) {
         Amount amount = tx.snapshot().amount();
         // Reverse: DEBIT the original recipient, CREDIT the original sender
-        tx.recordDoubleEntry(amount, tx.snapshot().toId(), tx.snapshot().fromId());
+        tx.recordDoubleEntry(amount, tx.snapshot().toAccountId(), tx.snapshot().fromAccountId());
         return tx;
     }
 

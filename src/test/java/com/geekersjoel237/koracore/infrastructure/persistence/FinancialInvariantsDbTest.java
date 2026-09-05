@@ -73,7 +73,7 @@ class FinancialInvariantsDbTest extends AbstractRepositoryTest {
         Number imbalance = (Number) em.createNativeQuery("""
                 SELECT SUM(CASE WHEN type = 'CREDIT' THEN amount ELSE 0 END)
                      - SUM(CASE WHEN type = 'DEBIT'  THEN amount ELSE 0 END)
-                FROM operations
+                FROM ledger_entries
                 WHERE deleted_at IS NULL
                 """)
                 .getSingleResult();
@@ -91,7 +91,7 @@ class FinancialInvariantsDbTest extends AbstractRepositoryTest {
 
         String txId = tx.snapshot().transactionId().value();
         Number opCount = (Number) em.createNativeQuery("""
-                SELECT COUNT(*) FROM operations
+                SELECT COUNT(*) FROM ledger_entries
                 WHERE transaction_id = :txId AND deleted_at IS NULL
                 """)
                 .setParameter("txId", txId)
@@ -107,7 +107,7 @@ class FinancialInvariantsDbTest extends AbstractRepositoryTest {
         em.flush();
 
         Number orphanCount = (Number) em.createNativeQuery("""
-                SELECT COUNT(*) FROM operations o
+                SELECT COUNT(*) FROM ledger_entries o
                 WHERE o.deleted_at IS NULL
                   AND o.transaction_id NOT IN (
                       SELECT t.id FROM transactions t WHERE t.deleted_at IS NULL
@@ -131,7 +131,7 @@ class FinancialInvariantsDbTest extends AbstractRepositoryTest {
         Number violations = (Number) em.createNativeQuery("""
                 SELECT COUNT(*) FROM (
                     SELECT transaction_id
-                    FROM operations
+                    FROM ledger_entries
                     WHERE deleted_at IS NULL
                     GROUP BY transaction_id
                     HAVING SUM(CASE WHEN type = 'CREDIT' THEN amount ELSE 0 END)
@@ -163,7 +163,7 @@ class FinancialInvariantsDbTest extends AbstractRepositoryTest {
         BigDecimal netFlow = new BigDecimal(
                 em.createNativeQuery("""
                         SELECT SUM(CASE WHEN type = 'CREDIT' THEN amount ELSE -amount END)
-                        FROM operations
+                        FROM ledger_entries
                         WHERE account_id = :accountId AND deleted_at IS NULL
                         """)
                         .setParameter("accountId", accountId)

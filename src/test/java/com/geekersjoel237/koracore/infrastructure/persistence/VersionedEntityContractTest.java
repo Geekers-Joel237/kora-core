@@ -25,7 +25,7 @@ class VersionedEntityContractTest extends AbstractRepositoryTest {
     @Test
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     void immutable_entities_have_no_version_column() {
-        for (String table : new String[]{"operations", "trx_state_historics", "ledgers"}) {
+        for (String table : new String[]{"ledger_entries", "trx_state_historics", "ledgers"}) {
             assertThatThrownBy(() ->
                     jdbcTemplate.execute("SELECT version FROM " + table + " LIMIT 1"))
                     .isInstanceOf(BadSqlGrammarException.class)

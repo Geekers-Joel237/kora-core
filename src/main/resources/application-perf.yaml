@@ -54,6 +54,9 @@ management:
   influx:
     metrics:
       export:
+        # The base config turns the exporter off everywhere. This is the one
+        # profile that starts InfluxDB, so it is the one profile that switches
+        # it back on — the line is load-bearing, not decoration.
         enabled: true
         uri: http://${INFLUXDB_HOST}:${INFLUXDB_PORT}
         db: kora_metrics

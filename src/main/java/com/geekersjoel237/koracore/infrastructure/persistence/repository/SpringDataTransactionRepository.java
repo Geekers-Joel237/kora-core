@@ -12,5 +12,5 @@ public interface SpringDataTransactionRepository
         extends JpaRepository<TransactionEntity, String>,
                 JpaSpecificationExecutor<TransactionEntity> {
 
-    List<TransactionEntity> findByFromIdOrToId(String fromId, String toId);
+    List<TransactionEntity> findByFromAccountIdOrToAccountId(String fromAccountId, String toAccountId);
 }

@@ -13,8 +13,8 @@ import java.util.List;
 @Entity
 @Table(name = "transactions",
         indexes = {
-                @Index(name = "idx_transactions_from_id", columnList = "from_id"),
-                @Index(name = "idx_transactions_to_id", columnList = "to_id")
+                @Index(name = "idx_transactions_from_account_id", columnList = "from_account_id"),
+                @Index(name = "idx_transactions_to_account_id", columnList = "to_account_id")
         })
 @Getter
 @Setter
@@ -27,11 +27,11 @@ public class TransactionEntity extends VersionedEntity {
     @Column(name = "transaction_number", unique = true, nullable = false)
     private String transactionNumber;
 
-    @Column(name = "from_id", nullable = false)
-    private String fromId;
+    @Column(name = "from_account_id", nullable = false)
+    private String fromAccountId;
 
-    @Column(name = "to_id", nullable = false)
-    private String toId;
+    @Column(name = "to_account_id", nullable = false)
+    private String toAccountId;
 
     @Column(name = "state", nullable = false)
     private String state;
@@ -56,5 +56,5 @@ public class TransactionEntity extends VersionedEntity {
     @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
     @JoinColumn(name = "transaction_id")
     @Builder.Default
-    private List<OperationEntity> operations = new ArrayList<>();
+    private List<LedgerEntryEntity> entries = new ArrayList<>();
 }

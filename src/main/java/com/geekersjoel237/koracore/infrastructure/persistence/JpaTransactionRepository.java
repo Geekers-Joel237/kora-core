@@ -2,7 +2,7 @@ package com.geekersjoel237.koracore.infrastructure.persistence;
 
 import com.geekersjoel237.koracore.domain.enums.Direction;
 import com.geekersjoel237.koracore.domain.enums.TriggerSource;
-import com.geekersjoel237.koracore.domain.model.Operation;
+import com.geekersjoel237.koracore.domain.model.LedgerEntry;
 import com.geekersjoel237.koracore.domain.model.Transaction;
 import com.geekersjoel237.koracore.domain.model.TrxStateHistoric;
 import com.geekersjoel237.koracore.domain.model.state.TransactionState;
@@ -12,7 +12,7 @@ import com.geekersjoel237.koracore.domain.query.PageResult;
 import com.geekersjoel237.koracore.domain.query.TransactionFilter;
 import com.geekersjoel237.koracore.domain.vo.Amount;
 import com.geekersjoel237.koracore.domain.vo.Id;
-import com.geekersjoel237.koracore.infrastructure.persistence.entities.OperationEntity;
+import com.geekersjoel237.koracore.infrastructure.persistence.entities.LedgerEntryEntity;
 import com.geekersjoel237.koracore.infrastructure.persistence.entities.TransactionEntity;
 import com.geekersjoel237.koracore.infrastructure.persistence.repository.SpringDataTransactionRepository;
 import com.geekersjoel237.koracore.infrastructure.persistence.repository.SpringDataTrxStateHistoricRepository;
@@ -51,15 +51,15 @@ public class JpaTransactionRepository implements TransactionRepository {
             Transaction.Snapshot snap = transaction.snapshot();
             entity.setState(snap.state().name());
 
-            // Add any new operations added after INSERT (e.g., writeEntries in capturePayment).
+            // Add any new entries added after INSERT (e.g., writeEntries in capturePayment).
             // Never clear or replace the collection — orphanRemoval would delete existing ops.
-            Set<String> existingIds = entity.getOperations().stream()
-                    .map(OperationEntity::getId)
+            Set<String> existingIds = entity.getEntries().stream()
+                    .map(LedgerEntryEntity::getId)
                     .collect(Collectors.toSet());
-            snap.operations().stream()
-                    .filter(op -> !existingIds.contains(op.operationId().value()))
+            snap.entries().stream()
+                    .filter(op -> !existingIds.contains(op.entryId().value()))
                     .forEach(op -> {
-                        OperationEntity e = OperationEntity.builder()
+                        LedgerEntryEntity e = LedgerEntryEntity.builder()
                                 .transactionId(snap.transactionId().value())
                                 .type(op.type())
                                 .amount(op.amount().value())
@@ -67,8 +67,8 @@ public class JpaTransactionRepository implements TransactionRepository {
                                 .accountId(op.accountId().value())
                                 .occurredAt(op.createdAt())
                                 .build();
-                        e.setId(op.operationId().value());
-                        entity.getOperations().add(e);
+                        e.setId(op.entryId().value());
+                        entity.getEntries().add(e);
                     });
             jpaTransactionRepo.save(entity);
         }
@@ -83,7 +83,7 @@ public class JpaTransactionRepository implements TransactionRepository {
     @Override
     public List<Transaction> findByAccountId(Id accountId) {
         return jpaTransactionRepo
-                .findByFromIdOrToId(accountId.value(), accountId.value())
+                .findByFromAccountIdOrToAccountId(accountId.value(), accountId.value())
                 .stream()
                 .map(this::toDomain)
                 .toList();
@@ -114,13 +114,13 @@ public class JpaTransactionRepository implements TransactionRepository {
 
             String id = accountId.value();
             if (filter.direction() == Direction.OUTBOUND) {
-                predicates.add(cb.equal(root.get("fromId"), id));
+                predicates.add(cb.equal(root.get("fromAccountId"), id));
             } else if (filter.direction() == Direction.INBOUND) {
-                predicates.add(cb.equal(root.get("toId"), id));
+                predicates.add(cb.equal(root.get("toAccountId"), id));
             } else {
                 predicates.add(cb.or(
-                        cb.equal(root.get("fromId"), id),
-                        cb.equal(root.get("toId"), id)
+                        cb.equal(root.get("fromAccountId"), id),
+                        cb.equal(root.get("toAccountId"), id)
                 ));
             }
 
@@ -144,9 +144,9 @@ public class JpaTransactionRepository implements TransactionRepository {
     private TransactionEntity toEntity(Transaction tx) {
         Transaction.Snapshot snap = tx.snapshot();
 
-        List<OperationEntity> opEntities = snap.operations().stream()
+        List<LedgerEntryEntity> entryEntities = snap.entries().stream()
                 .map(op -> {
-                    OperationEntity e = OperationEntity.builder()
+                    LedgerEntryEntity e = LedgerEntryEntity.builder()
                             .transactionId(snap.transactionId().value())
                             .type(op.type())
                             .amount(op.amount().value())
@@ -154,30 +154,30 @@ public class JpaTransactionRepository implements TransactionRepository {
                             .accountId(op.accountId().value())
                             .occurredAt(op.createdAt())
                             .build();
-                    e.setId(op.operationId().value());
+                    e.setId(op.entryId().value());
                     return e;
                 })
                 .toList();
 
         TransactionEntity entity = TransactionEntity.builder()
                 .transactionNumber(snap.transactionNumber())
-                .fromId(snap.fromId().value())
-                .toId(snap.toId().value())
+                .fromAccountId(snap.fromAccountId().value())
+                .toAccountId(snap.toAccountId().value())
                 .state(snap.state().name())
                 .type(snap.type())
                 .paymentMethod(snap.paymentMethod())
                 .amount(snap.amount().value())
                 .currency(snap.amount().currency())
                 .occurredAt(snap.createdAt())
-                .operations(opEntities)
+                .entries(entryEntities)
                 .build();
         entity.setId(snap.transactionId().value());
         return entity;
     }
 
     private Transaction toDomain(TransactionEntity entity) {
-        List<Operation> operations = entity.getOperations().stream()
-                .map(op -> Operation.createFromSnapshot(new Operation.Snapshot(
+        List<LedgerEntry> entries = entity.getEntries().stream()
+                .map(op -> LedgerEntry.createFromSnapshot(new LedgerEntry.Snapshot(
                         new Id(op.getId()),
                         op.getType(),
                         new Amount(op.getAmount(), op.getCurrency()),
@@ -206,18 +206,18 @@ public class JpaTransactionRepository implements TransactionRepository {
         Transaction.Snapshot snap = new Transaction.Snapshot(
                 new Id(entity.getId()),
                 entity.getTransactionNumber(),
-                new Id(entity.getFromId()),
-                new Id(entity.getToId()),
+                new Id(entity.getFromAccountId()),
+                new Id(entity.getToAccountId()),
                 TransactionState.fromValue(entity.getState()),
                 entity.getType(),
                 entity.getPaymentMethod(),
                 new Amount(entity.getAmount(), entity.getCurrency()),
                 entity.getOccurredAt(),
-                operations.stream().map(Operation::snapshot).toList(),
+                entries.stream().map(LedgerEntry::snapshot).toList(),
                 history
         );
 
-        return Transaction.createFromSnapshot(snap, operations, history);
+        return Transaction.createFromSnapshot(snap, entries, history);
     }
 
 }

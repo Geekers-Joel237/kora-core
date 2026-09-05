@@ -15,10 +15,29 @@ spring:
   jpa:
     hibernate:
       ddl-auto: none
+
+    # Mirrors src/main/resources/application.yaml. Not a test-only preference:
+    # if the suite ran with OSIV on while production runs with it off, a lazy
+    # association touched outside a transaction would pass here and throw in
+    # production. The value is duplicated because the test classpath shadows the
+    # main base file (see application.yaml next to this one), so nothing is
+    # inherited from it.
+    open-in-view: false
+
     show-sql: true
     properties:
       hibernate:
         format_sql: true
+
+# The exporter defaults to enabled whenever micrometer-registry-influx is on the
+# classpath, which it always is. Without this, every @SpringBootTest context
+# spends its life failing to reach localhost:8086 and fills the report with
+# stack traces.
+management:
+  influx:
+    metrics:
+      export:
+        enabled: false
 
 logging:
   level:

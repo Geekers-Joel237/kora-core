@@ -55,7 +55,7 @@ public class TestSupportAction {
     @PostMapping("/reset")
     public ResponseEntity<Map<String, Object>> reset() {
         jdbcTemplate.execute(
-                "TRUNCATE TABLE authorization_records, operations, trx_state_historics, " +
+                "TRUNCATE TABLE authorization_records, ledger_entries, trx_state_historics, " +
                 "transactions, accounts, customers, users RESTART IDENTITY CASCADE"
         );
         accountRepository.save(Account.createFloatAccount(Id.generate(), SystemConstants.PROVIDER_ID));

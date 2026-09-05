@@ -92,7 +92,7 @@ public class TransactionHistoryService implements TransactionHistoryUseCase {
     }
 
     private Direction computeDirection(Transaction.Snapshot tx, Id customerAccountId) {
-        return tx.fromId().equals(customerAccountId) ? Direction.OUTBOUND : Direction.INBOUND;
+        return tx.fromAccountId().equals(customerAccountId) ? Direction.OUTBOUND : Direction.INBOUND;
     }
 
     /**
@@ -104,9 +104,9 @@ public class TransactionHistoryService implements TransactionHistoryUseCase {
     private String resolveCounterpart(Transaction.Snapshot tx, Id customerAccountId) {
         if (tx.type() != TransactionType.P2P_TRANSFER) return null;
 
-        Id counterpartAccountId = tx.fromId().equals(customerAccountId)
-                ? tx.toId()
-                : tx.fromId();
+        Id counterpartAccountId = tx.fromAccountId().equals(customerAccountId)
+                ? tx.toAccountId()
+                : tx.fromAccountId();
 
         return accountRepository.findById(counterpartAccountId)
                 .flatMap(account -> {

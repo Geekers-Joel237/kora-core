@@ -1,5 +1,5 @@
 package com.geekersjoel237.koracore.domain.enums;
 
-public enum OperationType {
+public enum LedgerEntryType {
     DEBIT, CREDIT
 }

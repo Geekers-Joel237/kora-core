@@ -327,12 +327,12 @@ public class PaymentTransactionalExecutor {
                 || currentState == TransactionState.SETTLED
                 || currentState == TransactionState.COMPLETED) {
 
-            Account fromAccount = accountRepository.findById(tx.snapshot().fromId())
+            Account fromAccount = accountRepository.findById(tx.snapshot().fromAccountId())
                     .orElseThrow(() -> new AccountNotFoundException(
-                            "Account not found: " + tx.snapshot().fromId().value()));
-            Account toAccount = accountRepository.findById(tx.snapshot().toId())
+                            "Account not found: " + tx.snapshot().fromAccountId().value()));
+            Account toAccount = accountRepository.findById(tx.snapshot().toAccountId())
                     .orElseThrow(() -> new AccountNotFoundException(
-                            "Account not found: " + tx.snapshot().toId().value()));
+                            "Account not found: " + tx.snapshot().toAccountId().value()));
 
             Ledger ledger = ledgerRepository.findFirst();
 
@@ -512,7 +512,7 @@ public class PaymentTransactionalExecutor {
     /**
      * Loads the system float account without a pessimistic lock.
      * The float account balance is never written (ADR-001) — its integrity
-     * is maintained exclusively through double-entry ledger operations.
+     * is maintained exclusively through double-entry ledger entries.
      * A read lock would serialize all cash-in/cash-out operations for no benefit.
      */
     private Account getSystemFloatAccount() {

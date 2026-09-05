@@ -8,7 +8,7 @@ import com.geekersjoel237.koracore.application.service.AuthService;
 import com.geekersjoel237.koracore.application.service.PaymentService;
 import com.geekersjoel237.koracore.application.service.PaymentTransactionalExecutor;
 import com.geekersjoel237.koracore.domain.enums.PaymentMethod;
-import com.geekersjoel237.koracore.domain.enums.OperationType;
+import com.geekersjoel237.koracore.domain.enums.LedgerEntryType;
 import com.geekersjoel237.koracore.domain.enums.ProviderOperationType;
 import com.geekersjoel237.koracore.domain.enums.Role;
 import com.geekersjoel237.koracore.domain.enums.UserStatus;
@@ -145,14 +145,14 @@ class PaymentUseCaseTest {
 
     private void assertDoubleEntryInvariant() {
         Amount totalDebit = transactionRepo.findAll().stream()
-                .flatMap(tx -> tx.operations().stream())
-                .filter(op -> op.snapshot().type() == OperationType.DEBIT)
+                .flatMap(tx -> tx.entries().stream())
+                .filter(op -> op.snapshot().type() == LedgerEntryType.DEBIT)
                 .map(op -> op.snapshot().amount())
                 .reduce(AMOUNT_ZERO, Amount::add);
 
         Amount totalCredit = transactionRepo.findAll().stream()
-                .flatMap(tx -> tx.operations().stream())
-                .filter(op -> op.snapshot().type() == OperationType.CREDIT)
+                .flatMap(tx -> tx.entries().stream())
+                .filter(op -> op.snapshot().type() == LedgerEntryType.CREDIT)
                 .map(op -> op.snapshot().amount())
                 .reduce(AMOUNT_ZERO, Amount::add);
 
@@ -169,7 +169,7 @@ class PaymentUseCaseTest {
         Transaction tx = paymentService.cashIn(cmd);
 
         assertEquals(COMPLETED, tx.snapshot().state());
-        assertEquals(2, tx.snapshot().operations().size());
+        assertEquals(2, tx.snapshot().entries().size());
         assertEquals(1, transactionRepo.count());
 
         List<TrxStateHistoric> history =
@@ -204,7 +204,7 @@ class PaymentUseCaseTest {
         Transaction tx = paymentService.cashIn(cmd);
 
         assertEquals(AUTHORIZATION_FAILED, tx.snapshot().state());
-        assertEquals(0, tx.snapshot().operations().size());
+        assertEquals(0, tx.snapshot().entries().size());
 
         List<TrxStateHistoric> history =
                 historicRepo.findByTransactionId(tx.snapshot().transactionId());

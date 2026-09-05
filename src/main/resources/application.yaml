@@ -80,6 +80,15 @@ spring:
   jpa:
     hibernate:
       ddl-auto: validate
+
+    # Off, against the Spring Boot default. OSIV keeps the EntityManager bound to
+    # the request until the response is rendered, so a lazy association touched
+    # during serialization loads outside any transaction — a query that none of
+    # the TX-1 / TX-2 accounting in ADR-004 sees. With it off, that same access
+    # raises LazyInitializationException instead of quietly issuing SQL.
+    # It does not pin a JDBC connection either way: this is a resource-local
+    # setup, so Hibernate returns the connection to Hikari at each commit.
+    open-in-view: false
   flyway:
     # No url: Spring derives it from spring.datasource.url and only swaps the
     # credentials, so the two roles cannot drift onto different databases.
@@ -89,6 +98,17 @@ spring:
 
 server:
   port: ${SERVER_PORT}
+
+management:
+  influx:
+    metrics:
+      export:
+        # micrometer-registry-influx is an unconditional dependency, and the
+        # exporter's own default is enabled=true — so without this line it runs
+        # in every profile, hunting for localhost:8086 and logging two stack
+        # traces a minute wherever InfluxDB is not up. Only the perf profile,
+        # which starts the container, turns it back on.
+        enabled: false
 
 # Token and OTP lifetimes are product policy, not environment tuning: the same
 # numbers hold on a laptop and under load. A profile may still override them.

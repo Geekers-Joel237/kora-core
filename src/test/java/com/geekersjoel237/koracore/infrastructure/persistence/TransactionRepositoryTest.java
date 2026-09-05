@@ -1,9 +1,9 @@
 package com.geekersjoel237.koracore.infrastructure.persistence;
 
-import com.geekersjoel237.koracore.domain.enums.OperationType;
+import com.geekersjoel237.koracore.domain.enums.LedgerEntryType;
 import com.geekersjoel237.koracore.domain.enums.PaymentMethod;
 import com.geekersjoel237.koracore.domain.enums.TransactionType;
-import com.geekersjoel237.koracore.domain.model.Operation;
+import com.geekersjoel237.koracore.domain.model.LedgerEntry;
 import com.geekersjoel237.koracore.domain.model.Transaction;
 import com.geekersjoel237.koracore.domain.model.TrxStateHistoric;
 import com.geekersjoel237.koracore.domain.model.state.TransactionState;
@@ -35,11 +35,11 @@ class TransactionRepositoryTest extends AbstractRepositoryTest {
     @Autowired
     private SpringDataTransactionRepository springDataTransactionRepository;
 
-    private Transaction buildTransaction(Id fromId, Id toId) {
+    private Transaction buildTransaction(Id fromAccountId, Id toAccountId) {
         Id txId = Id.generate();
-        Transaction tx = Transaction.create(txId, fromId, toId,
+        Transaction tx = Transaction.create(txId, fromAccountId, toAccountId,
                 TransactionType.CASH_IN, PaymentMethod.ORANGE_MONEY, AMOUNT_10K);
-        tx.recordDoubleEntry(AMOUNT_10K, fromId, toId);
+        tx.recordDoubleEntry(AMOUNT_10K, fromAccountId, toAccountId);
         return tx;
     }
 
@@ -47,32 +47,32 @@ class TransactionRepositoryTest extends AbstractRepositoryTest {
 
     @Test
     void should_persist_transaction_with_two_operations_atomically() {
-        Id fromId = Id.generate();
-        Id toId = Id.generate();
-        Transaction tx = buildTransaction(fromId, toId);
+        Id fromAccountId = Id.generate();
+        Id toAccountId = Id.generate();
+        Transaction tx = buildTransaction(fromAccountId, toAccountId);
 
         txRepository.save(tx);
 
         Optional<Transaction> found = txRepository.findById(tx.snapshot().transactionId());
         assertThat(found).isPresent();
-        assertThat(found.get().operations()).hasSize(2);
+        assertThat(found.get().entries()).hasSize(2);
         assertThat(found.get().snapshot().amount().value())
                 .isEqualByComparingTo(AMOUNT_10K.value());
     }
 
     @Test
     void should_rollback_on_constraint_violation_when_transaction_number_is_duplicated() {
-        Id fromId = Id.generate();
-        Id toId = Id.generate();
-        Transaction tx = buildTransaction(fromId, toId);
+        Id fromAccountId = Id.generate();
+        Id toAccountId = Id.generate();
+        Transaction tx = buildTransaction(fromAccountId, toAccountId);
         txRepository.save(tx);
         String duplicateNumber = tx.snapshot().transactionNumber();
 
         // Build a raw entity with the same transaction_number
         TransactionEntity duplicate = TransactionEntity.builder()
                 .transactionNumber(duplicateNumber)
-                .fromId(fromId.value())
-                .toId(toId.value())
+                .fromAccountId(fromAccountId.value())
+                .toAccountId(toAccountId.value())
                 .state(TransactionState.INITIALIZED.name())
                 .type(TransactionType.CASH_IN)
                 .paymentMethod(PaymentMethod.MOBILE_MONEY)
@@ -88,22 +88,22 @@ class TransactionRepositoryTest extends AbstractRepositoryTest {
 
     @Test
     void should_load_transaction_with_both_operations_by_id() {
-        Id fromId = Id.generate();
-        Id toId = Id.generate();
-        Transaction tx = buildTransaction(fromId, toId);
+        Id fromAccountId = Id.generate();
+        Id toAccountId = Id.generate();
+        Transaction tx = buildTransaction(fromAccountId, toAccountId);
         txRepository.save(tx);
 
         Transaction loaded = txRepository.findById(tx.snapshot().transactionId()).orElseThrow();
 
-        List<Operation> ops = loaded.operations();
+        List<LedgerEntry> ops = loaded.entries();
         assertThat(ops).hasSize(2);
 
         boolean hasDebit = ops.stream()
-                .anyMatch(op -> op.snapshot().type() == OperationType.DEBIT
-                        && op.snapshot().accountId().equals(fromId));
+                .anyMatch(op -> op.snapshot().type() == LedgerEntryType.DEBIT
+                        && op.snapshot().accountId().equals(fromAccountId));
         boolean hasCredit = ops.stream()
-                .anyMatch(op -> op.snapshot().type() == OperationType.CREDIT
-                        && op.snapshot().accountId().equals(toId));
+                .anyMatch(op -> op.snapshot().type() == LedgerEntryType.CREDIT
+                        && op.snapshot().accountId().equals(toAccountId));
 
         assertThat(hasDebit).isTrue();
         assertThat(hasCredit).isTrue();
@@ -149,14 +149,14 @@ class TransactionRepositoryTest extends AbstractRepositoryTest {
         List<Transaction> forX = txRepository.findByAccountId(accountX);
         assertThat(forX).hasSize(1);
         Transaction tx = forX.getFirst();
-        assertThat(tx.snapshot().fromId()).isEqualTo(accountX);
+        assertThat(tx.snapshot().fromAccountId()).isEqualTo(accountX);
     }
 
     @Test
     void should_persist_transaction_state_historic() {
-        Id fromId = Id.generate();
-        Id toId = Id.generate();
-        Transaction tx = buildTransaction(fromId, toId);
+        Id fromAccountId = Id.generate();
+        Id toAccountId = Id.generate();
+        Transaction tx = buildTransaction(fromAccountId, toAccountId);
         txRepository.save(tx);
 
         TrxStateHistoric initialEntry = tx.history().getFirst();
@@ -172,9 +172,9 @@ class TransactionRepositoryTest extends AbstractRepositoryTest {
 
     @Test
     void should_return_state_history_in_chronological_order() {
-        Id fromId = Id.generate();
-        Id toId = Id.generate();
-        Transaction tx = buildTransaction(fromId, toId);
+        Id fromAccountId = Id.generate();
+        Id toAccountId = Id.generate();
+        Transaction tx = buildTransaction(fromAccountId, toAccountId);
         txRepository.save(tx);
 
         // Record INITIALIZED → AUTHORIZED → COMPLETED in history

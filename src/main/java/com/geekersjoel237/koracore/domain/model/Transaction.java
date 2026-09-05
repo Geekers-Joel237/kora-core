@@ -1,6 +1,6 @@
 package com.geekersjoel237.koracore.domain.model;
 
-import com.geekersjoel237.koracore.domain.enums.OperationType;
+import com.geekersjoel237.koracore.domain.enums.LedgerEntryType;
 import com.geekersjoel237.koracore.domain.enums.PaymentMethod;
 import com.geekersjoel237.koracore.domain.enums.TransactionType;
 import com.geekersjoel237.koracore.domain.exception.SelfTransferException;
@@ -20,58 +20,58 @@ public class Transaction {
 
     private final Id transactionId;
     private final String transactionNumber;
-    private final Id fromId;
-    private final Id toId;
+    private final Id fromAccountId;
+    private final Id toAccountId;
     private final TransactionType type;
     private final PaymentMethod paymentMethod;
     private final Amount amount;
     private final Instant createdAt;
-    private final List<Operation> operations;
+    private final List<LedgerEntry> entries;
     private final List<TrxStateHistoric> history;
     private TransactionState state;
 
-    private Transaction(Id transactionId, String transactionNumber, Id fromId, Id toId,
+    private Transaction(Id transactionId, String transactionNumber, Id fromAccountId, Id toAccountId,
                         TransactionType type, PaymentMethod paymentMethod, Amount amount) {
         this.transactionId = transactionId;
         this.transactionNumber = transactionNumber;
-        this.fromId = fromId;
-        this.toId = toId;
+        this.fromAccountId = fromAccountId;
+        this.toAccountId = toAccountId;
         this.state = TransactionState.INITIALIZED;
         this.type = type;
         this.paymentMethod = paymentMethod;
         this.amount = amount;
         this.createdAt = Instant.now();
-        this.operations = new ArrayList<>();
+        this.entries = new ArrayList<>();
         this.history = new ArrayList<>();
         this.history.add(TrxStateHistoric.of(transactionId, null, TransactionState.INITIALIZED));
     }
 
     public static Transaction create(Id transactionId,
-                                     Id fromId, Id toId, TransactionType type,
+                                     Id fromAccountId, Id toAccountId, TransactionType type,
                                      PaymentMethod paymentMethod, Amount amount) {
         if (transactionId == null) throw new IllegalArgumentException("Transaction id cannot be null");
-        if (fromId == null) throw new IllegalArgumentException("Transaction fromId cannot be null");
-        if (toId == null) throw new IllegalArgumentException("Transaction toId cannot be null");
+        if (fromAccountId == null) throw new IllegalArgumentException("Transaction fromAccountId cannot be null");
+        if (toAccountId == null) throw new IllegalArgumentException("Transaction toAccountId cannot be null");
         if (amount == null) throw new IllegalArgumentException("Transaction amount cannot be null");
 
-        if (fromId.equals(toId))
+        if (fromAccountId.equals(toAccountId))
             throw new SelfTransferException("Cannot transfer to the same account");
 
         var transactionNumber = generateTransactionNumber(transactionId);
-        return new Transaction(transactionId, transactionNumber, fromId, toId,
+        return new Transaction(transactionId, transactionNumber, fromAccountId, toAccountId,
                 type, paymentMethod, amount);
     }
 
     public static Transaction createFromSnapshot(Snapshot snap,
-                                                 List<Operation> operations,
+                                                 List<LedgerEntry> entries,
                                                  List<TrxStateHistoric> history) {
         Transaction tx = new Transaction(
                 snap.transactionId(), snap.transactionNumber(),
-                snap.fromId(), snap.toId(),
+                snap.fromAccountId(), snap.toAccountId(),
                 snap.type(), snap.paymentMethod(), snap.amount());
         tx.state = snap.state();
-        tx.operations.clear();
-        tx.operations.addAll(operations);
+        tx.entries.clear();
+        tx.entries.addAll(entries);
         tx.history.clear();
         tx.history.addAll(history);
         return tx;
@@ -87,24 +87,24 @@ public class Transaction {
     }
 
     public void recordDoubleEntry(Amount amount, Id debitAccountId, Id creditAccountId) {
-        this.operations.add(
-                Operation.create(Id.generate(), OperationType.DEBIT, amount, debitAccountId));
-        this.operations.add(
-                Operation.create(Id.generate(), OperationType.CREDIT, amount, creditAccountId));
+        this.entries.add(
+                LedgerEntry.create(Id.generate(), LedgerEntryType.DEBIT, amount, debitAccountId));
+        this.entries.add(
+                LedgerEntry.create(Id.generate(), LedgerEntryType.CREDIT, amount, creditAccountId));
         verifyDoubleEntry();
     }
 
     private void verifyDoubleEntry() {
-        Amount debit  = sumByType(OperationType.DEBIT);
-        Amount credit = sumByType(OperationType.CREDIT);
+        Amount debit  = sumByType(LedgerEntryType.DEBIT);
+        Amount credit = sumByType(LedgerEntryType.CREDIT);
         if (!debit.equals(credit))
             throw new IllegalStateException(
                     "Double-entry invariant violated: debit=" + debit.value()
                     + " credit=" + credit.value());
     }
 
-    private Amount sumByType(OperationType type) {
-        return this.operations.stream()
+    private Amount sumByType(LedgerEntryType type) {
+        return this.entries.stream()
                 .filter(op -> op.snapshot().type() == type)
                 .map(op -> op.snapshot().amount())
                 .reduce(Amount.of(BigDecimal.ZERO, this.amount.currency()), Amount::add);
@@ -116,8 +116,8 @@ public class Transaction {
         this.history.add(TrxStateHistoric.of(this.transactionId, old, this.state));
     }
 
-    public List<Operation> operations() {
-        return Collections.unmodifiableList(operations);
+    public List<LedgerEntry> entries() {
+        return Collections.unmodifiableList(entries);
     }
 
     public List<TrxStateHistoric> history() {
@@ -126,9 +126,9 @@ public class Transaction {
 
     public Snapshot snapshot() {
         return new Snapshot(
-                transactionId, transactionNumber, fromId, toId,
+                transactionId, transactionNumber, fromAccountId, toAccountId,
                 state, type, paymentMethod, amount, createdAt,
-                operations.stream().map(Operation::snapshot).toList(),
+                entries.stream().map(LedgerEntry::snapshot).toList(),
                 Collections.unmodifiableList(history)
         );
     }
@@ -176,14 +176,14 @@ public class Transaction {
     public record Snapshot(
             Id transactionId,
             String transactionNumber,
-            Id fromId,
-            Id toId,
+            Id fromAccountId,
+            Id toAccountId,
             TransactionState state,
             TransactionType type,
             PaymentMethod paymentMethod,
             Amount amount,
             Instant createdAt,
-            List<Operation.Snapshot> operations,
+            List<LedgerEntry.Snapshot> entries,
             List<TrxStateHistoric> history
     ) {
     }

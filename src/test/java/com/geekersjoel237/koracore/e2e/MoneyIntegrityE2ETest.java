@@ -52,7 +52,7 @@ class MoneyIntegrityE2ETest extends AbstractE2ETest {
         BigDecimal imbalance = new BigDecimal(Objects.requireNonNull(jdbcTemplate.queryForObject("""
                 SELECT SUM(CASE WHEN type = 'CREDIT' THEN amount ELSE 0 END)
                      - SUM(CASE WHEN type = 'DEBIT'  THEN amount ELSE 0 END)
-                FROM operations WHERE deleted_at IS NULL
+                FROM ledger_entries WHERE deleted_at IS NULL
                 """, Object.class)).toString());
 
         assertThat(imbalance).isEqualByComparingTo(BigDecimal.ZERO);
@@ -128,7 +128,7 @@ class MoneyIntegrityE2ETest extends AbstractE2ETest {
         Long violations = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*) FROM (
                     SELECT transaction_id
-                    FROM operations WHERE deleted_at IS NULL
+                    FROM ledger_entries WHERE deleted_at IS NULL
                     GROUP BY transaction_id
                     HAVING SUM(CASE WHEN type = 'CREDIT' THEN amount ELSE 0 END)
                         != SUM(CASE WHEN type = 'DEBIT'  THEN amount ELSE 0 END)

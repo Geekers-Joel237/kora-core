@@ -1,6 +1,6 @@
 package com.geekersjoel237.koracore.domain.model;
 
-import com.geekersjoel237.koracore.domain.enums.OperationType;
+import com.geekersjoel237.koracore.domain.enums.LedgerEntryType;
 import com.geekersjoel237.koracore.domain.enums.PaymentMethod;
 import com.geekersjoel237.koracore.domain.enums.TransactionType;
 import com.geekersjoel237.koracore.domain.exception.InvalidStateTransitionException;
@@ -26,8 +26,8 @@ class TransactionTest {
         );
     }
 
-    private Operation testOperation() {
-        return Operation.create(Id.generate(), OperationType.DEBIT, AMT, new Id("acc-001"));
+    private LedgerEntry testOperation() {
+        return LedgerEntry.create(Id.generate(), LedgerEntryType.DEBIT, AMT, new Id("acc-001"));
     }
 
     // ── Construction ──────────────────────────────────────────────────────────
@@ -39,7 +39,7 @@ class TransactionTest {
 
     @Test
     void should_create_transaction_with_empty_operations() {
-        assertTrue(createTestTransaction().operations().isEmpty());
+        assertTrue(createTestTransaction().entries().isEmpty());
     }
 
     @Test
@@ -55,8 +55,8 @@ class TransactionTest {
                 Id.generate(),
                 new Id("from-001"), new Id("to-001"),
                 TransactionType.CASH_IN, PaymentMethod.MOBILE_MONEY, AMT);
-        assertEquals(new Id("from-001"), tx.snapshot().fromId());
-        assertEquals(new Id("to-001"), tx.snapshot().toId());
+        assertEquals(new Id("from-001"), tx.snapshot().fromAccountId());
+        assertEquals(new Id("to-001"), tx.snapshot().toAccountId());
     }
 
     // ── SelfTransfer invariant ────────────────────────────────────────────────
@@ -73,7 +73,7 @@ class TransactionTest {
     void should_return_unmodifiable_operations_list() {
         Transaction tx = createTestTransaction();
         assertThrows(UnsupportedOperationException.class,
-                () -> tx.operations().add(testOperation()));
+                () -> tx.entries().add(testOperation()));
     }
 
     // ── recordDoubleEntry ─────────────────────────────────────────────────────
@@ -82,7 +82,7 @@ class TransactionTest {
     void should_add_two_operations_on_record_double_entry() {
         Transaction tx = createTestTransaction();
         tx.recordDoubleEntry(AMT, new Id("debit-acc"), new Id("credit-acc"));
-        assertEquals(2, tx.operations().size());
+        assertEquals(2, tx.entries().size());
     }
 
     @Test
@@ -90,10 +90,10 @@ class TransactionTest {
         Transaction tx = createTestTransaction();
         tx.recordDoubleEntry(AMT, new Id("debit-acc"), new Id("credit-acc"));
 
-        long debits  = tx.operations().stream()
-                .filter(op -> op.snapshot().type() == OperationType.DEBIT).count();
-        long credits = tx.operations().stream()
-                .filter(op -> op.snapshot().type() == OperationType.CREDIT).count();
+        long debits  = tx.entries().stream()
+                .filter(op -> op.snapshot().type() == LedgerEntryType.DEBIT).count();
+        long credits = tx.entries().stream()
+                .filter(op -> op.snapshot().type() == LedgerEntryType.CREDIT).count();
 
         assertEquals(1, debits);
         assertEquals(1, credits);

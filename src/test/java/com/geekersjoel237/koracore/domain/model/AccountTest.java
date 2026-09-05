@@ -144,7 +144,7 @@ class AccountTest {
         // Intentional design: float accounts are unbounded system accounts.
         // debit() is a no-op on the stored balance so that the treasury account
         // never blocks operations due to insufficient funds.
-        // Audit of float account movements must go through Operation ledger entries,
+        // Audit of float account movements must go through LedgerEntry rows,
         // not through balanceAmount. See ADR-001 and Account.debit() Javadoc.
         Account floatAccount = Account.createFloatAccount(Id.generate(), PROVIDER_ID);
         Amount largeDebit = Amount.of(BigDecimal.valueOf(1_000_000), "XAF");

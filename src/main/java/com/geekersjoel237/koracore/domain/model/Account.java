@@ -79,7 +79,7 @@ public class Account {
      *
      * <p>As a consequence, {@code balance_amount} on the float account row in the
      * database will always be 0, even after thousands of cash-in operations.
-     * <strong>Auditing the float account must go through the {@code Operation} entries
+     * <strong>Auditing the float account must go through the {@code LedgerEntry} rows
      * in the ledger</strong>, not through the stored balance.
      * See ADR-001 for the full rationale.
      *

@@ -1,6 +1,6 @@
 package com.geekersjoel237.koracore.domain.model;
 
-import com.geekersjoel237.koracore.domain.enums.OperationType;
+import com.geekersjoel237.koracore.domain.enums.LedgerEntryType;
 import com.geekersjoel237.koracore.domain.enums.PaymentMethod;
 import com.geekersjoel237.koracore.domain.enums.TransactionType;
 import com.geekersjoel237.koracore.domain.exception.CurrencyMismatchException;
@@ -24,11 +24,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Covers the two-phase API that PaymentTransactionalExecutor actually calls:
  * {@code initiate()} builds the transaction shell, {@code writeEntries()} writes
- * the ledger operations at capture time, {@code reverse()} writes the
+ * the ledger entries at capture time, {@code reverse()} writes the
  * compensating pair.
  *
  * <p>The former one-shot API (cashIn / cashOut / transfer) was removed. It was a
- * second way to build a Transaction — operations and all, in a single step —
+ * second way to build a Transaction — entries and all, in a single step —
  * which is the shape ADR-004 dismantled. Keeping it left the door open for the
  * problem to walk back in.
  */
@@ -58,23 +58,23 @@ class LedgerTest {
         return account.snapshot().accountId();
     }
 
-    private List<Id> accountsOf(Transaction tx, OperationType type) {
-        return tx.operations().stream()
+    private List<Id> accountsOf(Transaction tx, LedgerEntryType type) {
+        return tx.entries().stream()
                 .filter(op -> op.snapshot().type() == type)
                 .map(op -> op.snapshot().accountId())
                 .toList();
     }
 
-    private Amount sumByType(Transaction tx, OperationType type) {
-        return tx.operations().stream()
+    private Amount sumByType(Transaction tx, LedgerEntryType type) {
+        return tx.entries().stream()
                 .filter(op -> op.snapshot().type() == type)
                 .map(op -> op.snapshot().amount())
                 .reduce(Amount.of(BigDecimal.ZERO, "XAF"), Amount::add);
     }
 
     private boolean isDoubleEntryBalanced(Transaction tx) {
-        return sumByType(tx, OperationType.DEBIT).value()
-                .compareTo(sumByType(tx, OperationType.CREDIT).value()) == 0;
+        return sumByType(tx, LedgerEntryType.DEBIT).value()
+                .compareTo(sumByType(tx, LedgerEntryType.CREDIT).value()) == 0;
     }
 
     private Transaction initiateTransfer() {
@@ -95,8 +95,8 @@ class LedgerTest {
     void should_set_from_and_to_ids_from_the_accounts() {
         Transaction tx = ledger.initiate(floatAccount, customerAccount,
                 TransactionType.CASH_IN, PaymentMethod.MOBILE_MONEY, HUNDRED);
-        assertEquals(idOf(floatAccount), tx.snapshot().fromId());
-        assertEquals(idOf(customerAccount), tx.snapshot().toId());
+        assertEquals(idOf(floatAccount), tx.snapshot().fromAccountId());
+        assertEquals(idOf(customerAccount), tx.snapshot().toAccountId());
     }
 
     @Test
@@ -117,7 +117,7 @@ class LedgerTest {
      */
     @Test
     void should_record_no_operation_at_initiate() {
-        assertTrue(initiateTransfer().operations().isEmpty());
+        assertTrue(initiateTransfer().entries().isEmpty());
     }
 
     // ── initiate: guards ──────────────────────────────────────────────────────
@@ -209,7 +209,7 @@ class LedgerTest {
     void should_produce_exactly_two_operations_on_write_entries() {
         Transaction tx = initiateTransfer();
         ledger.writeEntries(tx, accountA, accountB, HUNDRED);
-        assertEquals(2, tx.operations().size());
+        assertEquals(2, tx.entries().size());
     }
 
     @Test
@@ -217,8 +217,8 @@ class LedgerTest {
         Transaction tx = initiateTransfer();
         ledger.writeEntries(tx, accountA, accountB, HUNDRED);
 
-        assertEquals(List.of(idOf(accountA)), accountsOf(tx, OperationType.DEBIT));
-        assertEquals(List.of(idOf(accountB)), accountsOf(tx, OperationType.CREDIT));
+        assertEquals(List.of(idOf(accountA)), accountsOf(tx, LedgerEntryType.DEBIT));
+        assertEquals(List.of(idOf(accountB)), accountsOf(tx, LedgerEntryType.CREDIT));
     }
 
     @Test
@@ -237,8 +237,8 @@ class LedgerTest {
         ledger.reverse(tx);
 
         // The reversal debits the original recipient and credits the original sender.
-        assertEquals(List.of(idOf(accountA), idOf(accountB)), accountsOf(tx, OperationType.DEBIT));
-        assertEquals(List.of(idOf(accountB), idOf(accountA)), accountsOf(tx, OperationType.CREDIT));
+        assertEquals(List.of(idOf(accountA), idOf(accountB)), accountsOf(tx, LedgerEntryType.DEBIT));
+        assertEquals(List.of(idOf(accountB), idOf(accountA)), accountsOf(tx, LedgerEntryType.CREDIT));
     }
 
     /**
@@ -250,7 +250,7 @@ class LedgerTest {
         Transaction tx = initiateTransfer();
         ledger.writeEntries(tx, accountA, accountB, HUNDRED);
         ledger.reverse(tx);
-        assertEquals(4, tx.operations().size());
+        assertEquals(4, tx.entries().size());
     }
 
     @Test
@@ -268,9 +268,9 @@ class LedgerTest {
         ledger.reverse(tx);
 
         // 100 written, 100 compensated → 200 on each side.
-        assertEquals(0, sumByType(tx, OperationType.DEBIT).value()
+        assertEquals(0, sumByType(tx, LedgerEntryType.DEBIT).value()
                 .compareTo(BigDecimal.valueOf(200)));
-        assertEquals(0, sumByType(tx, OperationType.CREDIT).value()
+        assertEquals(0, sumByType(tx, LedgerEntryType.CREDIT).value()
                 .compareTo(BigDecimal.valueOf(200)));
     }
 }

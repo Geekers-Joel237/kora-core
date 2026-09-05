@@ -7,7 +7,7 @@ against this file. Every statement describes code present on this branch.
 
 Kora Core is a Spring Boot wallet backend for mobile-money operations: cash-in,
 cash-out, P2P transfer, balance, history, operator reversal. Money moves as
-immutable double-entry operations on a transaction walking an 11-state
+immutable double-entry ledger entries on a transaction walking an 11-state
 lifecycle. Provider calls hit a configurable stub, not a real provider.
 
 ## 2. Build & run
@@ -39,13 +39,13 @@ Root `com.geekersjoel237.koracore`. Dependencies point inward only.
 
 ## 5. Domain vocabulary
 
-Use these names. `Order`, `PaymentPart`, `LedgerEntry`, `Money`, `ProviderReference` and `IdempotencyKey` do not exist here.
+Use these names. `Order`, `PaymentPart`, `Money`, `ProviderReference` and `IdempotencyKey` do not exist here.
 
 | Type | Role |
 |---|---|
-| `Transaction` | Aggregate root of a money movement; owns operations, state, history |
-| `Operation` | One ledger entry, `DEBIT` or `CREDIT`; append-only |
-| `Ledger` | Domain service creating transactions (`initiate`, `writeEntries`, `reverse`, `cashIn`, `cashOut`, `transfer`) |
+| `Transaction` | Aggregate root of a money movement; owns ledger entries, state, history |
+| `LedgerEntry` | One ledger entry, `DEBIT` or `CREDIT`; append-only. Table `ledger_entries` |
+| `Ledger` | Domain service creating transactions (`initiate`, `writeEntries`, `reverse`) |
 | `Account` | Balance holder; `CUSTOMER_ACCOUNT` or `FLOAT_ACCOUNT` |
 | `TrxStateHistoric` | Immutable audit row emitted on every state transition |
 | `AuthorizationRecord` | Provider authorization with TTL, used when capture fails |
@@ -62,9 +62,9 @@ Every aggregate exposes `snapshot()` returning an inner record, plus a static `c
 | Invariant | Enforced today |
 |---|---|
 | `SUM(DEBIT) == SUM(CREDIT)` per transaction and currency | Domain: `Transaction.verifyDoubleEntry()` runs after every `recordDoubleEntry()`. No DB constraint. Asserted in `FinancialInvariantsDbTest` and `MoneyIntegrityE2ETest` |
-| Ledger operations are append-only; a correction is a compensating entry | Application: `Ledger.reverse()` writes a mirrored pair; `JpaTransactionRepository.save()` only appends to the operations collection. No DB trigger |
-| Ledger operations are the source of truth for balance | Domain + ADR-001. `accounts.balance_amount` is a denormalized read cache updated in the same transaction as the ledger write; on divergence, `Operation` rows win. It is **not** derived on read |
-| Float account is unbounded | `Account.debit()` is a no-op for `FLOAT_ACCOUNT`, so its `balance_amount` stays 0; audit it through `operations` |
+| Ledger entries are append-only; a correction is a compensating entry | Application: `Ledger.reverse()` writes a mirrored pair; `JpaTransactionRepository.save()` only appends to the entries collection. No DB trigger |
+| Ledger entries are the source of truth for balance | Domain + ADR-001. `accounts.balance_amount` is a denormalized read cache updated in the same transaction as the ledger write; on divergence, `LedgerEntry` rows win. It is **not** derived on read |
+| Float account is unbounded | `Account.debit()` is a no-op for `FLOAT_ACCOUNT`, so its `balance_amount` stays 0; audit it through `ledger_entries` |
 | Money is `BigDecimal`, never `double` or `float` | `Amount.value` is `BigDecimal`; all money columns are `NUMERIC(19,4)` |
 | Currency is mandatory; cross-currency arithmetic forbidden | `Amount` compact constructor rejects a blank currency; `add` / `subtract` / `isGreaterThan*` throw `CurrencyMismatchException` |
 | No illegal state transition | Each `*State` class validates its own successors and throws `InvalidStateTransitionException`. Legal edges: INITIALIZED to AUTHORIZED, FAILED, AUTHORIZATION_FAILED; AUTHORIZED to CAPTURED, FAILED, AUTHORIZATION_FAILED, CAPTURE_FAILED, REVERSED; CAPTURED to SETTLEMENT_PENDING, CAPTURE_FAILED, REVERSED; SETTLEMENT_PENDING to SETTLED, SETTLEMENT_FAILED, REVERSED; SETTLED to COMPLETED, REVERSED; COMPLETED to REVERSED |
@@ -88,10 +88,10 @@ Assertions to apply to a diff. Each one is decidable by reading the diff alone.
 7. A state change written as a direct field assignment instead of going through
    the named methods on `Transaction` (`authorize()`, `capture()`, `settle()`,
    `markCompleted()`, `reverse()`, `fail*()`) is a defect.
-8. Any `UPDATE` or `DELETE` on `operations` or `trx_state_historics`, and any
-   `clear()` or `remove()` on the operations collection of `Transaction` or
+8. Any `UPDATE` or `DELETE` on `ledger_entries` or `trx_state_historics`, and any
+   `clear()` or `remove()` on the entries collection of `Transaction` or
    `TransactionEntity`, is a defect.
-9. A change to `accounts.balance_amount` not paired with `Operation` rows written
+9. A change to `accounts.balance_amount` not paired with `LedgerEntry` rows written
    in the same transaction is a defect.
 10. An `*Action` class in `web/api/**` containing branching on domain state,
     arithmetic, or repository access is a defect — it may only build a command,
@@ -147,5 +147,8 @@ Deliberate and tracked. Do not raise them on a PR.
 - `HELP.md` — engineering standards, DDD/SOLID rules, project conventions
 - `docs/kora-core-state-of-view.md` — engineering retrospective
 - `docs/adr/` — ADR-001 immutable ledger and balance cache · ADR-002 payment lifecycle and locking · ADR-003 single-call payment API · ADR-004 micro-transaction model · ADR-005 load-test calibration
-- `src/main/resources/db/migration/V202605270702__initial_schema.sql` — the whole schema
+- `src/main/resources/db/migration/` — `V202605270702__initial_schema.sql` creates the
+  whole schema; `V202609051542__rename_ledger_vocabulary.sql` renames
+  `operations` to `ledger_entries` and `from_id`/`to_id` to
+  `from_account_id`/`to_account_id`
 - `perf/PERF.md`, `perf/SIMULATION.md` — load-test procedure
