@@ -1,5 +1,6 @@
 package com.geekersjoel237.koracore.infrastructure.config;
 
+import com.geekersjoel237.koracore.domain.enums.Role;
 import com.geekersjoel237.koracore.infrastructure.security.JwtAuthenticationFilter;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
@@ -33,8 +34,8 @@ public class SecurityConfig {
                         .requestMatchers("/test/**").permitAll()   // perf profile only — read-only
                         .requestMatchers("/actuator/**").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
-                        .requestMatchers("/payments/**").hasRole("CUSTOMER")
-                        .requestMatchers("/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/payments/**").hasRole(Role.CUSTOMER.name())
+                        .requestMatchers("/admin/**").hasRole(Role.ADMIN.name())
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(ex -> ex

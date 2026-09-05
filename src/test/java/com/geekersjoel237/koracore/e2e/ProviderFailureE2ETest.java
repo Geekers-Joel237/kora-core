@@ -40,7 +40,7 @@ class ProviderFailureE2ETest {
 
             ResponseEntity<TransactionResponse> response = postWithToken(
                     "/payments/cash-in",
-                    new CashInRequest("1234", new BigDecimal("5000.00"), "XAF", "ORANGE_MONEY"),
+                    new CashInRequest("1234", new BigDecimal("5000"), "XAF", "ORANGE_MONEY"),
                     ctx.tokens().accessToken(),
                     TransactionResponse.class);
 
@@ -58,12 +58,12 @@ class ProviderFailureE2ETest {
             // Credit balance first via direct account manipulation (provider is broken, can't cash-in)
             var account = accountRepository.findByCustomerId(ctx.customerId()).orElseThrow();
             account.credit(com.geekersjoel237.koracore.domain.vo.Amount.of(
-                    new BigDecimal("10000.00"), "XAF"));
+                    new BigDecimal("10000"), "XAF"));
             accountRepository.save(account);
 
             ResponseEntity<TransactionResponse> response = postWithToken(
                     "/payments/cash-out",
-                    new CashOutRequest("1234", new BigDecimal("3000.00"), "XAF", "ORANGE_MONEY"),
+                    new CashOutRequest("1234", new BigDecimal("3000"), "XAF", "ORANGE_MONEY"),
                     ctx.tokens().accessToken(),
                     TransactionResponse.class);
 
@@ -94,7 +94,7 @@ class ProviderFailureE2ETest {
 
             ResponseEntity<TransactionResponse> response = postWithToken(
                     "/payments/cash-in",
-                    new CashInRequest("1234", new BigDecimal("5000.00"), "XAF", "ORANGE_MONEY"),
+                    new CashInRequest("1234", new BigDecimal("5000"), "XAF", "ORANGE_MONEY"),
                     ctx.tokens().accessToken(),
                     TransactionResponse.class);
 
@@ -110,7 +110,7 @@ class ProviderFailureE2ETest {
                     "fail-cap-bal@example.com", "FailCapBal", "+225", "07000009004", "1234");
 
             postWithToken("/payments/cash-in",
-                    new CashInRequest("1234", new BigDecimal("5000.00"), "XAF", "ORANGE_MONEY"),
+                    new CashInRequest("1234", new BigDecimal("5000"), "XAF", "ORANGE_MONEY"),
                     ctx.tokens().accessToken(), TransactionResponse.class);
 
             var account = accountRepository.findByCustomerId(ctx.customerId()).orElseThrow();

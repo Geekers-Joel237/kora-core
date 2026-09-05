@@ -5,6 +5,7 @@ import com.geekersjoel237.koracore.domain.enums.PaymentMethod;
 import com.geekersjoel237.koracore.domain.vo.Amount;
 import com.geekersjoel237.koracore.domain.vo.Id;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -16,7 +17,9 @@ public record CashInRequest(
         String rawPin,
 
         @NotNull(message = "Amount is required")
-        @DecimalMin(value = "0.01", message = "Amount must be greater than 0")
+        @DecimalMin(value = "1", message = "Amount must be at least 1 XAF")
+        @Digits(integer = 15, fraction = 0,
+                message = "XAF has no minor unit: amount must be a whole number")
         BigDecimal amount,
 
         @NotBlank(message = "Currency is required")

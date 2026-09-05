@@ -19,7 +19,7 @@ class BalanceE2ETest extends AbstractE2ETest {
     private static final String PREFIX    = "+225";
     private static final String PHONE     = "07000005001";
     private static final String PIN       = "4321";
-    private static final BigDecimal CASH_IN_AMOUNT = new BigDecimal("7500.00");
+    private static final BigDecimal CASH_IN_AMOUNT = new BigDecimal("7500");
 
     @Test
     void should_return_zero_balance_for_newly_registered_account() {

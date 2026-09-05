@@ -18,7 +18,7 @@ class CashInE2ETest extends AbstractE2ETest {
     private static final String PREFIX   = "+225";
     private static final String PHONE    = "07000002001";
     private static final String PIN      = "5678";
-    private static final BigDecimal AMOUNT = new BigDecimal("5000.00");
+    private static final BigDecimal AMOUNT = new BigDecimal("5000");
 
     @Test
     void should_cash_in_and_return_completed_transaction() {

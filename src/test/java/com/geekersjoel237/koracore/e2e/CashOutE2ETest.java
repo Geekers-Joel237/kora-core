@@ -18,8 +18,8 @@ class CashOutE2ETest extends AbstractE2ETest {
     private static final String PREFIX    = "+225";
     private static final String PHONE     = "07000004001";
     private static final String PIN       = "9876";
-    private static final BigDecimal CASH_IN_AMOUNT  = new BigDecimal("10000.00");
-    private static final BigDecimal CASH_OUT_AMOUNT = new BigDecimal("4000.00");
+    private static final BigDecimal CASH_IN_AMOUNT  = new BigDecimal("10000");
+    private static final BigDecimal CASH_OUT_AMOUNT = new BigDecimal("4000");
 
     @Test
     void should_cash_out_and_return_completed_transaction() {

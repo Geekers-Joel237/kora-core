@@ -25,7 +25,7 @@ class MoneyIntegrityE2ETest extends AbstractE2ETest {
 
     @Test
     void balance_is_zero_after_cash_in_and_equal_cash_out() {
-        BigDecimal amount = new BigDecimal("5000.00");
+        BigDecimal amount = new BigDecimal("5000");
         SetupData ctx = setupCustomerWithAccount("mi1@example.com", "MI1", "+225", "07000004001", "1234");
 
         postWithToken("/payments/cash-in",
@@ -42,7 +42,7 @@ class MoneyIntegrityE2ETest extends AbstractE2ETest {
 
     @Test
     void sum_of_all_operations_credits_minus_debits_is_zero() {
-        BigDecimal amount = new BigDecimal("2000.00");
+        BigDecimal amount = new BigDecimal("2000");
         SetupData ctx = setupCustomerWithAccount("mi2@example.com", "MI2", "+225", "07000004002", "1234");
 
         postWithToken("/payments/cash-in",
@@ -60,8 +60,8 @@ class MoneyIntegrityE2ETest extends AbstractE2ETest {
 
     @Test
     void transfer_keeps_total_balance_constant() {
-        BigDecimal cashIn   = new BigDecimal("10000.00");
-        BigDecimal transfer = new BigDecimal("4000.00");
+        BigDecimal cashIn   = new BigDecimal("10000");
+        BigDecimal transfer = new BigDecimal("4000");
 
         SetupData sender   = setupCustomerWithAccount("mi3s@example.com", "MI3S", "+225", "07000004003", "1234");
         SetupData receiver = setupCustomerWithAccount("mi3r@example.com", "MI3R", "+225", "07000004004", "5678");
@@ -85,7 +85,7 @@ class MoneyIntegrityE2ETest extends AbstractE2ETest {
     @Test
     void concurrent_cash_ins_all_return_200() throws Exception {
         int threadCount = 5;
-        BigDecimal perCashIn = new BigDecimal("1000.00");
+        BigDecimal perCashIn = new BigDecimal("1000");
 
         SetupData ctx = setupCustomerWithAccount("mi4@example.com", "MI4", "+225", "07000004005", "1234");
         String token = ctx.tokens().accessToken();
@@ -107,9 +107,9 @@ class MoneyIntegrityE2ETest extends AbstractE2ETest {
 
     @Test
     void double_entry_invariant_holds_after_multiple_operations() {
-        BigDecimal cashIn   = new BigDecimal("8000.00");
-        BigDecimal cashOut  = new BigDecimal("3000.00");
-        BigDecimal transfer = new BigDecimal("2000.00");
+        BigDecimal cashIn   = new BigDecimal("8000");
+        BigDecimal cashOut  = new BigDecimal("3000");
+        BigDecimal transfer = new BigDecimal("2000");
 
         SetupData sender   = setupCustomerWithAccount("mi5s@example.com", "MI5S", "+225", "07000004006", "1234");
         setupCustomerWithAccount("mi5r@example.com", "MI5R", "+225", "07000004007", "5678");

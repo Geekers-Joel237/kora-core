@@ -14,8 +14,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class TransferE2ETest extends AbstractE2ETest {
 
-    private static final BigDecimal CASH_IN_AMOUNT  = new BigDecimal("10000.00");
-    private static final BigDecimal TRANSFER_AMOUNT = new BigDecimal("3000.00");
+    private static final BigDecimal CASH_IN_AMOUNT  = new BigDecimal("10000");
+    private static final BigDecimal TRANSFER_AMOUNT = new BigDecimal("3000");
 
     @Test
     void should_transfer_funds_between_two_customers() {
