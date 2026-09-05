@@ -8,7 +8,7 @@
  * tokenExpiresAt en secondes depuis epoch (évite corruption des grands
  * entiers par la sérialisation JSON Go/k6 entre setup() et default()).
  *
- * Seed cashIn (100 000 XOF) : garantit un solde initial suffisant pour toute
+ * Seed cashIn (100 000 XAF) : garantit un solde initial suffisant pour toute
  * séquence aléatoire de cashOut/transfer avant le premier cashIn du scénario.
  * Sans ce seed, un VU qui tire cashOut ou transfer en première itération échoue
  * systématiquement (solde = 0 → InsufficientFundsException).
@@ -114,12 +114,12 @@ export function createTestUsers(n, prefix = 'user') {
         }
 
         // ── Seed cashIn ─────────────────────────────────────────────────────
-        // 100 000 XOF : couvre N itérations cashOut (5 000) + transfer (2 000)
-        // avant le premier cashIn du scénario. Le mix net est positif (+2 550 XOF/iter
+        // 100 000 XAF : couvre N itérations cashOut (5 000) + transfer (2 000)
+        // avant le premier cashIn du scénario. Le mix net est positif (+2 550 XAF/iter
         // en moyenne), le solde croît ensuite de lui-même.
         const seedRes = http.post(
             `${BASE_URL}/payments/cash-in`,
-            JSON.stringify({ rawPin: PIN, amount: 100_000, currency: 'XOF', paymentMethod: 'ORANGE_MONEY' }),
+            JSON.stringify({ rawPin: PIN, amount: 100_000, currency: 'XAF', paymentMethod: 'ORANGE_MONEY' }),
             { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` } }
         );
         if (seedRes.status !== 200) {

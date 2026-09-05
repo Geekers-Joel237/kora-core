@@ -36,7 +36,7 @@ Aucun jeton requis. Toute la branche `/auth/**` est ouverte.
 | `409` | E-mail déjà enregistré |
 | `503` | Échec d'envoi de l'e-mail |
 
-Effets de bord : crée l'utilisateur, le client et **son compte portefeuille** (solde 0, devise `XOF` en dur), puis envoie l'OTP.
+Effets de bord : crée l'utilisateur, le client et **son compte portefeuille** (solde 0, devise `XAF` en dur), puis envoie l'OTP.
 **Aucun jeton n'est délivré ici** — il faut passer par `/auth/verify-otp`.
 
 > **Observation vérifiée sur le code.** `User.create(...)` positionne le statut à `VERIFIED` **immédiatement**, avant toute vérification d'OTP. `UserStatus.PENDING` existe dans l'énumération mais n'est jamais attribué. L'OTP garde l'émission des jetons, il ne garde pas l'activation du compte. L'app ne doit donc **jamais** afficher d'état « compte en attente de vérification » — il n'existe pas. À rejouer après chaque livraison touchant `AuthService` : c'est un comportement susceptible de changer.
@@ -124,7 +124,7 @@ Rôle requis : `CUSTOMER`. Un jeton `ADMIN` reçoit `403` sur `/payments/**`.
   "accountId":     "3a91...",
   "accountNumber": "ACC-20260806-A3F91C2D",   // ACC-yyyyMMdd-<8 hex majuscules>
   "amount":         125000,                    // BigDecimal sérialisé en nombre JSON
-  "currency":      "XOF"
+  "currency":      "XAF"
 }
 ```
 
@@ -132,7 +132,7 @@ Rôle requis : `CUSTOMER`. Un jeton `ADMIN` reçoit `403` sur `/payments/**`.
 
 > `amount` arrive comme un **nombre JSON**. En JavaScript, il transite par un `double`. Voir §5 pour la règle de manipulation obligatoire.
 
-> **Devise.** `Account` crée tout compte client avec `Balance.zero("XOF")` **en dur**. `XOF` est aujourd'hui la seule devise existante dans le système. Le champ `currency` est donc constant en pratique — mais il doit être traité comme une donnée, jamais supposé.
+> **Devise.** `Account` crée tout compte client avec `Balance.zero("XAF")` **en dur**. `XAF` est aujourd'hui la seule devise existante dans le système. Le champ `currency` est donc constant en pratique — mais il doit être traité comme une donnée, jamais supposé.
 
 ### `POST /payments/cash-in` — dépôt
 
@@ -140,7 +140,7 @@ Rôle requis : `CUSTOMER`. Un jeton `ADMIN` reçoit `403` sur `/payments/**`.
 {
   "rawPin":        "1234",
   "amount":         50000,           // > 0.01
-  "currency":      "XOF",            // exactement 3 caractères
+  "currency":      "XAF",            // exactement 3 caractères
   "paymentMethod": "ORANGE_MONEY"    // chaîne libre — voir §4
 }
 ```
@@ -155,7 +155,7 @@ Corps strictement identique à `cash-in`.
 {
   "rawPin":        "1234",
   "amount":         25000,
-  "currency":      "XOF",
+  "currency":      "XAF",
   "toPhoneNumber": "+2250708091011"  // non vide
 }
 ```
@@ -169,7 +169,7 @@ Corps strictement identique à `cash-in`.
   "transactionNumber": "TRX-20260806-A3F91C2D",   // référence lisible, à afficher
   "state":             "COMPLETED",
   "amount":             50000,
-  "currency":          "XOF"
+  "currency":          "XAF"
 }
 ```
 
@@ -216,7 +216,7 @@ Paramètres, tous optionnels sauf indication :
       "direction":         "OUTBOUND",
       "state":             "COMPLETED",
       "amount":             25000,
-      "currency":          "XOF",
+      "currency":          "XAF",
       "paymentMethod":     "WALLET",
       "counterpart":       "+225070***011",   // null si CASH_IN / CASH_OUT
       "createdAt":         "2026-08-06T11:42:13Z",
@@ -371,25 +371,25 @@ Confondre les deux produit soit une boucle de rafraîchissement infinie, soit un
 
 `amount` est un `BigDecimal` côté Java, sérialisé en nombre JSON. Il devient un `double` en JavaScript.
 
-> **Le backend n'impose aucune échelle.** `Amount` est un `record(BigDecimal value, String currency)` sans normalisation ni contrôle de nombre de décimales. La seule contrainte est `@DecimalMin("0.01")` au niveau de la requête. Un `amount` de `100.5` en `XOF` serait **accepté**, alors que le franc CFA n'a pas de subdivision.
+> **Le backend n'impose aucune échelle.** `Amount` est un `record(BigDecimal value, String currency)` sans normalisation ni contrôle de nombre de décimales. La seule contrainte est `@DecimalMin("0.01")` au niveau de la requête. Un `amount` de `100.5` en `XAF` serait **accepté**, alors que le franc CFA n'a pas de subdivision.
 >
-> La règle « unité mineure entière » ci-dessous est donc une **convention client**, pas une garantie serveur. Deux conséquences : l'app n'émet jamais de décimale en `XOF`, et elle doit **tolérer** d'en recevoir une — arrondi à l'entier le plus proche à la réception, avec alerte en mode validation. À signaler côté backend : c'est un candidat naturel à un contrôle de domaine.
+> La règle « unité mineure entière » ci-dessous est donc une **convention client**, pas une garantie serveur. Deux conséquences : l'app n'émet jamais de décimale en `XAF`, et elle doit **tolérer** d'en recevoir une — arrondi à l'entier le plus proche à la réception, avec alerte en mode validation. À signaler côté backend : c'est un candidat naturel à un contrôle de domaine.
 
 **Aucune arithmétique en virgule flottante n'est autorisée sur un montant.**
 
 - À la réception : convertir immédiatement en entier de plus petite unité.
-- Pour le XOF, la plus petite unité **est le franc** — `exponent = 0`, aucune décimale.
+- Pour le XAF, la plus petite unité **est le franc** — `exponent = 0`, aucune décimale.
 - Toute somme, différence ou comparaison se fait sur des entiers.
 - La conversion vers un nombre décimal n'a lieu qu'au moment du formatage pour l'affichage.
 
 ```ts
 export const CURRENCY = {
-  XOF: { exponent: 0, symbol: 'F',  code: 'XOF' },
+  XAF: { exponent: 0, symbol: 'F',  code: 'XAF' },
   XAF: { exponent: 0, symbol: 'FCFA', code: 'XAF' },
   EUR: { exponent: 2, symbol: '€',  code: 'EUR' },
 } as const;
 
-// 125000 XOF  →  "125 000 F"   (espace fine insécable U+202F comme séparateur)
+// 125000 XAF  →  "125 000 F"   (espace fine insécable U+202F comme séparateur)
 ```
 
 Le backend ne pratique aucune conversion de devise. Un transfert dont la devise diffère de celle du compte lève `CurrencyMismatchException` → `422`.

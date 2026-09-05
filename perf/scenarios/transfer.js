@@ -21,7 +21,7 @@ const BASE_URL = __ENV.BASE_URL || 'http://localhost:8081';
  *
  * @param {object} sender         objet user complet (email, pin, accessToken, tokenExpiresAt)
  * @param {string} recipientPhone numéro complet du destinataire, ex: "+237620003141"
- * @param {number} amount         montant en XOF (défaut : 2 000)
+ * @param {number} amount         montant en XAF (défaut : 2 000)
  * @returns {object} réponse JSON du transfert
  */
 export function scenarioTransfer(sender, recipientPhone, amount = 2_000) {
@@ -32,7 +32,7 @@ export function scenarioTransfer(sender, recipientPhone, amount = 2_000) {
         JSON.stringify({
             rawPin:        sender.pin,
             amount,
-            currency:      'XOF',
+            currency:      'XAF',
             toPhoneNumber: recipientPhone,
         }),
         { headers: authHeaders(accessToken), tags: { operation: 'transfer' } }

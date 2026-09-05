@@ -15,7 +15,7 @@ class AuthorizationRecordTest {
 
     private static final Id TX_ID = new Id("tx-001");
     private static final String PROVIDER_REF = "provider-ref-abc";
-    private static final Amount AMOUNT = Amount.of(BigDecimal.valueOf(10_000), "XOF");
+    private static final Amount AMOUNT = Amount.of(BigDecimal.valueOf(10_000), "XAF");
     private static final Duration TTL_15_MIN = Duration.ofMinutes(15);
 
     private AuthorizationRecord freshRecord() {

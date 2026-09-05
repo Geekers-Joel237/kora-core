@@ -236,7 +236,7 @@ Un montant n'est **jamais** une simple chaîne de caractères. Il se compose en 
 Règles impératives :
 
 1. Séparateur de milliers : **espace fine insécable** `U+202F`. Ni virgule, ni point, ni espace normale.
-2. XOF et XAF s'affichent **sans décimale**. Jamais `125 000,00 F`.
+2. XAF et XAF s'affichent **sans décimale**. Jamais `125 000,00 F`.
 3. Le symbole suit le montant en franc CFA, séparé par une espace fine insécable.
 4. Le signe négatif est `U+2212` (moins mathématique), jamais `-` (trait d'union).
 5. Le signe `+` n'apparaît que sur les flux entrants, jamais sur un solde.

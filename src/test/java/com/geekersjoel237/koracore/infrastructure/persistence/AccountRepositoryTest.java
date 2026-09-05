@@ -30,7 +30,7 @@ class AccountRepositoryTest extends AbstractRepositoryTest {
         Id accountId = Id.generate();
         Id customerId = Id.generate();
         Account account = Account.createCustomerAccount(accountId, customerId);
-        account.credit(new Amount(new BigDecimal("100.00"), "XOF"));
+        account.credit(new Amount(new BigDecimal("100.00"), "XAF"));
 
         repository.save(account);
 
@@ -97,7 +97,7 @@ class AccountRepositoryTest extends AbstractRepositoryTest {
         duplicate.setResourceType(ResourceType.CUSTOMER_ACCOUNT);
         duplicate.setResourceId("fake-res");
         duplicate.setBalanceAmount(BigDecimal.ZERO);
-        duplicate.setBalanceCurrency("XOF");
+        duplicate.setBalanceCurrency("XAF");
         duplicate.setBlocked(false);
 
         assertThatThrownBy(() -> jpaRepository.saveAndFlush(duplicate))
@@ -119,7 +119,7 @@ class AccountRepositoryTest extends AbstractRepositoryTest {
         duplicate.setResourceType(ResourceType.CUSTOMER_ACCOUNT);
         duplicate.setResourceId(customerId.value());   // same resource_id → constraint violation
         duplicate.setBalanceAmount(BigDecimal.ZERO);
-        duplicate.setBalanceCurrency("XOF");
+        duplicate.setBalanceCurrency("XAF");
         duplicate.setBlocked(false);
 
         assertThatThrownBy(() -> jpaRepository.saveAndFlush(duplicate))
@@ -136,14 +136,14 @@ class AccountRepositoryTest extends AbstractRepositoryTest {
         BigDecimal val2 = new BigDecimal("0.2");
         BigDecimal sum = val1.add(val2);
 
-        account.credit(new Amount(sum, "XOF"));
+        account.credit(new Amount(sum, "XAF"));
         repository.save(account);
 
         Account found = repository.findById(accountId).orElseThrow();
         assertThat(found.snapshot().balance().solde().value()).isEqualByComparingTo("0.3");
 
         BigDecimal large = new BigDecimal("999999999.99");
-        account.credit(new Amount(large, "XOF"));
+        account.credit(new Amount(large, "XAF"));
         repository.save(account);
 
         found = repository.findById(accountId).orElseThrow();

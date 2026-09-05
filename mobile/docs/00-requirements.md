@@ -181,7 +181,7 @@ L'appareil socle est un Android à 8 Go de stockage, 3 Go de RAM, SoC d'entrée 
 |---|---|
 | NFR-60 | Français en langue par défaut, anglais en second, dès la V1 |
 | NFR-61 | Aucune chaîne de caractères visible n'est écrite en dur dans un composant |
-| NFR-62 | Le formatage monétaire respecte les conventions de la devise : **XOF s'affiche sans décimale** |
+| NFR-62 | Le formatage monétaire respecte les conventions de la devise : **XAF s'affiche sans décimale** |
 | NFR-63 | Les dates sont affichées dans le fuseau de l'appareil ; le backend émet exclusivement en UTC |
 
 ---

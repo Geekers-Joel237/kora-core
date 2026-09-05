@@ -20,7 +20,7 @@ public record CashOutRequest(
         BigDecimal amount,
 
         @NotBlank(message = "Currency is required")
-        @Size(min = 3, max = 3, message = "Currency must be a 3-letter ISO code (e.g. XOF)")
+        @Size(min = 3, max = 3, message = "Currency must be a 3-letter ISO code (e.g. XAF)")
         String currency,
 
         @NotBlank(message = "Payment method is required")

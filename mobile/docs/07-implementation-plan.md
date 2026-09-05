@@ -57,7 +57,7 @@ L'ordre n'est pas négociable : les lots 2 et 3 construisent le socle visuel et 
 - [x] Rafraîchissement en vol groupé, un seul rejeu — `06-architecture.md` §3.4
 - [x] Politique de reprise : `GET` seulement, **jamais** sur `/payments/*`
 - [x] `isOutcomeUnknown` calculé dans la couche HTTP, jamais dans un écran
-- [x] `src/lib/money/` — conversion entière, formatage à blocs, XOF sans décimale
+- [x] `src/lib/money/` — conversion entière, formatage à blocs, XAF sans décimale
 - [x] `src/lib/datetime.ts` — ISO-8601 UTC ↔ local, formats d'affichage
 - [x] `src/lib/storage/` — enveloppes SecureStore et MMKV
 - [x] `src/lib/capabilities.ts` — les 8 drapeaux `API_CAPABILITIES`, tous à `false`
@@ -70,7 +70,7 @@ L'ordre n'est pas négociable : les lots 2 et 3 construisent le socle visuel et 
 
 **Vérification** — **63 tests**, toutes passées :
 
-- `formatMinor(125000, 'XOF')` → `{ sign: '', integer: '125 000', symbol: 'F', fraction: null }` avec `U+202F` vérifié caractère par caractère
+- `formatMinor(125000, 'XAF')` → `{ sign: '', integer: '125 000', symbol: 'F', fraction: null }` avec `U+202F` vérifié caractère par caractère
 - Bornes `0`, `1`, `999999999` couvertes ; `U+2212` vérifié distinct de `-`
 - Un test prouve que `{status:401, error:'Unauthorized'}` déclenche **un** rafraîchissement puis un rejeu, et que `{status:401, detail:'Invalid PIN'}` n'en déclenche **aucun**
 - Trois `401` simultanés ne produisent **qu'un seul** `/auth/refresh`

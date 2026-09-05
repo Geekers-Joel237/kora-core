@@ -24,7 +24,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class TransactionRepositoryTest extends AbstractRepositoryTest {
 
-    private static final Amount AMOUNT_10K = new Amount(new BigDecimal("10000.00"), "XOF");
+    private static final Amount AMOUNT_10K = new Amount(new BigDecimal("10000.00"), "XAF");
     @Autowired
     private JpaTransactionRepository txRepository;
     @Autowired

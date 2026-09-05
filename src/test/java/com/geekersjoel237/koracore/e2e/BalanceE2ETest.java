@@ -34,7 +34,7 @@ class BalanceE2ETest extends AbstractE2ETest {
         assertThat(body.accountId()).isNotBlank();
         assertThat(body.accountNumber()).matches("ACC-\\d{8}-[A-Z0-9]{8}");
         assertThat(body.amount()).isEqualByComparingTo(BigDecimal.ZERO);
-        assertThat(body.currency()).isEqualTo("XOF");
+        assertThat(body.currency()).isEqualTo("XAF");
     }
 
     @Test
@@ -42,7 +42,7 @@ class BalanceE2ETest extends AbstractE2ETest {
         SetupData ctx = setupCustomerWithAccount(EMAIL, FULL_NAME, PREFIX, PHONE, PIN);
 
         postWithToken("/payments/cash-in",
-                new CashInRequest(PIN, CASH_IN_AMOUNT, "XOF", "ORANGE_MONEY"),
+                new CashInRequest(PIN, CASH_IN_AMOUNT, "XAF", "ORANGE_MONEY"),
                 ctx.tokens().accessToken(), TransactionResponse.class);
 
         ResponseEntity<BalanceResponse> response = getWithToken(
@@ -58,10 +58,10 @@ class BalanceE2ETest extends AbstractE2ETest {
         SetupData ctx = setupCustomerWithAccount(EMAIL, FULL_NAME, PREFIX, PHONE, PIN);
 
         postWithToken("/payments/cash-in",
-                new CashInRequest(PIN, CASH_IN_AMOUNT, "XOF", "ORANGE_MONEY"),
+                new CashInRequest(PIN, CASH_IN_AMOUNT, "XAF", "ORANGE_MONEY"),
                 ctx.tokens().accessToken(), TransactionResponse.class);
         postWithToken("/payments/cash-in",
-                new CashInRequest(PIN, CASH_IN_AMOUNT, "XOF", "ORANGE_MONEY"),
+                new CashInRequest(PIN, CASH_IN_AMOUNT, "XAF", "ORANGE_MONEY"),
                 ctx.tokens().accessToken(), TransactionResponse.class);
 
         ResponseEntity<BalanceResponse> response = getWithToken(

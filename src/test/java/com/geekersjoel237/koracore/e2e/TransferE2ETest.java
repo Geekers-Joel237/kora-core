@@ -24,13 +24,13 @@ class TransferE2ETest extends AbstractE2ETest {
 
         // Fund sender first
         postWithToken("/payments/cash-in",
-                new CashInRequest("1234", CASH_IN_AMOUNT, "XOF", "ORANGE_MONEY"),
+                new CashInRequest("1234", CASH_IN_AMOUNT, "XAF", "ORANGE_MONEY"),
                 sender.tokens().accessToken(), TransactionResponse.class);
 
         String receiverPhone = "+22507000003002";
         ResponseEntity<TransactionResponse> response = postWithToken(
                 "/payments/transfer",
-                new TransferRequest("1234", TRANSFER_AMOUNT, "XOF", receiverPhone),
+                new TransferRequest("1234", TRANSFER_AMOUNT, "XAF", receiverPhone),
                 sender.tokens().accessToken(),
                 TransactionResponse.class);
 
@@ -45,11 +45,11 @@ class TransferE2ETest extends AbstractE2ETest {
         SetupData receiver = setupCustomerWithAccount("rcv2@example.com", "Receiver2", "+225", "07000003004", "5678");
 
         postWithToken("/payments/cash-in",
-                new CashInRequest("1234", CASH_IN_AMOUNT, "XOF", "ORANGE_MONEY"),
+                new CashInRequest("1234", CASH_IN_AMOUNT, "XAF", "ORANGE_MONEY"),
                 sender.tokens().accessToken(), TransactionResponse.class);
 
         postWithToken("/payments/transfer",
-                new TransferRequest("1234", TRANSFER_AMOUNT, "XOF", "+22507000003004"),
+                new TransferRequest("1234", TRANSFER_AMOUNT, "XAF", "+22507000003004"),
                 sender.tokens().accessToken(), TransactionResponse.class);
 
         var senderAccount   = accountRepository.findByCustomerId(sender.customerId()).orElseThrow();
@@ -69,7 +69,7 @@ class TransferE2ETest extends AbstractE2ETest {
         // No cash-in → balance is 0
         ResponseEntity<String> response = postWithToken(
                 "/payments/transfer",
-                new TransferRequest("1234", TRANSFER_AMOUNT, "XOF", "+22507000003006"),
+                new TransferRequest("1234", TRANSFER_AMOUNT, "XAF", "+22507000003006"),
                 sender.tokens().accessToken(),
                 String.class);
 
@@ -81,12 +81,12 @@ class TransferE2ETest extends AbstractE2ETest {
         SetupData sender = setupCustomerWithAccount("snd4@example.com", "Sender4", "+225", "07000003007", "1234");
 
         postWithToken("/payments/cash-in",
-                new CashInRequest("1234", CASH_IN_AMOUNT, "XOF", "ORANGE_MONEY"),
+                new CashInRequest("1234", CASH_IN_AMOUNT, "XAF", "ORANGE_MONEY"),
                 sender.tokens().accessToken(), TransactionResponse.class);
 
         ResponseEntity<String> response = postWithToken(
                 "/payments/transfer",
-                new TransferRequest("1234", TRANSFER_AMOUNT, "XOF", "+22500000000001"),
+                new TransferRequest("1234", TRANSFER_AMOUNT, "XAF", "+22500000000001"),
                 sender.tokens().accessToken(),
                 String.class);
 
@@ -98,12 +98,12 @@ class TransferE2ETest extends AbstractE2ETest {
         SetupData sender = setupCustomerWithAccount("snd5@example.com", "Sender5", "+225", "07000003009", "1234");
 
         postWithToken("/payments/cash-in",
-                new CashInRequest("1234", CASH_IN_AMOUNT, "XOF", "ORANGE_MONEY"),
+                new CashInRequest("1234", CASH_IN_AMOUNT, "XAF", "ORANGE_MONEY"),
                 sender.tokens().accessToken(), TransactionResponse.class);
 
         ResponseEntity<String> response = postWithToken(
                 "/payments/transfer",
-                new TransferRequest("1234", TRANSFER_AMOUNT, "XOF", "+22507000003009"),
+                new TransferRequest("1234", TRANSFER_AMOUNT, "XAF", "+22507000003009"),
                 sender.tokens().accessToken(),
                 String.class);
 
@@ -116,12 +116,12 @@ class TransferE2ETest extends AbstractE2ETest {
         setupCustomerWithAccount("rcv6@example.com", "Receiver6", "+225", "07000003011", "5678");
 
         postWithToken("/payments/cash-in",
-                new CashInRequest("1234", CASH_IN_AMOUNT, "XOF", "ORANGE_MONEY"),
+                new CashInRequest("1234", CASH_IN_AMOUNT, "XAF", "ORANGE_MONEY"),
                 sender.tokens().accessToken(), TransactionResponse.class);
 
         ResponseEntity<String> response = postWithToken(
                 "/payments/transfer",
-                new TransferRequest("0000", TRANSFER_AMOUNT, "XOF", "+22507000003011"),
+                new TransferRequest("0000", TRANSFER_AMOUNT, "XAF", "+22507000003011"),
                 sender.tokens().accessToken(),
                 String.class);
 

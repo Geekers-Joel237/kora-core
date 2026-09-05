@@ -26,7 +26,7 @@ class PaymentLifecycleE2ETest extends AbstractE2ETest {
     private static final String PHONE     = "690000099";
     private static final String PIN       = "4321";
     private static final BigDecimal AMOUNT   = new BigDecimal("10000.00");
-    private static final String CURRENCY = "XOF";
+    private static final String CURRENCY = "XAF";
     private static final String METHOD   = "ORANGE_MONEY";
 
     @Autowired

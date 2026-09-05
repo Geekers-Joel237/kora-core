@@ -61,7 +61,7 @@ Aucun de ces trois points n'est un défaut de code : ce sont des vérifications 
 - ☑︎ Aucun dégradé hors halo d'accent spécifié
 - ☑︎ Aucune ombre portée en thème sombre hors `elevation.4`
 - ✅ Tout montant utilise des chiffres tabulaires — *`Amount` impose `tabular`, testé*
-- ✅ Tout montant XOF s'affiche sans décimale — *`money.test.ts`*
+- ✅ Tout montant XAF s'affiche sans décimale — *`money.test.ts`*
 - ✅ Le séparateur de milliers est `U+202F`, le signe négatif `U+2212` — *vérifié caractère par caractère*
 - ☑︎ Le rayon d'un élément imbriqué vaut `rayon du parent − padding`
 - ✅ Aucun montant sortant n'est coloré en rouge — *`theme.flow.outbound` distinct de `status.failed`, testé*
@@ -175,7 +175,7 @@ Trois faits pour trancher :
 | # | Scénario | Attendu |
 |---|---|---|
 | 1 | Inscription → OTP MailDev → accueil | Aboutit sans accroc, solde à 0 |
-| 2 | Dépôt de 50 000 XOF via Orange Money | Succès, solde animé de 0 à 50 000 |
+| 2 | Dépôt de 50 000 XAF via Orange Money | Succès, solde animé de 0 à 50 000 |
 | 3 | Transfert de 25 000 vers un second compte | Succès, case de vérification exigée |
 | 4 | Retrait de 10 000 | Succès |
 | 5 | Retrait supérieur au solde | Bloqué avant soumission, secousse |
