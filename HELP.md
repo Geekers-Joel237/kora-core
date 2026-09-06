@@ -12,11 +12,11 @@ The goal is to apply modern Java/Spring engineering practices **rigorously**, wi
 - JVM tooling: JFR / async-profiler (later stages)
 
 ### Frameworks
-- **Spring Boot 3.x**
-- Spring Web (REST)
+- **Spring Boot 4.0.3** (Spring Framework 7)
+- Spring Web MVC (REST)
 - Spring Validation
-- Spring Data JPA (or JDBC where appropriate)
-- Spring Security (later stage, when auth/risk is introduced)
+- Spring Data JPA for writes, `NamedParameterJdbcTemplate` for reads
+- Spring Security — in place: JWT, refresh tokens, `ROLE_CUSTOMER` / `ROLE_ADMIN`
 
 ### Data & Messaging
 - PostgreSQL (preferred) or MySQL
@@ -69,37 +69,43 @@ We use **TDD** with three test layers. The goal is not “high coverage”, but 
 **Scope**
 - Domain model (entities, value objects)
 - Domain services
-- Application services/use cases (with ports mocked)
+- Interactors, driven by hand-written in-memory adapters
 
 **Rules**
 - No Spring context
 - No DB
 - No network
 - Execution time: seconds
+- **No mocking framework.** There is no Mockito on the classpath. A port is faked by
+  a real in-memory implementation in `<module>/unit/doubles/`, which can be asserted
+  against and reused. A double that answers differently from the thing it replaces is
+  the bug a mock cannot show you — it has happened here twice.
 
 **Examples**
 - Ledger invariants: `sum(debits) == sum(credits)`
 - Payment lifecycle transitions are valid/invalid
-- Idempotency behavior for same key
+- Which direction a transfer reads as, from each party's side
 
 ---
 
 ### 3.2 Integration Tests (Real infrastructure, limited scope)
 **Scope**
-- Repository adapters
+- Repository adapters and the JDBC read adapters
 - DB constraints, indexes, transaction isolation behavior
-- Outbox insertion logic
 
 **Rules**
 - Real DB (Testcontainers)
 - Spring context allowed but minimal
 - Verify SQL queries and transaction boundaries
-- Use `@DataJpaTest` or sliced tests where possible
+- **No `@DataJpaTest`, no `@AutoConfigureTestDatabase`** — both were removed in
+  Spring Boot 4. Extend `AbstractRepositoryTest`: `@SpringBootTest` + `@Transactional`
+  + a static `PostgreSQLContainer` wired through `@DynamicPropertySource`.
+- No HTTP at this level; that is e2e, and `TestPyramidTest` asserts it
 
 **Examples**
-- Verify unique constraint prevents duplicate idempotency keys
-- Verify ledger entries persist atomically with transaction record
-- Verify optimistic/pessimistic locking behavior under contention
+- Verify ledger entries persist atomically with the transaction record
+- Verify optimistic locking behaviour under contention
+- Verify a history page's SQL scopes, filters and folds its joins correctly
 
 ---
 
@@ -114,9 +120,14 @@ We use **TDD** with three test layers. The goal is not “high coverage”, but 
 - Run in CI (can be slower)
 
 **Examples**
-- `/payments` creates an Order + N payment parts and progresses state
-- Retry of the same request returns same outcome (idempotency)
-- Partial failure then manual retry of one part completes the global order
+- `POST /payments/cash-in` walks INITIALIZED → AUTHORIZED → CAPTURED → … → COMPLETED
+- A provider refusal leaves the transaction in `AUTHORIZATION_FAILED` and the balance
+  untouched
+- `POST /payments/transfer` moves money between two wallets with the ledger balanced
+  at every step
+
+Idempotency is **not** covered here yet — there is no idempotency store (Étape 4 of
+`ROADMAP.md`). A client retry currently creates a second `INITIALIZED` transaction.
 
 ---
 
@@ -150,22 +161,24 @@ Fintech systems require:
 - correctness under failure
 
 ### DDD Building Blocks
-- **Bounded Contexts** (evolves with roadmap):
-    - Payments
-    - Ledger
-    - Risk
-    - Reconciliation
+
+The vocabulary below is the one in the code. `CLAUDE.md` §5 is the authoritative table;
+`Order`, `PaymentPart`, `Money`, `ProviderReference` and `IdempotencyKey` are names this
+project deliberately does **not** use.
+
+- **Modules** (today): `auth`, `payment`, `shared` — the kernel. Risk and reconciliation
+  arrive with Étapes 6 and 8.
 - **Aggregates**:
-    - `Order` (payment intent) as aggregate root
-    - `Ledger` behavior may be modeled via services + invariants
+    - `Transaction` — the money movement, aggregate root; owns its ledger entries,
+      its state and its history
+    - `Account` — the balance holder
+    - `Ledger` — a domain service, not an aggregate: it creates transactions and
+      enforces the double-entry invariant
 - **Value Objects**:
-    - `Money(amount, currency)`
-    - `ProviderReference`
-    - `IdempotencyKey`
-- **Domain Events** (later stage):
-    - `PaymentPartSucceeded`
-    - `OrderCompleted`
-    - `ReconciliationMismatchDetected`
+    - `Amount(BigDecimal value, String currency)` — the money type
+    - `Id`, `Msisdn`, `Pin` in the kernel; `PhoneNumber`, `OtpCode` in auth
+- **Domain Events** (later stage, Étape 5):
+    - not implemented; no event type exists yet
 
 ### DDD Rules
 - Business logic belongs in the domain (not in controllers)
@@ -198,28 +211,38 @@ We use patterns only when they remove real complexity:
 
 We evolve architecture only when justified.
 
-### Phase A — Monolith (strict separation)
-- Domain + application logic separated from web layer
+### Phase A — Monolith (strict separation) — done
+- Domain + application logic separated from the web layer
 
-### Phase B — Modular Monolith
-- Clear modules (payments/ledger/risk/recon)
-- Explicit boundaries and ownership
+### Phase B — Hexagonal — done
+- **Domain**: pure, JDK only
+- **Application**: interactors, commands, queries — no foreign type at all
+- **Ports**: `ports/in` driving, `ports/out` driven
+- **Adapters**: `adapters/in` (REST, bus), `adapters/out` (JPA, JDBC, provider, mail)
+- **Config**: the composition root, and the only place Spring wires anything
 
-### Phase C — Hexagonal
-- **Domain**: pure (no Spring imports)
-- **Application**: use cases, ports
-- **Infrastructure**: adapters (DB, messaging, providers)
-- **Web/API**: controllers only
+### Phase C — Modular Monolith — done
+- `auth`, `payment`, `shared`; the kernel names no module
 
-**Rule:** No Spring annotations in domain model.
+**Phases B and C are in this order on purpose**, against the original roadmap. Drawing
+module boundaries over an unclear layering freezes the framework dependency into the
+module contract, and unpicking it afterwards means moving every file twice. See
+ADR-007.
+
+There is no `infrastructure/` package and no `web/` package. Both were replaced by
+`adapters/out` and `adapters/in`, which name the direction rather than the technology.
+
+**Rule:** No Spring annotations in the domain model — and none in `application/` or
+`ports/` either, asserted by an allow-list that is currently empty.
 
 ---
 
 ## 8) DevOps Standards
 
 ### Local Environment
-- `docker-compose.yml` for DB, Redis, Kafka (when needed)
-- one command bootstrap: `make up` / `./gradlew bootRun`
+- `docker-compose.yml` plus `.override.yml` and `.prod.yml`; services are selected by
+  `COMPOSE_PROFILES`, not by commenting blocks out (ADR-006, `CONTRIBUTING.md` §3.2)
+- bootstrap: `docker compose up -d` then `./gradlew bootRun`. There is no Makefile.
 
 ### CI/CD (baseline)
 Pipeline must include:
@@ -275,8 +298,10 @@ Every stage should produce **evidence**:
 ## 11) Project Conventions
 
 ### Naming
-- Use business names in domain: `Order`, `PaymentPart`, `LedgerEntry`
-- Avoid technical names in domain (no “Entity”, “DTO” in domain types)
+- Use the business names this project actually uses: `Transaction`, `LedgerEntry`,
+  `Account`, `Ledger`, `AuthorizationRecord`. `CLAUDE.md` §5 is the reference.
+- Avoid technical names in domain types (no “Entity”, “DTO”). `*Entity` is reserved
+  for the JPA adapter, where it is accurate.
 
 ### Error Handling
 - Domain errors are explicit (typed)
@@ -293,7 +318,9 @@ Every stage should produce **evidence**:
 ## 12) Expected Outcomes (What you should be able to explain)
 
 By progressing through this project, you should be able to answer:
-- Why ledgers are immutable and balance is derived
+- Why ledgers are immutable, and why the balance here is a **denormalized cache**
+  written in the same transaction as the entries rather than derived on read — the
+  trade-off, and what makes the entries the source of truth anyway (ADR-001)
 - How to design idempotency under retries/timeouts
 - How to handle partial failures without breaking trust
 - How to reconcile internal vs provider statements

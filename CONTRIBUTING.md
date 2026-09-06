@@ -48,16 +48,17 @@ docker --version
 kora-core/
 ├── src/
 │   ├── main/java/com/geekersjoel237/koracore/
-│   │   ├── application/        # Use cases, commands, application services
-│   │   ├── domain/             # Entities, value objects, domain events, ports
-│   │   ├── infrastructure/     # JPA adapters, security, mail, providers
-│   │   └── web/                # REST controllers, DTOs, exception handlers
+│   │   └── <module>/           # auth · payment · shared
+│   │       ├── domain/         # model, model/state, vo, enums, exception
+│   │       ├── application/    # usecases, command, query, result
+│   │       ├── ports/          # in (driving) · out (driven)
+│   │       ├── adapters/       # in (REST, bus) · out (JPA, JDBC, provider, mail)
+│   │       └── config/         # the composition root
 │   └── test/java/
-│       ├── application/        # Unit tests — in-memory repositories
-│       ├── domain/             # Domain model and value object tests
-│       ├── e2e/                # End-to-end tests — real HTTP + Testcontainers
-│       ├── infrastructure/     # JPA repository tests — Testcontainers
-│       └── shared/inmemory/    # Shared in-memory test doubles
+│       └── <module>/           # the same three modules
+│           ├── unit/           # no context, no container — domain, application, doubles
+│           ├── integration/    # Testcontainers, no HTTP — persistence, query
+│           └── e2e/            # real HTTP + Testcontainers
 ├── perf/                       # k6 load tests, Grafana dashboards, runbook
 ├── docs/
 │   └── adr/                    # Architecture Decision Records
@@ -69,15 +70,30 @@ kora-core/
 
 ### Architecture layers
 
-KORA Core follows Hexagonal Architecture. The dependency rule is strict:
+KORA Core has a hexagonal interior and three top-level packages. It is **not yet a
+modular monolith**: there is one Gradle project and one `@SpringBootApplication`, so
+the module boundary is asserted by a test rather than enforced by the build, and
+`auth` and `payment` still share domain models. Étape 2 is open — see `ROADMAP.md`.
+
+The dependency rule inside a module is strict:
 
 ```
-web → application → domain ← infrastructure
+adapters/in → ports/in → application → domain ← ports/out ← adapters/out
+                                ↑
+                             config wires it all
 ```
 
-The `domain` package has zero Spring dependencies.
-The `application` package depends only on domain interfaces (ports).
-Infrastructure implements those ports and is wired by Spring.
+- `domain/` names the JDK and `shared/domain`. Nothing else.
+- `application/` and `ports/` name **no foreign type at all** — not Spring, not
+  Jakarta, not a JSON binding. `HexagonalArchitectureTest` compares every foreign
+  import against `FRAMEWORK_ALLOW_LIST`, which is empty.
+- `adapters/` implement the ports; `config/` is the only place Spring wires anything.
+- `shared/` is the kernel: it names neither `auth` nor `payment`. What those two still
+  take from each other is recorded as an equality in `ModuleBoundariesTest`, so a new
+  coupling fails the build and closing one fails it too.
+
+There is no `infrastructure/` package and no `web/` package. See ADR-007 for why the
+hexagonal split was done before the modules rather than after.
 
 ---
 
@@ -429,31 +445,34 @@ curl -s "http://localhost:8081/test/otp/anyone%40test.com"
 All test commands assume the infrastructure services are up
 (`docker compose up -d`).
 
+The test tree states the pyramid level first, so a level is a package selector.
+`TestPyramidTest` checks that the statement is true: no `@SpringBootTest` under
+`unit/`, no HTTP client under `integration/`, and nothing outside the three levels.
+
 ### Unit tests (no Docker required)
 
-These tests use in-memory repositories and run without any external dependency:
+In-memory adapters, no Spring context, no external dependency:
 
 ```bash
-./gradlew test --tests "com.geekersjoel237.koracore.application.*"
-./gradlew test --tests "com.geekersjoel237.koracore.domain.*"
+./gradlew test --tests "com.geekersjoel237.koracore.*.unit.*"
+./gradlew test --tests "com.geekersjoel237.koracore.payment.unit.*"
 ```
 
-### JPA / repository tests (Testcontainers)
+### Integration tests (Testcontainers)
 
-These tests spin up a real PostgreSQL container automatically via Testcontainers.
-Docker must be running. No manual configuration required:
+A real PostgreSQL container, started automatically. Docker must be running:
 
 ```bash
-./gradlew test --tests "com.geekersjoel237.koracore.infrastructure.persistence.*"
+./gradlew test --tests "com.geekersjoel237.koracore.*.integration.*"
 ```
 
 ### End-to-end tests (Testcontainers + real HTTP)
 
-Full HTTP stack tests — real Spring Boot server, real PostgreSQL container,
-real financial invariant assertions via JDBC:
+Full HTTP stack — real Spring Boot server, real PostgreSQL container, financial
+invariants asserted through JDBC:
 
 ```bash
-./gradlew test --tests "com.geekersjoel237.koracore.e2e.*"
+./gradlew test --tests "com.geekersjoel237.koracore.*.e2e.*"
 ```
 
 ### Full test suite
@@ -462,21 +481,21 @@ real financial invariant assertions via JDBC:
 ./gradlew test
 ```
 
-Test coverage is measured by JaCoCo. The load pipeline enforces a minimum
-threshold — check `build.gradle` for the current gate value.
+There is no coverage gate. Coverage is not the target — the architecture tests in
+`shared/unit/architecture/` are, and they fail the build.
 
 ### Running a single test class
 
 ```bash
-./gradlew test --tests "com.geekersjoel237.koracore.e2e.CashInE2ETest"
-./gradlew test --tests "com.geekersjoel237.koracore.e2e.PaymentLifecycleE2ETest"
+./gradlew test --tests "*CashInE2ETest"
+./gradlew test --tests "com.geekersjoel237.koracore.payment.e2e.PaymentLifecycleE2ETest"
 ```
 
 ### Test profiles
 
-Tests run with `@ActiveProfiles("test")` and read
-`src/test/resources/application.yaml`, which shadows the base file on the test
-classpath. That is deliberate: the suite reads no environment variable and needs
+Tests run with `@ActiveProfiles("test")`. `src/test/resources/application.yaml`
+shadows the base file on the test classpath, and `application-test.yaml` layers the
+profile on top. That is deliberate: the suite reads no environment variable and needs
 no `.env`. This configuration:
 - Uses a fixed, literal JWT key, independent from any environment
 - Disables real SMTP (`TestMailConfig` replaces `SmtpMailAdapter` with an in-memory stub)
@@ -525,27 +544,36 @@ SPRING_PROFILES_ACTIVE=perf ./gradlew bootRun
 
 ### Package structure
 
-Follow the existing hexagonal layers strictly. If you are unsure where something
-belongs, ask: *does this depend on Spring or an external library?*
+Two questions, in order. First: **which module?** `auth` owns identity, credentials
+and the OTP challenge; `payment` owns accounts, the ledger and the provider; `shared`
+owns what neither may claim — and `shared` may name neither of the other two.
 
-- **Yes** → it belongs in `infrastructure`
-- **No, it's a use case** → it belongs in `application`
-- **No, it's a business rule** → it belongs in `domain`
+Then: **which layer?**
 
-The `domain` package must never import anything from Spring, JPA, or any
-infrastructure library. This is enforced by the test suite — domain tests
-run without Spring context.
+- *Does it depend on Spring or any external library?* → `adapters/`
+- *Is it a use case?* → `application/usecases/`
+- *Is it an interface the use case needs?* → `ports/out/`, or `ports/in` if it is the
+  use case's own entry point
+- *Is it a business rule?* → `domain/`
+- *Is it wiring?* → `config/`
+
+`domain/`, `application/` and `ports/` must import nothing outside the JDK and this
+repository. Enforced by `HexagonalArchitectureTest` as an allow-list comparison, not
+a grep: adding a foreign type costs a line there and the sentence that justifies it.
 
 ### Domain model conventions
 
 - Use **snapshots** to expose domain state read-only.
   Never return mutable domain objects from repositories.
-- Use **Value Objects** for all financial primitives: `Amount`, `Balance`, `Id`,
-  `PhoneNumber`. Never use raw `BigDecimal`, `String`, or `Long` for financial data.
-- Use **sealed state classes** for transaction state machine transitions.
-  Never expose `setState()` on domain entities.
+- Use **Value Objects** for every primitive that means something: `Amount`, `Balance`,
+  `Id`, `Msisdn`, `Pin`, `PhoneNumber`, `OtpCode`. Never a raw `BigDecimal`, `String`
+  or `Long` for financial or identifying data. Conversion happens once, in
+  `Request.toCommand()` at the web edge.
+- Use **state classes** for transaction lifecycle transitions; each validates its own
+  successors. Never expose `setState()` on a domain entity.
 - **Double-entry invariant**: every `Transaction` must have `SUM(DEBIT) == SUM(CREDIT)`
-  before being persisted. `Ledger.verifyDoubleEntry()` enforces this.
+  before being persisted. `Transaction.verifyDoubleEntry()` enforces it, privately,
+  after every `recordDoubleEntry()`.
 
 ### Currency and precision
 
@@ -571,9 +599,19 @@ double amount = 10000.00;
 
 ### Exception handling
 
-Domain exceptions extend `BusinessException`. They are mapped to HTTP status
-codes in `GlobalExceptionHandler`. Do not catch `BusinessException` in the
-application or domain layer — let them propagate.
+Domain exceptions extend `BusinessException`. They are mapped to HTTP status codes in
+the module's handler — `AuthExceptionHandler`, `PaymentExceptionHandler` — or in
+`SharedExceptionHandler` for what the kernel raises. There is no single
+`GlobalExceptionHandler`.
+
+Do not catch a `BusinessException` to swallow it. **Throwing one inside
+`TransactionBoundary.execute` is how a use case rolls back**, so catching it silently
+commits work the domain refused.
+
+There is one legitimate reason to catch: **compensating**. `CashInService` catches
+`ProviderException` between phases and writes the failure to the ledger, because at
+that point TX-1 has already committed and the transaction must not be left dangling.
+A catch that does not compensate is a defect.
 
 Never return sensitive information in error responses. `ProblemDetail` (RFC 9457)
 is the standard response format for all errors.
@@ -782,15 +820,19 @@ All significant architectural decisions are recorded in `docs/adr/`.
 | ADR | Decision | Status |
 |---|---|---|
 | [ADR-001](./docs/adr/ADR-001-immutable-ledger.md) | Immutable double-entry ledger with denormalized balance cache | Accepted |
-| [ADR-002](./docs/adr/ADR-002-payment-lifecycle.md) | Payment lifecycle state machine: INITIATED → AUTHORIZED → CAPTURED → SETTLEMENT_PENDING → SETTLED → COMPLETED | Accepted |
+| [ADR-002](./docs/adr/ADR-002-payment-lifecycle.md) | Payment lifecycle state machine: INITIALIZED → AUTHORIZED → CAPTURED → SETTLEMENT_PENDING → SETTLED → COMPLETED | Accepted |
 | [ADR-003](./docs/adr/ADR-003-payment-api-design.md) | Payment lifecycle fully orchestrated inside cashIn/cashOut/transfer — no separate authorize/capture API | Accepted |
+| [ADR-004](./docs/adr/ADR-004-micro-transaction-optimization.md) | Micro-transaction model: TX-1 / provider I/O / TX-2, no connection held across a network call | Accepted |
+| [ADR-005](./docs/adr/ADR-005-load-test-calibration.md) | Load-test calibration and the SLO gates | Accepted |
+| [ADR-006](./docs/adr/ADR-006-compose-topology.md) | Compose topology: one file per environment, services selected by profile | Accepted |
+| [ADR-007](./docs/adr/ADR-007-hexagonal-before-modular.md) | Hexagonal split before the modules; `TransactionBoundary` is not a Unit of Work; retry scope | Accepted |
 
 When making a significant architectural decision, create a new ADR following
 the existing format. Link it from this table.
 
 A decision is "significant" if it affects:
 - Financial correctness or auditability
-- The boundary between domain, application, or infrastructure layers
+- The boundary between a module, a layer, or a port
 - Concurrency or transaction isolation strategy
 - A trade-off between performance and correctness
 
@@ -817,10 +859,12 @@ not exposed to the client — only the final state is returned.
 ### Operator surface (`ROLE_ADMIN` / `ROLE_OPERATOR`) — Step 5+
 
 ```
-POST /payments/{id}/reverse        — reverse an authorized or captured transaction
-POST /admin/payments/{id}/reverse  — reverse an authorized or captured transaction
-GET  /admin/payments               — list transactions by state (e.g. stuck in AUTHORIZED)
+POST /admin/payments/{txId}/reverse  — reverse an authorized or captured transaction
 ```
+
+That is the whole operator surface today. Listing transactions by state — the query an
+operator needs to find what is stuck in `AUTHORIZED` — is not implemented; it arrives
+with the reconciliation engine (Étape 6).
 
 RBAC is enforced in `SecurityConfig`. Never add business logic to the security
 layer — role checks are a routing concern, not a domain concern.
