@@ -1,0 +1,24 @@
+package com.geekersjoel237.koracore.auth.adapters.in.rest.api.register;
+
+import com.geekersjoel237.koracore.auth.adapters.in.rest.api.shared.OtpResponse;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.RestController;
+import com.geekersjoel237.koracore.shared.ports.in.CommandBus;
+import com.geekersjoel237.koracore.shared.adapters.in.rest.CorrelationId;
+
+@RestController
+public class RegisterAction implements RegisterApi {
+
+    private final CommandBus bus;
+
+    public RegisterAction(CommandBus bus) {
+        this.bus = bus;
+    }
+
+    @Override
+    public ResponseEntity<OtpResponse> register(RegisterRequest request, String correlationId) {
+        bus.dispatch(request.toCommand(CorrelationId.fromHeaderOrNew(correlationId)));
+        return ResponseEntity.status(HttpStatus.CREATED).body(new OtpResponse("OTP sent to your email"));
+    }
+}

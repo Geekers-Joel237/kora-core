@@ -63,52 +63,76 @@ KORA Core is built to reach:
 
 ---
 
-## 🏦 What KORA Core simulates
+## ✅ What runs today
 
-### 1️⃣ Institutional-Grade Ledger
-- Double-entry immutable ledger
-- No direct balance updates
-- Balance reconstruction from ledger entries
-- Snapshot & audit support
-- Financial invariants enforcement
+Java 21 · Spring Boot 4.0.3 · PostgreSQL + Flyway · 547 tests, no mocking framework.
+Three packages — `auth`, `payment`, `shared` — with a hexagonal interior whose
+dependency rules are asserted by the build, not by convention. Not yet a modular
+monolith: one Gradle project, one Spring Boot application, and eleven classes still
+crossing between `auth` and `payment`. Those crossings are *recorded* so they cannot
+grow unnoticed, which is the first half of Étape 2, not the whole of it.
 
-### 2️⃣ Full Payment Lifecycle Modeling
-- INITIATED → AUTHORIZED → CAPTURED → SETTLED
-- FAILED / REVERSED handling
-- Strict state machine enforcement
+```
+POST /auth/register · /auth/verify-otp · /auth/login · /auth/refresh
+POST /payments/cash-in · /payments/cash-out · /payments/transfer
+GET  /payments/balance · /payments/history
+POST /admin/payments/{txId}/reverse
+```
 
-### 3️⃣ Idempotent Transaction Handling
-- Protection against duplicate charges
-- Retry-safe architecture
-- Correlation IDs across services
+### 1️⃣ Immutable double-entry ledger
+- Ledger entries are append-only; a correction is a compensating entry, never an update
+- `SUM(DEBIT) == SUM(CREDIT)` verified in the domain after every write, and asserted
+  again against the database
+- `accounts.balance_amount` is a **denormalized read cache**, written in the same
+  transaction as the entries. It is deliberately *not* recomputed on read — a choice
+  with a real cost, weighed against three alternatives in
+  [ADR-001](./docs/adr/ADR-001-immutable-ledger.md). On divergence the entries win.
+- Snapshot pattern on every aggregate; an immutable audit row on every state change
 
-### 4️⃣ Automated Reconciliation Engine
-- Provider report ingestion
-- Matching internal ledger vs external settlement
-- Detection of mismatches and orphan transactions
-- Manual review workflows
+### 2️⃣ Full payment lifecycle
+- Eleven states, one interface, each validating its own successors:
+  `INITIALIZED → AUTHORIZED → CAPTURED → SETTLEMENT_PENDING → SETTLED → COMPLETED`
+- Plus `FAILED`, `AUTHORIZATION_FAILED`, `CAPTURE_FAILED`, `SETTLEMENT_FAILED`,
+  `REVERSED`. An illegal transition throws; there is no `setState()`.
+- No provider call inside a database transaction. Cash-in, cash-out and reversal run
+  as TX-1 / provider I/O / TX-2, holding zero connections across the ~1.4 s of provider
+  latency. The response to a measured p95 of 60 s and a 73.93 % error rate at 25 req/s,
+  caused by a single `@Transactional` spanning the whole operation
+  ([ADR-004](./docs/adr/ADR-004-micro-transaction-optimization.md)). The post-fix
+  baseline has not been re-measured — that run belongs on staging, not a laptop.
 
-### 5️⃣ Risk & Velocity Controls
-- Daily and hourly transaction limits
-- Suspicious activity detection
-- Hard stop vs manual review strategies
+### 3️⃣ Command bus with three middlewares
+- Correlation id propagated into every log line, born at the HTTP edge
+- Command validation before any write
+- Anti-replay over a TTL window
+- A command with no registered use case **stops the application from booting**,
+  rather than failing on the one request that needs it
 
-### 6️⃣ Multi-Provider Orchestration
-- Fallback strategies
-- Circuit breaker pattern
-- Bulkhead isolation
-- Controlled retries with jitter
+### 4️⃣ Retry scoped to what is safe to replay
+- Optimistic clashes and Postgres deadlocks arrive as one retryable type
+- Backoff is jittered, so two transactions that collided do not collide again on the
+  same schedule
+- The retry wraps the transaction boundary, never the reverse, and never spans the
+  provider call — replaying that would charge twice
 
-### 7️⃣ Event-Driven Consistency
-- Outbox pattern
-- At-least-once event delivery
-- Idempotent consumers
+---
 
-### 8️⃣ Cloud-Native Scaling
-- Dockerized services
-- Kubernetes orchestration
-- Horizontal Pod Autoscaling
-- Observability & metrics-driven scaling
+## 🚧 On the roadmap
+
+Not built. Listed here because the architecture is shaped to receive them, and
+`ROADMAP.md` says when.
+
+| | | Étape |
+|---|---|---|
+| **Idempotency** | duplicate-charge protection under retry storms | 4 |
+| **Event-driven consistency** | outbox, at-least-once delivery, idempotent consumers | 5 |
+| **Reconciliation engine** | provider report ingestion, mismatch and orphan detection, manual review | 6 |
+| **Multi-provider orchestration** | fallback, circuit breaker, bulkhead isolation | 8 |
+| **Risk & velocity controls** | daily and hourly limits, suspicious activity, hard stop vs review | 8 |
+| **Cloud-native scaling** | Kubernetes, HPA, metrics-driven scaling | 9 |
+
+The provider today is a latency-simulating stub, not an HTTP client. That is
+deliberate: it makes the failure modes reproducible in a test.
 
 ---
 
@@ -140,17 +164,21 @@ No architectural theater.
 
 Security is embedded from day one.
 
-- Immutable financial records
-- Strict state transition validation
-- Idempotency-first design
-- Least privilege access control
-- Secure secrets management
-- No sensitive data in logs
-- Tamper-aware audit trail
-- Zero-trust inter-service communication (when distributed)
-- Protection against replay attacks
-- Rate limiting & abuse mitigation
-- Defensive coding against OWASP Top 10
+**In place:**
+- Immutable financial records; strict state transition validation
+- Replay protection on the command bus, over a TTL window
+- PINs hashed with bcrypt; JWT with refresh tokens; `ROLE_CUSTOMER` / `ROLE_ADMIN`
+- **No sensitive data in logs** — `Pin`, `Msisdn`, `PhoneNumber` and `OtpCode` each
+  redact themselves in `toString()`, so a record that happens to hold one is covered
+  without anyone remembering to be careful. A test dispatches a command carrying a PIN
+  through the bus, captures the log output, and asserts the type is named and neither
+  the PIN nor the customer id appears.
+- Secrets have no fallback value: a clone without `.env` refuses to boot rather than
+  starting with a publicly readable signing key. A test enforces that.
+- Tamper-aware audit trail: every state change writes an immutable row
+
+**Planned:** idempotency-first design (Étape 4), rate limiting and abuse mitigation,
+zero-trust inter-service communication once anything is distributed.
 
 In fintech, security failures are trust failures.
 
@@ -202,8 +230,29 @@ MIT (for learning, experimentation, and transparency).
 
 ## 🚀 Getting Started
 
+```bash
+cp .env.example .env
+docker compose up -d
+./gradlew bootRun          # :8081 — http://localhost:8081/swagger-ui.html
+./gradlew build            # compile + the full suite
+```
+
 | Document | Purpose |
 |---|---|
-| [CONTRIBUTING.md](./CONTRIBUTING.md) | Local setup, running the app, running tests |
+| [CONTRIBUTING.md](./CONTRIBUTING.md) | Local setup, running the app, running the tests, conventions |
+| [CLAUDE.md](./CLAUDE.md) | The invariants, the vocabulary, and the rules a review applies to a diff |
+| [HELP.md](./HELP.md) | Engineering standards: testing strategy, DDD and SOLID as practised here |
+| [ROADMAP.md](./ROADMAP.md) | The ten étapes, and where the project stands in them |
 | [perf/PERF.md](./perf/PERF.md) | Load testing runbook (k6 + Grafana) |
-| [docs/adr/ADR-001](./docs/adr/ADR-001-immutable-ledger.md) | Ledger architecture decision |
+
+**Architecture decisions** — the reasoning, and what each one cost:
+
+| ADR | Decision |
+|---|---|
+| [001](./docs/adr/ADR-001-immutable-ledger.md) | Immutable ledger, and why the balance is a cache rather than a sum |
+| [002](./docs/adr/ADR-002-payment-lifecycle.md) | The lifecycle state machine and its locking |
+| [003](./docs/adr/ADR-003-payment-api-design.md) | One call per operation, no separate authorize/capture API |
+| [004](./docs/adr/ADR-004-micro-transaction-optimization.md) | TX-1 / provider I/O / TX-2 — the p95 60 s post-mortem |
+| [005](./docs/adr/ADR-005-load-test-calibration.md) | Load-test calibration and the SLO gates |
+| [006](./docs/adr/ADR-006-compose-topology.md) | One compose file per environment, services chosen by profile |
+| [007](./docs/adr/ADR-007-hexagonal-before-modular.md) | Hexagonal before modular; the transaction boundary is not a Unit of Work |

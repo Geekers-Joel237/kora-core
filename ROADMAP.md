@@ -5,6 +5,14 @@
 
 P2P, cash-in/out, paiement marchand, multi-provider, settlement différé, réconciliation, risk, observabilité, cloud orchestration.
 
+> **La numérotation de ce fichier fait foi.** `CLAUDE.md` renvoie à ces étapes et n'en
+> numérote aucune de son côté ; les deux fichiers ont désigné deux choses différentes
+> par « Step 2 » assez longtemps pour que ça se paie. Voir ADR-007.
+>
+> **État** : Étapes 0, 1 et 3 livrées — l'Étape 3 avant l'Étape 2, voir ADR-007.
+> **L'Étape 2 est ouverte** : le découpage en dossiers est fait et sa frontière est
+> assertée, mais le monolithe modulaire au sens de cette étape ne l'est pas.
+
 ---
 
 # 🧱 ÉTAPE 0 — Monolithe transactionnel conscient
@@ -115,6 +123,26 @@ En Afrique, le **settlement peut être différé (J+1)** selon provider.
 
 # 🧩 ÉTAPE 2 — Modular Monolith discipliné
 
+> **Ouverte. Commencée après l'Étape 3, pas terminée.** Voir ADR-007 pour l'ordre :
+> découper en modules par-dessus un découpage en couches encore flou aurait gelé la
+> dépendance au framework dans le contrat de module.
+>
+> **Fait (phase A)** : les trois dossiers `auth`, `payment`, `shared` ; le noyau ne
+> nomme aucun module ; les couplages qui restent sont inscrits en **égalité** dans
+> `ModuleBoundariesTest`, donc un nouveau fait échouer le build et en fermer un aussi.
+>
+> **Reste à faire, et c'est le cœur de l'étape** :
+> - **de vraies applications Spring Boot par module.** Aujourd'hui un seul projet
+>   Gradle, un seul `@SpringBootApplication`, un seul classpath : rien n'empêche
+>   techniquement un import, seul un test le signale.
+> - **des entités non partagées.** `payment` atteint `auth.domain.model.Customer` et
+>   `auth.domain.vo.PhoneNumber` ; `auth` atteint `payment.domain.model.Account`.
+>   Onze classes traversent, listées dans `ModuleBoundariesTest`. Un module dont on
+>   importe l'agrégat n'a pas de frontière, il a un dossier.
+>
+> La numérotation de ce document est conservée telle quelle — renuméroter un document
+> déjà lu coûte plus que noter l'ordre réel.
+
 **(Semaines 5–6)**
 
 ## 🎯 Contexte métier
@@ -161,6 +189,11 @@ Sans découpage interne, la vitesse de delivery chute.
 ---
 
 # 🧱 ÉTAPE 3 — Migration Hexagonale (Clean architecture pragmatique)
+
+> **Faite en premier, avant l'Étape 2.** Voir ADR-007. C'est aussi ce lot qui solde la
+> dette laissée par ADR-004 : `application/` et `ports/` ne nomment plus aucun type
+> étranger, ce que `HexagonalArchitectureTest` vérifie par égalité contre une liste
+> blanche vide.
 
 **(Semaines 7–9)**
 

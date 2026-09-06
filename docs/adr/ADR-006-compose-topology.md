@@ -3,7 +3,7 @@
 **Date**: 2026-08-26
 **Status**: Accepted
 **Authors**: Kora Core Engineering — Ivan Joël Tchatchoua Bayon
-**Related**: ADR-005 — Calibration des tests de performance · `CONTRIBUTING.md` §3.2 · KC-02 — Séparation stricte de la configuration · KC-03 — Socle Compose minimal (amendé, voir D4)
+**Related**: ADR-005 — Calibration des tests de performance · ADR-007 — Hexagonal avant modulaire (numérotation faisant foi, voir D5) · `CONTRIBUTING.md` §3.2 · KC-02 — Séparation stricte de la configuration · KC-03 — Socle Compose minimal (amendé, voir D4)
 
 ---
 
@@ -159,9 +159,26 @@ entre l'application et son orchestrateur, que nous refusons.
 
 ### D5 — Redis retiré
 
-Réintroduit lorsque le `OtpStore` en aura besoin (Step 2). Déclarer une
-infrastructure inutilisée est la même classe d'erreur qu'une valeur de repli sur un
-secret : le fichier ment sur le système.
+*Renvoi corrigé le 2026-09-06. La rédaction initiale disait « lorsque le `OtpStore`
+en aura besoin (Step 2) ». Les deux moitiés ont vieilli : `OtpStore` n'existe plus,
+et « Step 2 » désignait la numérotation que ADR-007 a supprimée — l'Étape 2 du
+`ROADMAP.md` est faite et ne contenait pas Redis. La décision, elle, n'a pas bougé.*
+
+Réintroduit lorsque `ExpiringStore<OtpCode>` en aura besoin — c'est-à-dire le jour
+où l'application tourne sur plus d'une instance, les codes OTP vivant aujourd'hui
+dans le tas d'une seule JVM. Aucune étape du `ROADMAP.md` ne le porte : c'est une
+contrainte de déploiement, pas un jalon fonctionnel, et la dater d'avance
+reviendrait à la même infrastructure spéculative que D4 refuse pour le staging.
+
+Le port a été rendu générique entre-temps, ce qui réduit la réintroduction à une
+ligne : `InMemoryExpiringStore` est déclaré dans `AuthUseCaseConfiguration`, et un
+adaptateur Redis prend sa place sans qu'aucun appelant ne change. `put(key, value,
+ttl)` est déjà la forme de `SET key value EX ttl`.
+
+Déclarer une infrastructure inutilisée est la même classe d'erreur qu'une valeur de
+repli sur un secret : le fichier ment sur le système. Vérification aujourd'hui —
+`grep -i redis build.gradle src/main` ne remonte qu'un commentaire javadoc, celui
+qui décrit précisément le remplacement d'une ligne ci-dessus.
 
 ### D6 — Healthchecks sur tout service dont un autre dépend
 
