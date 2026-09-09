@@ -124,6 +124,7 @@ Every aggregate exposes `snapshot()` returning an inner record, plus a static
 | No provider network call inside a DB transaction | `CashInService`, `CashOutService` and `ReversePaymentService` split into TX-1 (~10 ms) / provider I/O (~1 400 ms, zero connections held) / TX-2 (~20 ms). Per ADR-004, a class-level `@Transactional` produced p95 60 000 ms and a 73.93 % error rate at 25 req/s through HikariCP pool exhaustion |
 | A rollback happens by throwing | `BusinessException` — or any unchecked throwable — inside `TransactionBoundary.execute` discards the writes; returning normally commits. The port hands out no transaction status, so throwing is the only way for a use case to abort. Pinned in `SpringTransactionBoundaryTest` against a recording transaction manager |
 | Retry wraps the boundary, never the reverse | `ConcurrentUpdateException` surfaces at commit, so the transaction is already dead. Retry is scoped to the phase that is safe to replay — TX-2, after the provider answered (ADR-007) |
+| An enumerated column holds only values the domain defines | Eleven `CHECK` constraints, `ck_<table>_<column>`, added by `V202609071725__constrain_enum_columns.sql` over `users.role`, `users.status`, `accounts.resource_type`, `transactions.state` / `type` / `payment_method`, `ledger_entries.type`, `trx_state_historics.old_state` / `new_state` / `triggered_by`, `authorization_records.status`. `EnumColumnConstraintsDbTest` in `auth` and in `payment` reads `pg_get_constraintdef` and asserts the constraint's literals **equal** the Java values, so a constant added on either side alone fails the build. Native `CREATE TYPE … AS ENUM` was rejected: no `DROP VALUE` exists, and it would put `@JdbcTypeCode(NAMED_ENUM)` in ten entities. The `currency` columns are deliberately out — currency is not a closed set here |
 
 ## 7. Review rules
 
@@ -170,10 +171,18 @@ Assertions to apply to a diff. Each one is decidable by reading the diff alone.
 16. New domain behaviour without a Spring-free unit test is a defect.
 17. A test placed outside `<module>/{unit,integration,e2e}/` is a defect, as is a
     `@SpringBootTest` under `unit/` or an HTTP client under `integration/`.
+18. A constant added to or removed from a persisted enum — `Role`, `UserStatus`,
+    `ResourceType`, `TransactionType`, `PaymentMethod`, `LedgerEntryType`,
+    `TriggerSource`, `AuthorizationStatus` — or a singleton added to or removed from
+    `TransactionState`, without a migration in the same diff dropping and re-adding
+    the matching `ck_<table>_<column>` constraint, is a defect.
+19. A new enumerated column whose migration carries no `ck_<table>_<column>`
+    constraint, and no matching equality assertion in the module's
+    `EnumColumnConstraintsDbTest`, is a defect.
 
 ## 8. Testing strategy
 
-55 test classes under `src/test/java`. The tree states the pyramid level first, and
+57 test classes under `src/test/java`. The tree states the pyramid level first, and
 `TestPyramidTest` checks that the statement is true.
 
 ```
@@ -221,6 +230,8 @@ Deliberate and tracked. Do not raise them on a PR.
 - `SETTLEMENT_PENDING` to `SETTLED` is not automated; the reconciliation engine is
   roadmap Étape 6.
 - The double-entry and append-only invariants have no database-level constraint.
+  Enumerated columns do, since `V202609071725__constrain_enum_columns.sql`; the
+  balance and ledger invariants stay in the domain.
 - A deterministic lock order for crossing transfers is not implemented; a deadlock
   surfaces as `ConcurrentUpdateException` and is retried.
 - `auth -> payment` and `payment -> auth` couplings remain, listed and asserted in
@@ -241,5 +252,7 @@ Deliberate and tracked. Do not raise them on a PR.
   ADR-007 hexagonal before modular
 - `src/main/resources/db/migration/` — `V202605270702__initial_schema.sql` creates the
   whole schema; `V202609051542__rename_ledger_vocabulary.sql` renames `operations` to
-  `ledger_entries` and `from_id`/`to_id` to `from_account_id`/`to_account_id`
+  `ledger_entries` and `from_id`/`to_id` to `from_account_id`/`to_account_id`;
+  `V202609071725__constrain_enum_columns.sql` closes every enumerated column with a
+  `CHECK`, and its header records why not a native `ENUM` type
 - `perf/PERF.md`, `perf/SIMULATION.md` — load-test procedure

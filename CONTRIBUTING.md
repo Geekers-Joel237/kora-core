@@ -755,11 +755,88 @@ date -u +%Y%m%d%H%M
 `MigrationNamingConventionTest` scans `src/main/resources/db/migration/` on every
 `./gradlew test` and fails on any file that breaks the pattern.
 
+### Enumerated columns carry a CHECK
+
+A column that stores an enum name is a closed set, and the schema has to say so.
+Every one of them carries a constraint named `ck_<table>_<column>` listing the
+values verbatim:
+
+```sql
+ALTER TABLE transactions
+    ADD CONSTRAINT ck_transactions_type
+        CHECK (type IN ('CASH_IN', 'CASH_OUT', 'P2P_TRANSFER'));
+```
+
+Nullable columns need no `IS NULL` branch: a `CHECK` fails only on FALSE, and
+`NULL IN (...)` is UNKNOWN.
+
+**Adding or removing a constant is a migration**, dropping and re-adding the
+constraint. Forgetting it does not slip through — `EnumColumnConstraintsDbTest`
+in `auth` and in `payment` reads the definition back out of `pg_get_constraintdef`
+and asserts the literals **equal** `Enum.values()`. The equality cuts both ways:
+a constant added only in Java fails, and a constraint still listing a constant
+the domain dropped fails too.
+
+Native `CREATE TYPE ... AS ENUM` was considered and rejected; the reasoning is in
+the header of `V202609071725__constrain_enum_columns.sql`.
+
 ### Never modify an applied migration
 
 Add a new one instead. Flyway stores a checksum of each migration's content in
 `flyway_schema_history`; editing a file already applied anywhere invalidates that
 checksum and blocks startup on every database that holds it.
+
+#### The everyday case: your own migration, still on your branch
+
+The rule above is about migrations that have been **shared**. A migration you are still
+writing hits the same wall for a much smaller reason: you ran the application once, the
+dev database applied the file, and you then edited it — even only a comment. Startup
+refuses:
+
+```
+Migration checksum mismatch for migration version 202609071725
+-> Applied to database : -1060536491
+-> Resolved locally    : -1364846286
+```
+
+Flyway compares the **whole file**, comments included, so a reworded header breaks the
+checksum exactly as a rewritten `ALTER TABLE` would.
+
+**First, find out which of the two it was.** Read the schema back and compare it with
+the file — never assume the edit was cosmetic:
+
+```bash
+docker compose exec postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c   "SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint
+    WHERE conname LIKE 'ck_%' ORDER BY conname;"
+```
+
+Then pick:
+
+- **The database is disposable** — the usual answer on a feature branch. Recreate it and
+  let Flyway replay the whole chain from nothing:
+
+  ```bash
+  docker compose down -v && docker compose up -d
+  ```
+
+  This proves the migration applies, rather than declaring that it did, and it exercises
+  the chain on the dev engine — the Testcontainers suite runs `postgres:16-alpine`, the
+  dev container is on 17.x.
+
+- **The database holds something you need** — realign the checksum by hand, but only
+  after the comparison above showed the applied DDL matches the file:
+
+  ```bash
+  docker compose exec postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c     "UPDATE flyway_schema_history SET checksum = <resolved locally>
+      WHERE version = '<version>';"
+  ```
+
+  Take `<resolved locally>` from the error message. Unlike the rename case below, this
+  works: the version still exists on disk, so it is the checksum and not the identity
+  that has to move.
+
+**Once the migration is pushed, neither applies.** Someone else's database holds it, and
+the only correct answer is a new migration.
 
 ### Ordering across branches — `out-of-order` is off
 

@@ -8,14 +8,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.Map;
 
-/**
- * Rows written the short way, in SQL.
- *
- * <p>The read adapters answer questions about the schema, so the fixtures speak to the
- * schema directly. Building the same rows through four aggregates and their repositories
- * would make a read test depend on the write side's mapping, and a failure would no
- * longer say which of the two broke.
- */
+
 final class QueryFixtures {
 
     private final NamedParameterJdbcTemplate jdbc;
@@ -24,11 +17,11 @@ final class QueryFixtures {
         this.jdbc = jdbc;
     }
 
-    /** A customer needs the user row its primary key points at. */
+
     void customer(String customerId, String prefix, String number) {
         jdbc.update("""
                 INSERT INTO users (id, full_name, email, role, status, created_at, updated_at)
-                VALUES (:id, 'Test User', :email, 'CUSTOMER', 'ACTIVE', now(), now())
+                VALUES (:id, 'Test User', :email, 'CUSTOMER', 'VERIFIED', now(), now())
                 """, Map.of("id", customerId, "email", customerId + "@kora.test"));
         jdbc.update("""
                 INSERT INTO customers (id, phone_prefix, phone_number, hashed_pin, created_at, updated_at)

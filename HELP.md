@@ -166,8 +166,9 @@ The vocabulary below is the one in the code. `CLAUDE.md` §5 is the authoritativ
 `Order`, `PaymentPart`, `Money`, `ProviderReference` and `IdempotencyKey` are names this
 project deliberately does **not** use.
 
-- **Modules** (today): `auth`, `payment`, `shared` — the kernel. Risk and reconciliation
-  arrive with Étapes 6 and 8.
+- **Modules** (today): `auth`, `payment`, `shared` — the kernel. Bounded contexts in the
+  DDD sense, and packages with an asserted boundary — not yet deployable modules; see
+  §7 Phase C. Risk and reconciliation arrive with Étapes 6 and 8.
 - **Aggregates**:
     - `Transaction` — the money movement, aggregate root; owns its ledger entries,
       its state and its history
@@ -221,13 +222,33 @@ We evolve architecture only when justified.
 - **Adapters**: `adapters/in` (REST, bus), `adapters/out` (JPA, JDBC, provider, mail)
 - **Config**: the composition root, and the only place Spring wires anything
 
-### Phase C — Modular Monolith — done
-- `auth`, `payment`, `shared`; the kernel names no module
+### Phase C — Modular Monolith — open
 
-**Phases B and C are in this order on purpose**, against the original roadmap. Drawing
-module boundaries over an unclear layering freezes the framework dependency into the
-module contract, and unpicking it afterwards means moving every file twice. See
-ADR-007.
+Roadmap Étape 2, which `ROADMAP.md` numbers and this file does not. **Do not describe
+this codebase as a modular monolith.** `auth`, `payment` and `shared` are packages with
+an asserted boundary, which is the first half of the phase and not the phase.
+
+**Landed** — the three packages; the kernel names no module; and whatever the two
+business modules still take from each other is recorded as an **equality** in
+`ModuleBoundariesTest`, so a new coupling fails the build and closing one fails it too.
+
+**Not landed, and it is the substance of the phase**:
+- **One Gradle project, one `@SpringBootApplication`, one classpath.** Nothing in the
+  build stops an import across the boundary — only a test reports it. The phase ends
+  when each package is its own application.
+- **`auth` and `payment` still share aggregates.** Eleven classes cross today:
+  `payment` reaches `auth.domain.model.Customer` and `auth.domain.vo.PhoneNumber`,
+  `auth` reaches `payment.domain.model.Account`. A package whose aggregate the
+  neighbour imports has a directory, not a boundary. Closing them needs a published
+  `OpenWalletUseCase` and a wallet lookup by msisdn.
+
+That recorded list is the measure of how far from done this is: the phase is finished
+when it is empty.
+
+**Phases B and C are in this order on purpose**, against the original roadmap — B is
+done and C was started after it. Drawing module boundaries over an unclear layering
+freezes the framework dependency into the module contract, and unpicking it afterwards
+means moving every file twice. See ADR-007.
 
 There is no `infrastructure/` package and no `web/` package. Both were replaced by
 `adapters/out` and `adapters/in`, which name the direction rather than the technology.
