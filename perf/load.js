@@ -1,5 +1,5 @@
 /**
- * load.js — Load test : validation des SLOs nominaux Étape 1.
+ * load.js — Load test : validation des SLOs nominaux Step 1.
  *
  * SLOs cibles :
  *   P95 latency  < 200ms
@@ -18,13 +18,11 @@
  * Lancer : ./perf/load-run.sh
  */
 
-import { sleep }           from 'k6';
-import { SharedArray }     from 'k6/data';
-import { createTestUsers } from './data/setup.js';
-import { scenarioCashIn }  from './scenarios/cashIn.js';
-import { scenarioCashOut } from './scenarios/cashOut.js';
-import { scenarioTransfer } from './scenarios/transfer.js';
-import { scenarioBalance } from './scenarios/balance.js';
+import {createTestUsers} from './data/setup.js';
+import {scenarioCashIn} from './scenarios/cashIn.js';
+import {scenarioCashOut} from './scenarios/cashOut.js';
+import {scenarioTransfer} from './scenarios/transfer.js';
+import {scenarioBalance} from './scenarios/balance.js';
 
 // ── Nombre d'utilisateurs de test ─────────────────────────────────────────────
 // USER_COUNT = preAllocatedVUs = maxVUs : chaque VU possède son propre user.
@@ -39,15 +37,15 @@ export const options = {
     setupTimeout: '5m',
     scenarios: {
         load: {
-            executor:        'ramping-arrival-rate',
-            startRate:       0,
-            timeUnit:        '1s',
+            executor: 'ramping-arrival-rate',
+            startRate: 0,
+            timeUnit: '1s',
             preAllocatedVUs: 60,
-            maxVUs:          60,    // = USER_COUNT — interdit le partage de compte entre VUs
+            maxVUs: 60,    // = USER_COUNT — interdit le partage de compte entre VUs
             stages: [
-                { target: 25, duration: '2m' },   // ramp-up
-                { target: 25, duration: '8m' },   // plateau nominal
-                { target: 0,  duration: '1m' },   // ramp-down
+                {target: 25, duration: '2m'},   // ramp-up
+                {target: 25, duration: '8m'},   // plateau nominal
+                {target: 0, duration: '1m'},   // ramp-down
             ],
         },
     },
@@ -60,11 +58,11 @@ export const options = {
         //
         // La borne cash (2 500ms) est au-dessus du plafond provider mesuré (2 130ms)
         // mais assez serrée pour détecter une pool exhaustion (p(95) monterait à 5–30s).
-        'http_req_duration{operation:balance}':  ['p(95)<100'],
+        'http_req_duration{operation:balance}': ['p(95)<100'],
         'http_req_duration{operation:transfer}': ['p(95)<200'],
-        'http_req_duration{operation:cash}':     ['p(95)<2500'],
-        http_req_failed:                          ['rate<0.01'],
-        checks:                                   ['rate>0.99'],
+        'http_req_duration{operation:cash}': ['p(95)<2500'],
+        http_req_failed: ['rate<0.01'],
+        checks: ['rate>0.99'],
     },
 };
 
@@ -81,7 +79,7 @@ export default function (data) {
     if (!users || users.length === 0) return;
 
     // Sélection déterministe du user par VU pour éviter les collisions
-    const idx   = __VU % users.length;
+    const idx = __VU % users.length;
     const userA = users[idx];
     const userB = users[(idx + 1) % users.length];
 

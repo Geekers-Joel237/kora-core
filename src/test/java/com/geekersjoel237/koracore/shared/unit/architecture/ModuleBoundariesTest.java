@@ -79,7 +79,7 @@ class ModuleBoundariesTest {
      * <p>Until it is empty, {@code auth} and {@code payment} are packages and not
      * modules: two of the entries below carry an aggregate across, and a package whose
      * aggregate the neighbour imports has a directory rather than a boundary. Roadmap
-     * Étape 2 is open, and this list is the measure of how far from done it is.
+     * Step 2 is open, and this list is the measure of how far from done it is.
      */
     private static final Map<String, Set<String>> RECORDED = new TreeMap<>(Map.of(
             "auth -> payment", Set.of(

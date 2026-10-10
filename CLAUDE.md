@@ -37,7 +37,7 @@ layers. Dependencies point inward only.
 
 **They are not modules yet.** One Gradle project, one `@SpringBootApplication`, one
 classpath — the boundary is asserted by a test, not enforced by the build — and `auth`
-and `payment` still share domain models. Roadmap Étape 2 is open; do not describe this
+and `payment` still share domain models. Roadmap Step 2 is open; do not describe this
 as a modular monolith.
 
 | Module | Owns |
@@ -54,7 +54,7 @@ it names both modules by construction.
 Whatever `auth` and `payment` still take from each other is recorded in that same test
 as an **equality**, so a new coupling fails the build and closing one fails it too.
 Eleven classes cross today, `Customer` and `Account` among them. That list is meant to
-shrink, and Étape 2 is finished when it is empty and each package is its own
+shrink, and Step 2 is finished when it is empty and each package is its own
 application.
 
 | Layer | Package | May depend on |
@@ -220,7 +220,7 @@ couplings), `TestPyramidTest` (the tree above), `ConfigurationHygieneTest`,
 Deliberate and tracked. Do not raise them on a PR.
 
 - No idempotency store: a client retry can create duplicate `INITIALIZED`
-  transactions. Roadmap Étape 4 — deliberately not folded into the command bus.
+  transactions. Roadmap Step 4 — deliberately not folded into the command bus.
 - No recovery for a crash between TX-1 and TX-2, and no TX-2 retry after provider
   success; `AuthorizationRecord` exists only to make these auditable (ADR-004 G-1 to G-4).
 - `MobileMoneyProviderAdapter` is a latency-simulating stub, not an HTTP client,
@@ -228,7 +228,7 @@ Deliberate and tracked. Do not raise them on a PR.
 - `InMemoryExpiringStore` holds OTP codes in one JVM's heap. Single-instance only;
   Redis replaces it by changing one `@Bean` line in `AuthUseCaseConfiguration`.
 - `SETTLEMENT_PENDING` to `SETTLED` is not automated; the reconciliation engine is
-  roadmap Étape 6.
+  roadmap Step 6.
 - The double-entry and append-only invariants have no database-level constraint.
   Enumerated columns do, since `V202609071725__constrain_enum_columns.sql`; the
   balance and ledger invariants stay in the domain.
@@ -243,8 +243,8 @@ Deliberate and tracked. Do not raise them on a PR.
 - `ROADMAP.md` — 10-step evolution plan, authoritative numbering
 - `HELP.md` — engineering standards, DDD/SOLID rules, project conventions
 - `CONTRIBUTING.md` — configuration assignment and migration naming, both test-enforced
-- `docs/kora-core-state-of-view-v2.md` — engineering retrospective, Étapes 2 and 3.
-  `docs/kora-core-state-of-view.md` is the Étape 1 snapshot, kept unedited; v2 lists
+- `docs/kora-core-state-of-view-v2.md` — engineering retrospective, Steps 2 and 3.
+  `docs/kora-core-state-of-view.md` is the Step 1 snapshot, kept unedited; v2 lists
   what it says that no longer holds
 - `docs/adr/` — ADR-001 immutable ledger and balance cache · ADR-002 payment lifecycle
   and locking · ADR-003 single-call payment API · ADR-004 micro-transaction model ·

@@ -181,12 +181,12 @@ Codes d'erreur possibles :
 | `401` | PIN invalide, **ou** jeton expiré | **Deux cas à distinguer** — voir §5.2 |
 | **`404`** | **Destinataire introuvable** (`AccountNotFoundException`), compte de l'appelant introuvable | Message métier. **Ce n'est pas un `422`** |
 | `422` | Solde insuffisant, compte bloqué ou suspendu, auto-transfert, devise incompatible, transition d'état interdite | Message métier, l'opération n'a pas eu lieu |
-| **`500`** | **`ProviderException`** — non mappée par le `GlobalExceptionHandler` | Corps **non conforme à RFC 7807**. Traiter comme une issue incertaine |
+| **`500`** | **`PaymentProviderException`** — non mappée par le `GlobalExceptionHandler` | Corps **non conforme à RFC 7807**. Traiter comme une issue incertaine |
 | `503` | Conflit de concurrence après 5 tentatives, ou échec d'envoi de mail | Incident temporaire |
 
 > **⚠️ Un transfert vers un numéro inconnu renvoie `404`, pas `422`.** `validateRecipientAndGetAccount` lève `AccountNotFoundException`, que le `GlobalExceptionHandler` mappe sur `NOT_FOUND`. Brancher ce cas sur `422` produirait un message générique là où l'utilisateur a besoin d'une réponse précise. C'est l'erreur de transfert la plus fréquente en usage réel.
 
-> **⚠️ `ProviderException` n'est mappée nulle part.** `MobileMoneyProviderAdapter` la lève sur échec fournisseur (trois points de levée), et aucun `@ExceptionHandler` ne la couvre. Le résultat est un **`500` avec le corps d'erreur Spring par défaut** — ni `ProblemDetail`, ni `{status, error}`. C'est un **troisième format d'erreur** que le client doit tolérer. À signaler côté backend : c'est vraisemblablement un oubli.
+> **⚠️ `PaymentProviderException` n'est mappée nulle part.** `MobileMoneyProviderAdapter` la lève sur échec fournisseur (trois points de levée), et aucun `@ExceptionHandler` ne la couvre. Le résultat est un **`500` avec le corps d'erreur Spring par défaut** — ni `ProblemDetail`, ni `{status, error}`. C'est un **troisième format d'erreur** que le client doit tolérer. À signaler côté backend : c'est vraisemblablement un oubli.
 
 > **`503` sur une opération monétaire est le cas le plus délicat.** Le serveur a épuisé 5 tentatives de verrouillage optimiste (`TransientPaymentException`). L'opération n'a très probablement pas eu lieu — mais l'app ne peut pas l'affirmer. Traitement imposé en §6.1. **Un `500` de fournisseur relève du même traitement** : issue incertaine, jamais un échec affirmé.
 
@@ -341,7 +341,7 @@ Sur un `400` de validation, un champ supplémentaire apparaît :
 |---|---|---|---|
 | 1 | `ProblemDetail` (RFC 7807) | `GlobalExceptionHandler` | Toute exception métier mappée |
 | 2 | `{ "status": n, "error": "…" }` | Couche de sécurité Spring | `401` jeton absent/invalide, `403` rôle insuffisant |
-| 3 | Corps d'erreur Spring par défaut | Aucun handler | `500` sur `ProviderException` et toute exception non mappée |
+| 3 | Corps d'erreur Spring par défaut | Aucun handler | `500` sur `PaymentProviderException` et toute exception non mappée |
 
 ```jsonc
 { "status": 401, "error": "Unauthorized" }   // format 2 — jeton absent, invalide ou expiré

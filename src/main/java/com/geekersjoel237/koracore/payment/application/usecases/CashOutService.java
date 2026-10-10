@@ -14,14 +14,13 @@ import com.geekersjoel237.koracore.payment.domain.enums.ResourceType;
 import com.geekersjoel237.koracore.payment.domain.enums.TransactionType;
 import com.geekersjoel237.koracore.payment.domain.exception.AccountNotFoundException;
 import com.geekersjoel237.koracore.payment.domain.exception.AccountSuspendedException;
-import com.geekersjoel237.koracore.payment.domain.exception.ProviderException;
+import com.geekersjoel237.koracore.payment.domain.exception.PaymentProviderException;
 import com.geekersjoel237.koracore.payment.domain.model.Account;
 import com.geekersjoel237.koracore.payment.domain.model.AuthorizationRecord;
 import com.geekersjoel237.koracore.payment.domain.model.Transaction;
 import com.geekersjoel237.koracore.payment.ports.out.repository.AccountRepository;
 import com.geekersjoel237.koracore.payment.ports.out.repository.AuthorizationRecordRepository;
 import com.geekersjoel237.koracore.payment.ports.out.repository.LedgerRepository;
-import com.geekersjoel237.koracore.payment.ports.out.security.PinVerifier;
 import com.geekersjoel237.koracore.payment.ports.out.provider.ProviderPort;
 import com.geekersjoel237.koracore.payment.ports.out.repository.TransactionRepository;
 import com.geekersjoel237.koracore.payment.ports.out.repository.TrxHistoricStatesRepository;
@@ -78,13 +77,13 @@ public final class CashOutService implements CashOutCommandHandler {
         try {
             authorization = provider.authorize(cmd.amount(), cmd.paymentMethod(),
                     correlationId, ProviderOperationType.DISBURSEMENT, initiated.phone());
-        } catch (ProviderException e) {
+        } catch (PaymentProviderException e) {
             return boundary.execute(() -> failAuthorization(initiated.transactionId()));
         }
 
         try {
             provider.capture(authorization.providerReference(), correlationId);
-        } catch (ProviderException e) {
+        } catch (PaymentProviderException e) {
             return boundary.execute(() -> failCapture(initiated.transactionId(), authorization, cmd));
         }
 

@@ -73,7 +73,7 @@ kora-core/
 KORA Core has a hexagonal interior and three top-level packages. It is **not yet a
 modular monolith**: there is one Gradle project and one `@SpringBootApplication`, so
 the module boundary is asserted by a test rather than enforced by the build, and
-`auth` and `payment` still share domain models. Étape 2 is open — see `ROADMAP.md`.
+`auth` and `payment` still share domain models. Step 2 is open — see `ROADMAP.md`.
 
 The dependency rule inside a module is strict:
 
@@ -609,7 +609,7 @@ Do not catch a `BusinessException` to swallow it. **Throwing one inside
 commits work the domain refused.
 
 There is one legitimate reason to catch: **compensating**. `CashInService` catches
-`ProviderException` between phases and writes the failure to the ledger, because at
+`PaymentProviderException` between phases and writes the failure to the ledger, because at
 that point TX-1 has already committed and the transaction must not be left dangling.
 A catch that does not compensate is a defect.
 
@@ -941,7 +941,7 @@ POST /admin/payments/{txId}/reverse  — reverse an authorized or captured trans
 
 That is the whole operator surface today. Listing transactions by state — the query an
 operator needs to find what is stuck in `AUTHORIZED` — is not implemented; it arrives
-with the reconciliation engine (Étape 6).
+with the reconciliation engine (Step 6).
 
 RBAC is enforced in `SecurityConfig`. Never add business logic to the security
 layer — role checks are a routing concern, not a domain concern.

@@ -2,7 +2,7 @@ package com.geekersjoel237.koracore.payment.adapters.out.provider;
 
 import com.geekersjoel237.koracore.payment.domain.enums.PaymentMethod;
 import com.geekersjoel237.koracore.payment.domain.enums.ProviderOperationType;
-import com.geekersjoel237.koracore.payment.domain.exception.ProviderException;
+import com.geekersjoel237.koracore.payment.domain.exception.PaymentProviderException;
 import com.geekersjoel237.koracore.payment.ports.out.provider.ProviderPort;
 import com.geekersjoel237.koracore.shared.domain.vo.Amount;
 import com.geekersjoel237.koracore.payment.domain.vo.AuthorizationResult;
@@ -30,7 +30,7 @@ import java.util.UUID;
  * <ul>
  *   <li>{@code SUCCESS}          — every call succeeds (default)</li>
  *   <li>{@code SLOW}             — succeeds but with 2× base latency</li>
- *   <li>{@code FAIL_ON_AUTHORIZE}— throws {@link ProviderException} on authorize, credit, debit, send</li>
+ *   <li>{@code FAIL_ON_AUTHORIZE}— throws {@link PaymentProviderException} on authorize, credit, debit, send</li>
  *   <li>{@code FAIL_ON_CAPTURE}  — authorizes OK, throws during capture</li>
  *   <li>{@code TIMEOUT}          — simulates a network timeout on every call</li>
  * </ul>
@@ -114,21 +114,21 @@ public class MobileMoneyProviderAdapter implements ProviderPort {
             case FAIL_ON_AUTHORIZE -> {
                 if (checkpoint == Checkpoint.AUTHORIZE) {
                     log.warn("Provider simulation: FAIL_ON_AUTHORIZE — checkpoint={}", checkpoint);
-                    throw new ProviderException(
+                    throw new PaymentProviderException(
                             "Provider refused operation — account blocked or regulatory limit exceeded");
                 }
             }
             case FAIL_ON_CAPTURE -> {
                 if (checkpoint == Checkpoint.CAPTURE) {
                     log.warn("Provider simulation: FAIL_ON_CAPTURE — checkpoint={}", checkpoint);
-                    throw new ProviderException(
+                    throw new PaymentProviderException(
                             "Provider capture failed — post-authorization incident");
                 }
             }
             case TIMEOUT -> {
                 log.warn("Provider simulation: TIMEOUT — checkpoint={}", checkpoint);
                 simulateLatency(timeoutThresholdMs + 500);
-                throw new ProviderException(
+                throw new PaymentProviderException(
                         "Provider timeout — no response after " + timeoutThresholdMs + "ms");
             }
             default -> { /* SUCCESS or SLOW — no error */ }

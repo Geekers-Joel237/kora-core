@@ -9,8 +9,8 @@
 
 ## Context
 
-`ROADMAP.md` planned Étape 2 as the modular monolith and Étape 3 as the hexagonal
-migration. Étape 3 is done. Étape 2 was started after it and is not finished — see
+`ROADMAP.md` planned Step 2 as the modular monolith and Step 3 as the hexagonal
+migration. Step 3 is done. Step 2 was started after it and is not finished — see
 *Consequences* for exactly what was and was not delivered.
 
 Three things pushed the inversion, and one of them was a debt with a number on it.
@@ -51,7 +51,7 @@ The order that was executed:
 9. The architecture rules that could not be green before
 10. This document
 
-Idempotency stays where the roadmap put it, at Étape 4. It was not folded into the bus.
+Idempotency stays where the roadmap put it, at Step 4. It was not folded into the bus.
 
 ## Consequences
 
@@ -65,23 +65,23 @@ other that had nothing to do with it.
 **`ROADMAP.md` numbering is authoritative.** `CLAUDE.md` refers to roadmap steps and
 numbers nothing of its own. Where a gap has no roadmap home, it says so in words.
 
-### Étape 3 is complete; Étape 2 is half-delivered
+### Step 3 is complete; Step 2 is half-delivered
 
 `ROADMAP.md` keeps its original numbering — renumbering a document people have read is
 worse than recording that two entries were executed out of order. Both entries carry a
 note saying so.
 
-**Delivered for Étape 2**: three packages, a kernel that names no module, and the
+**Delivered for Step 2**: three packages, a kernel that names no module, and the
 remaining cross-module couplings recorded as an equality so that a new one fails the
 build and closing one fails it too.
 
-**Not delivered, and it is the substance of the étape**: separate Spring Boot
+**Not delivered, and it is the substance of the step**: separate Spring Boot
 applications per module, and modules that do not share entities. There is one Gradle
 project and one `@SpringBootApplication`, so the boundary is asserted by a test rather
 than enforced by the build; and eleven classes cross, `Customer` and `Account` among
 them. A module whose aggregate the neighbour imports has a folder, not a boundary.
 
-This ADR originally recorded both étapes as complete. That was wrong, and the evidence
+This ADR originally recorded both steps as complete. That was wrong, and the evidence
 was in a test written in the same session — `ModuleBoundariesTest` lists every crossing
 by name. Recorded here rather than quietly amended, because the point of the recording
 is to make the list shrink deliberately.

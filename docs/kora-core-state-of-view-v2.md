@@ -4,12 +4,12 @@
 
 **Author**: Ivan Joël Tchatchoua Bayon — [@Geekers-Joel237](https://github.com/Geekers-Joel237)
 **Date**: September 2026
-**Version**: Étape 3 delivered · Étape 2 begun
+**Version**: Step 3 delivered · Step 2 begun
 **Tags**: `java-21` `spring-boot-4` `hexagonal-architecture` `modular-monolith` `cqrs` `command-bus` `architecture-tests` `test-doubles` `tdd`
 
 ---
 
-> *v1 of this document is a snapshot: what Kora Core was in May 2026, at the end of Étape 1. It has not been edited, and it should not be — a retrospective that gets quietly rewritten every time the code moves stops being evidence of anything. This is the next chapter. Where v1 no longer describes the repository, this document says so explicitly rather than reaching back.*
+> *v1 of this document is a snapshot: what Kora Core was in May 2026, at the end of Step 1. It has not been edited, and it should not be — a retrospective that gets quietly rewritten every time the code moves stops being evidence of anything. This is the next chapter. Where v1 no longer describes the repository, this document says so explicitly rather than reaching back.*
 
 ---
 
@@ -43,7 +43,7 @@ Listed here rather than corrected there, because v1 is dated and accurate for it
 | `MailPort.sendOtp(email, code, subject)` | `MailPort.send(Mail)`. See Chapter 7 — the old signature was hiding a bug |
 | "Clean resolution in Step 2" for `TransactionBoundary` | Done. The application layer names no foreign type at all, asserted by an allow-list |
 | ADR index, 001–005 | 001–007 |
-| The gradient table, keyed on "Step" | `ROADMAP.md`'s "Étape" numbering is now authoritative and this document uses it. The two files meant different things by "Step 2" for months (ADR-007) |
+| The gradient table, keyed on `CLAUDE.md`'s own "Step" numbering | `ROADMAP.md`'s numbering is now authoritative and this document uses it; `CLAUDE.md` no longer numbers steps of its own. The two files meant different things by "Step 2" for months (ADR-007) |
 
 ---
 
@@ -62,8 +62,8 @@ was the right call at the time and the wrong state to stay in.
 
 ### Why hexagonal before modular, against the roadmap
 
-`ROADMAP.md` planned Étape 2 as the modular monolith and Étape 3 as the hexagonal
-migration. Étape 3 was done first, and ADR-007 records why. Étape 2 was begun after it
+`ROADMAP.md` planned Step 2 as the modular monolith and Step 3 as the hexagonal
+migration. Step 3 was done first, and ADR-007 records why. Step 2 was begun after it
 and is **not** finished — Chapter 5 says what is missing.
 
 A module boundary is a statement about which types may cross it. Drawing that boundary
@@ -77,7 +77,7 @@ the layering to already be legible, because the honest answer is usually *"it be
 the port, and the port belongs to whoever declares it."*
 
 The work was cut into ten steps, and executed in that order. Idempotency was explicitly
-kept out and left at Étape 4, where the roadmap put it — the temptation to fold it into
+kept out and left at Step 4, where the roadmap put it — the temptation to fold it into
 the command bus, once a bus existed, was real and was refused.
 
 ---
@@ -231,7 +231,7 @@ There is no `infrastructure/` package and no `web/` package any more — `adapte
 `adapters/out` name the *direction*, which is the thing that matters, rather than the
 technology, which changes.
 
-**These are packages, not yet modules, and the difference is the whole of Étape 2.** One
+**These are packages, not yet modules, and the difference is the whole of Step 2.** One
 Gradle project, one `@SpringBootApplication`, one classpath: nothing at build time stops
 an import, only a test reports it afterwards. And the two business packages still share
 domain models — `payment` reaches into `auth.domain.model.Customer`, `auth` into
@@ -507,9 +507,9 @@ with no error.
 
 ### The rule this produced
 
-ADR-007 fixes the numbering: `ROADMAP.md`'s "Étape" is authoritative, and `CLAUDE.md`
-numbers nothing of its own. The two files had meant different things by "Step 2" for
-months, so a gap marked *"Step 2 target"* in one pointed at an unrelated milestone in the
+ADR-007 fixes the numbering: `ROADMAP.md`'s steps are authoritative, and `CLAUDE.md`
+numbers nothing of its own. The two files had each kept their own step numbering and
+meant different things by "Step 2" for months, so a gap marked *"Step 2 target"* in one pointed at an unrelated milestone in the
 other.
 
 ---
@@ -522,7 +522,7 @@ other.
   is faked by a real in-memory implementation that can be asserted against.
 - **Three packages** — `auth`, `payment`, `shared` — with a hexagonal interior. The
   kernel names no module. What the two business packages still owe each other is
-  recorded as an equality. This is the first half of Étape 2, not the whole of it; see
+  recorded as an equality. This is the first half of Step 2, not the whole of it; see
   *What is not done*.
 - **Zero foreign types** in `application/` and `ports/`. Not "no Spring" — nothing
   outside the JDK and this repository.
@@ -538,21 +538,21 @@ other.
 
 ### What is not done
 
-- **The modular monolith itself.** Étape 2 has its boundary drawn and nothing more.
+- **The modular monolith itself.** Step 2 has its boundary drawn and nothing more.
   Two things are missing and they are the substance of it: **separate Spring Boot
   applications per module** — today one Gradle project and one `@SpringBootApplication`,
   so an import is reported by a test rather than refused by the build — and **modules
   that do not share entities**, where eleven classes still cross and two of them carry
-  aggregates. This document first recorded Étape 2 as done. It was not, and the
+  aggregates. This document first recorded Step 2 as done. It was not, and the
   evidence was in a test written the same week.
 - **Idempotency** — a client retry still creates a second `INITIALIZED` transaction.
-  Étape 4, deliberately not folded into the bus.
+  Step 4, deliberately not folded into the bus.
 - **G-1 to G-4 from ADR-004** — no reaper between TX-1 and TX-2, no TX-2 retry after
   provider success. `AuthorizationRecord` still exists only to make them auditable.
 - **A real provider** — `MobileMoneyProviderAdapter` is a latency-simulating stub with no
   circuit breaker. Deliberate: it makes failure modes reproducible in a test.
 - **Redis** for `ExpiringStore` — single-instance today, one `@Bean` line away.
-- **Automated settlement** — `SETTLEMENT_PENDING → SETTLED` is not triggered. Étape 6.
+- **Automated settlement** — `SETTLEMENT_PENDING → SETTLED` is not triggered. Step 6.
 - **Database-level enforcement** of the double-entry and append-only invariants. Both
   live in the domain and in tests; neither has a constraint or a trigger.
 - **A deterministic lock order** for crossing transfers. A deadlock surfaces as
@@ -568,7 +568,7 @@ Keyed on `ROADMAP.md`'s numbering, which is now the only one.
 Volumes are `ROADMAP.md`'s, not v1's — v1's table used the other numbering and a
 different scale, and reconciling the two was part of what ADR-007 settled.
 
-| Étape | Volume target | Peak | Architecture unlock | State |
+| Step | Volume target | Peak | Architecture unlock | State |
 |---|---|---|---|---|
 | 0 | 5 000 tx/day | 5–10 req/s | Domain model, double-entry ledger, TDD baseline | done |
 | 1 | 15 000 tx/day | 20–30 req/s | Lifecycle state machine, locking, micro-transaction | done |
@@ -582,9 +582,9 @@ different scale, and reconciling the two was part of what ADR-007 settled.
 | 9 | 300 000 tx/day | 700–800 req/s | Containerisation and Kubernetes | |
 | 10 | 500 000 tx/day | 1000+ req/s | Observability and business KPIs | |
 
-Étapes 2 and 3 are listed in the order they were begun. The volume targets are not
-re-ordered with them, and none of the three most recent has been demonstrated: Étape 3
-was delivered but its 50 000 tx/day gate was never measured, and Étape 2 is not
+Steps 2 and 3 are listed in the order they were begun. The volume targets are not
+re-ordered with them, and none of the three most recent has been demonstrated: Step 3
+was delivered but its 50 000 tx/day gate was never measured, and Step 2 is not
 delivered at all. See ADR-007, and the missing baseline
 above.
 
@@ -630,6 +630,6 @@ An invariant is only as good as the thing that would notice if it broke.
 
 ---
 
-*Living document. v1 remains as the Étape 1 snapshot; this covers Étape 3 and the
-first half of Étape 2.*
+*Living document. v1 remains as the Step 1 snapshot; this covers Step 3 and the
+first half of Step 2.*
 *[github.com/Geekers-Joel237](https://github.com/Geekers-Joel237) · [geekersjoel237.substack.com](https://geekersjoel237.substack.com)*

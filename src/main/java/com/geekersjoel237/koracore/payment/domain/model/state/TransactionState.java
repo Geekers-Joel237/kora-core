@@ -13,6 +13,7 @@ public interface TransactionState {
     TransactionState CAPTURE_FAILED = new CaptureFailedState();
     TransactionState SETTLEMENT_FAILED = new SettlementFailedState();
     TransactionState REVERSED = new ReversedState();
+    TransactionState UNKNOWN = new UnknownState();
 
     static TransactionState fromValue(String value) {
         return switch (value) {
@@ -27,6 +28,7 @@ public interface TransactionState {
             case "CAPTURE_FAILED" -> CAPTURE_FAILED;
             case "SETTLEMENT_FAILED" -> SETTLEMENT_FAILED;
             case "REVERSED" -> REVERSED;
+            case "UNKNOWN" -> UNKNOWN;
             default -> throw new IllegalArgumentException("Unknown transaction state: " + value);
         };
     }

@@ -1,4 +1,4 @@
-# ADR-005 — Calibration des Tests de Performance pour l'Étape 1
+# ADR-005 — Calibration des Tests de Performance pour le Step 1
 
 **Date**: 2026-05-24
 **Status**: Accepted

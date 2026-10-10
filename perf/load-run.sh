@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# load-run.sh — Lance le load test k6 (validation SLOs nominaux Étape 0).
+# load-run.sh — Lance le load test k6 (validation SLOs nominaux Step 0).
 # Usage : ./perf/load-run.sh [BASE_URL]
 #
 # SLOs validés par ce test :
@@ -56,7 +56,7 @@ banner() {
 }
 
 print_slos() {
-  echo -e "${YELLOW}  SLOs validés par ce test (Étape 1)${NC}"
+  echo -e "${YELLOW}  SLOs validés par ce test (Step 1)${NC}"
   echo "  ┌─────────────────────────────────────────────────"
   echo "  │  balance   p95 < 100ms"
   echo "  │  transfer  p95 < 200ms"

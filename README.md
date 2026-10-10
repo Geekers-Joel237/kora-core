@@ -70,7 +70,7 @@ Three packages — `auth`, `payment`, `shared` — with a hexagonal interior who
 dependency rules are asserted by the build, not by convention. Not yet a modular
 monolith: one Gradle project, one Spring Boot application, and eleven classes still
 crossing between `auth` and `payment`. Those crossings are *recorded* so they cannot
-grow unnoticed, which is the first half of Étape 2, not the whole of it.
+grow unnoticed, which is the first half of Step 2, not the whole of it.
 
 ```
 POST /auth/register · /auth/verify-otp · /auth/login · /auth/refresh
@@ -122,7 +122,7 @@ POST /admin/payments/{txId}/reverse
 Not built. Listed here because the architecture is shaped to receive them, and
 `ROADMAP.md` says when.
 
-| | | Étape |
+| | | Step |
 |---|---|---|
 | **Idempotency** | duplicate-charge protection under retry storms | 4 |
 | **Event-driven consistency** | outbox, at-least-once delivery, idempotent consumers | 5 |
@@ -177,7 +177,7 @@ Security is embedded from day one.
   starting with a publicly readable signing key. A test enforces that.
 - Tamper-aware audit trail: every state change writes an immutable row
 
-**Planned:** idempotency-first design (Étape 4), rate limiting and abuse mitigation,
+**Planned:** idempotency-first design (Step 4), rate limiting and abuse mitigation,
 zero-trust inter-service communication once anything is distributed.
 
 In fintech, security failures are trust failures.
@@ -242,7 +242,7 @@ docker compose up -d
 | [CONTRIBUTING.md](./CONTRIBUTING.md) | Local setup, running the app, running the tests, conventions |
 | [CLAUDE.md](./CLAUDE.md) | The invariants, the vocabulary, and the rules a review applies to a diff |
 | [HELP.md](./HELP.md) | Engineering standards: testing strategy, DDD and SOLID as practised here |
-| [ROADMAP.md](./ROADMAP.md) | The ten étapes, and where the project stands in them |
+| [ROADMAP.md](./ROADMAP.md) | The ten steps, and where the project stands in them |
 | [perf/PERF.md](./perf/PERF.md) | Load testing runbook (k6 + Grafana) |
 
 **Architecture decisions** — the reasoning, and what each one cost:

@@ -92,7 +92,7 @@ const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
 
 ### 3.2 Erreur normalisée
 
-Le backend produit **trois formats d'erreur distincts** (contrat §5.1) — `ProblemDetail`, `{status, error}` de la couche sécurité, et le corps Spring par défaut sur les exceptions non mappées comme `ProviderException`. Un corps vide ou non-JSON reste possible. Le client les ramène tous à un type unique, sans jamais planter.
+Le backend produit **trois formats d'erreur distincts** (contrat §5.1) — `ProblemDetail`, `{status, error}` de la couche sécurité, et le corps Spring par défaut sur les exceptions non mappées comme `PaymentProviderException`. Un corps vide ou non-JSON reste possible. Le client les ramène tous à un type unique, sans jamais planter.
 
 ```ts
 export type KoraError = {

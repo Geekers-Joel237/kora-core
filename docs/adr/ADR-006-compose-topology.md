@@ -161,8 +161,8 @@ entre l'application et son orchestrateur, que nous refusons.
 
 *Renvoi corrigé le 2026-09-06. La rédaction initiale disait « lorsque le `OtpStore`
 en aura besoin (Step 2) ». Les deux moitiés ont vieilli : `OtpStore` n'existe plus,
-et « Step 2 » désignait la numérotation que ADR-007 a supprimée — l'Étape 2 du
-`ROADMAP.md` est faite et ne contenait pas Redis. La décision, elle, n'a pas bougé.*
+et ce « Step 2 » relevait de la numérotation propre à `CLAUDE.md`, que ADR-007 a
+supprimée — le Step 2 du `ROADMAP.md`, lui, est encore ouvert et ne contient pas Redis. La décision, elle, n'a pas bougé.*
 
 Réintroduit lorsque `ExpiringStore<OtpCode>` en aura besoin — c'est-à-dire le jour
 où l'application tourne sur plus d'une instance, les codes OTP vivant aujourd'hui

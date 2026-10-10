@@ -2,7 +2,7 @@ package com.geekersjoel237.koracore.payment.unit.doubles;
 
 import com.geekersjoel237.koracore.payment.domain.enums.PaymentMethod;
 import com.geekersjoel237.koracore.payment.domain.enums.ProviderOperationType;
-import com.geekersjoel237.koracore.payment.domain.exception.ProviderException;
+import com.geekersjoel237.koracore.payment.domain.exception.PaymentProviderException;
 import com.geekersjoel237.koracore.payment.ports.out.provider.ProviderPort;
 import com.geekersjoel237.koracore.shared.domain.vo.Amount;
 import com.geekersjoel237.koracore.payment.domain.vo.AuthorizationResult;
@@ -55,7 +55,7 @@ public class InMemoryProviderAdapter implements ProviderPort {
         this.lastCustomerPhone = customerPhone;
 
         if (behavior == Behavior.FAIL || behavior == Behavior.FAIL_ON_AUTHORIZE)
-            throw new ProviderException("Provider simulated authorization failure");
+            throw new PaymentProviderException("Provider simulated authorization failure");
 
         return new AuthorizationResult(
                 UUID.randomUUID().toString(),
@@ -67,7 +67,7 @@ public class InMemoryProviderAdapter implements ProviderPort {
     public CaptureResult capture(String authorizationReference, Id correlationId) {
         this.captureCalls++;
         if (behavior == Behavior.FAIL_ON_CAPTURE)
-            throw new ProviderException("Provider simulated capture failure");
+            throw new PaymentProviderException("Provider simulated capture failure");
         return new CaptureResult(UUID.randomUUID().toString(), true);
     }
 

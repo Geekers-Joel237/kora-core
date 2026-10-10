@@ -335,7 +335,7 @@ La correspondance est une **table de données** indexée par `(statut, motif)`, 
 
 Le cas le plus délicat, et celui qui distingue une application financière sérieuse.
 
-Trois déclencheurs, un seul écran : `503` (`TransientPaymentException`), `500` (`ProviderException` non mappée, corps non conforme), et l'absence de réponse. Dans les trois cas, l'app **ignore si l'argent a bougé**.
+Trois déclencheurs, un seul écran : `503` (`TransientPaymentException`), `500` (`PaymentProviderException` non mappée, corps non conforme), et l'absence de réponse. Dans les trois cas, l'app **ignore si l'argent a bougé**.
 
 | Aspect | Spécification |
 |---|---|

@@ -126,7 +126,7 @@ We use **TDD** with three test layers. The goal is not “high coverage”, but 
 - `POST /payments/transfer` moves money between two wallets with the ledger balanced
   at every step
 
-Idempotency is **not** covered here yet — there is no idempotency store (Étape 4 of
+Idempotency is **not** covered here yet — there is no idempotency store (Step 4 of
 `ROADMAP.md`). A client retry currently creates a second `INITIALIZED` transaction.
 
 ---
@@ -168,7 +168,7 @@ project deliberately does **not** use.
 
 - **Modules** (today): `auth`, `payment`, `shared` — the kernel. Bounded contexts in the
   DDD sense, and packages with an asserted boundary — not yet deployable modules; see
-  §7 Phase C. Risk and reconciliation arrive with Étapes 6 and 8.
+  §7 Phase C. Risk and reconciliation arrive with Steps 6 and 8.
 - **Aggregates**:
     - `Transaction` — the money movement, aggregate root; owns its ledger entries,
       its state and its history
@@ -178,7 +178,7 @@ project deliberately does **not** use.
 - **Value Objects**:
     - `Amount(BigDecimal value, String currency)` — the money type
     - `Id`, `Msisdn`, `Pin` in the kernel; `PhoneNumber`, `OtpCode` in auth
-- **Domain Events** (later stage, Étape 5):
+- **Domain Events** (later stage, Step 5):
     - not implemented; no event type exists yet
 
 ### DDD Rules
@@ -224,7 +224,7 @@ We evolve architecture only when justified.
 
 ### Phase C — Modular Monolith — open
 
-Roadmap Étape 2, which `ROADMAP.md` numbers and this file does not. **Do not describe
+Roadmap Step 2, which `ROADMAP.md` numbers and this file does not. **Do not describe
 this codebase as a modular monolith.** `auth`, `payment` and `shared` are packages with
 an asserted boundary, which is the first half of the phase and not the phase.
 

@@ -12,7 +12,7 @@ mocking needed between scenarios.
 |--------------------------|-------------|
 | `SUCCESS` *(default)*    | Every authorize/capture call succeeds immediately |
 | `SLOW`                   | Succeeds but with 2× base latency (simulates congested network) |
-| `FAIL_ON_AUTHORIZE`      | Throws `ProviderException` during authorize → transaction reaches `AUTHORIZATION_FAILED` |
+| `FAIL_ON_AUTHORIZE`      | Throws `PaymentProviderException` during authorize → transaction reaches `AUTHORIZATION_FAILED` |
 | `FAIL_ON_CAPTURE`        | Authorizes OK, throws during capture → transaction reaches `CAPTURE_FAILED` |
 | `TIMEOUT`                | Simulates a network timeout on every call (sleeps `timeoutThresholdMs + 500ms` then throws) |
 
