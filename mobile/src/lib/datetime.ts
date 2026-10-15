@@ -2,8 +2,9 @@
  * Dates — contrat §2, architecture §8.2.
  *
  * Le backend émet **exclusivement en ISO-8601 UTC**. Toute date est convertie
- * dans le fuseau de l'appareil à l'affichage, et reconvertie en UTC à l'envoi.
- * Une date locale envoyée telle quelle produit un `400`.
+ * dans le fuseau de l'appareil à l'affichage. Les filtres de l'historique, eux,
+ * s'envoient en **jours** `YYYY-MM-DD` : le serveur les lit sur le calendrier du
+ * client (`toApiDay`).
  */
 
 import { format, isToday, isYesterday, parseISO } from 'date-fns';
@@ -23,12 +24,20 @@ export function parseInstantOrEpoch(iso: string): Date {
 }
 
 /**
- * Sérialisation pour `from` / `to` de `GET /payments/history`.
- * `toISOString()` produit toujours un instant UTC suffixé `Z`, ce que
- * `Instant.parse` attend côté serveur.
+ * Sérialisation pour `from` / `to` de `GET /payments/history` : le **jour local**,
+ * bornes incluses côté serveur. Jamais `toISOString()`, qui basculerait la veille
+ * pour un appareil en avance sur UTC. Contrat §2.
  */
-export function toApiInstant(date: Date): string {
-  return date.toISOString();
+export function toApiDay(date: Date): string {
+  return format(date, 'yyyy-MM-dd');
+}
+
+/** Lecture tolérante d'un jour `YYYY-MM-DD`, à minuit local — règle R2. */
+export function parseApiDay(raw: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+  if (!match) return null;
+  const day = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return Number.isNaN(day.getTime()) ? null : day;
 }
 
 /**
@@ -97,11 +106,6 @@ export function formatSectionHeader(date: Date): string {
 /** Écran de détail : `6 août 2026, 11:42`. */
 export function formatDetailTimestamp(date: Date): string {
   return format(date, 'd MMMM yyyy, HH:mm', { locale: dateLocale() });
-}
-
-/** Frise des états : `11:42:13`, à la seconde. */
-export function formatTimelineTimestamp(date: Date): string {
-  return format(date, 'HH:mm:ss');
 }
 
 /** Clé de groupement par jour, en heure locale. */

@@ -51,12 +51,11 @@ class AuthorizationRecordTest {
 
     @Test
     void isExpired_should_return_true_after_ttl_has_passed() {
-        // Create a record whose expiresAt is in the past
         AuthorizationRecord record = AuthorizationRecord.createFromSnapshot(
                 new AuthorizationRecord.Snapshot(
                         Id.generate(), TX_ID, PROVIDER_REF, AMOUNT,
                         Instant.now().minus(Duration.ofMinutes(16)),
-                        Instant.now().minus(Duration.ofMinutes(1)),  // already expired
+                        Instant.now().minus(Duration.ofMinutes(1)),
                         AuthorizationStatus.ACTIVE
                 )
         );

@@ -1,12 +1,19 @@
 /**
- * setup.js — Création et pré-authentification séquentielle des users de test.
+ * setup.js — Création et pré-authentification des users de test, par lots.
  *
- * Flow par user :
+ * Flow par lot de BATCH_SIZE users, chaque étape en parallèle via http.batch :
  *   register → captureOtp → verify-otp → seed cashIn → stocke { email, pin,
- *   phonePrefix, phoneNumber, fullPhone, accessToken, tokenExpiresAt }
+ *   phonePrefix, phoneNumber, fullPhone, accessToken, refreshToken, tokenExpiresAt }
+ *
+ * Pourquoi par lots : à ~2.7s par user en séquentiel, 400 users coûtaient 18 min
+ * de setup, et les premiers tokens expiraient pendant le run — une vague de
+ * re-login (BCrypt + OTP + mail) au milieu des mesures. En lots de 20, un lot
+ * coûte ~3s (le seed cashIn domine), soit ~1 min pour 400 users.
  *
  * tokenExpiresAt en secondes depuis epoch (évite corruption des grands
  * entiers par la sérialisation JSON Go/k6 entre setup() et default()).
+ * Il est fixé entre 10 et 14 min (access token : 15 min) avec une part
+ * aléatoire, pour étaler les refresh au lieu de les synchroniser.
  *
  * Seed cashIn (100 000 XAF) : garantit un solde initial suffisant pour toute
  * séquence aléatoire de cashOut/transfer avant le premier cashIn du scénario.
@@ -19,14 +26,15 @@ import { sleep } from 'k6';
 
 const BASE_URL     = __ENV.BASE_URL || 'http://localhost:8081';
 const HEADERS_JSON = { 'Content-Type': 'application/json' };
+const SETUP_PARAMS = { headers: HEADERS_JSON, tags: { operation: 'setup' } };
 
 const PHONE_PREFIX = '+237';
 const PIN          = '123456';
+const SEED_AMOUNT  = 100_000;
+export const BATCH_SIZE = 20;
 
 // Plages de numéros isolées par type de test — évite les collisions entre tests parallèles.
-// Formule : phoneBase + parseInt(RUN_SUFFIX) × 100 + i
-// Chaque plage absorbe max RUN_SUFFIX(99999) × 100 + users_max = 9 999 940 numéros → 10 M.
-// Bases espacées de 20 M pour garantir l'absence de chevauchement.
+// Formule : phoneBase + parseInt(RUN_SUFFIX) × 100 + i. Bases espacées de 20 M.
 const PHONE_RANGES = {
     smoke:  600_000_000,
     load:   620_000_000,
@@ -35,14 +43,13 @@ const PHONE_RANGES = {
 };
 
 // RUN_SUFFIX — 5 derniers chiffres du timestamp en SECONDES.
-// Cycle de 100 000 secondes ≈ 27,8 heures → collision pratiquement impossible.
 const RUN_SUFFIX = String(Math.floor(Date.now() / 1000)).slice(-5);
 
 // RUN_ID — unicité des adresses email entre runs.
 const RUN_ID = __ENV.RUN_ID || `${Date.now()}`;
 
 /**
- * Crée N utilisateurs via l'API, les pré-authentifie séquentiellement,
+ * Crée N utilisateurs via l'API, les pré-authentifie par lots,
  * et retourne leurs profils avec token JWT prêt à l'emploi.
  *
  * @param {number} n           nombre d'utilisateurs à créer
@@ -50,107 +57,142 @@ const RUN_ID = __ENV.RUN_ID || `${Date.now()}`;
  * @returns {{ users: Array }}
  */
 export function createTestUsers(n, prefix = 'user') {
-    const users     = [];
     const phoneBase = PHONE_RANGES[prefix] || 600_080_000;
+    const users     = [];
 
-    for (let i = 1; i <= n; i++) {
-        const phoneNumber = String(phoneBase + parseInt(RUN_SUFFIX) * 100 + i);
-        const email       = `${prefix}-${RUN_ID}-${i}@kora.perf`;
-        const fullPhone   = `${PHONE_PREFIX}${phoneNumber}`;
-
-        // ── Register ────────────────────────────────────────────────────────
-        const regRes = http.post(
-            `${BASE_URL}/auth/register`,
-            JSON.stringify({
-                fullName:    `Perf User ${i}`,
-                email,
-                phonePrefix: PHONE_PREFIX,
+    for (let start = 1; start <= n; start += BATCH_SIZE) {
+        const candidates = [];
+        for (let i = start; i < start + BATCH_SIZE && i <= n; i++) {
+            const phoneNumber = String(phoneBase + parseInt(RUN_SUFFIX) * 100 + i);
+            candidates.push({
+                index: i,
+                email: `${prefix}-${RUN_ID}-${i}@kora.perf`,
                 phoneNumber,
-                rawPin:      PIN,
-            }),
-            { headers: HEADERS_JSON }
-        );
-
-        console.log(`[setup] register ${email} → HTTP ${regRes.status}`);
-
-        // 201 = inscrit, 409 = déjà inscrit (idempotence)
-        if (regRes.status !== 201 && regRes.status !== 409) {
-            console.error(`[setup] register échoué pour ${email}: ${regRes.status} ${regRes.body}`);
-            continue;
+                fullPhone: `${PHONE_PREFIX}${phoneNumber}`,
+            });
         }
-
-        // ── Capture OTP ─────────────────────────────────────────────────────
-        const otp = captureOtp(email);
-        if (!otp) {
-            console.error(`[setup] OTP timeout pour ${email} — /test/otp endpoint retourne 404 ?`);
-            console.error(`[setup] Vérifier : SPRING_PROFILES_ACTIVE=perf et curl http://localhost:8081/test/otp/${encodeURIComponent(email)}`);
-            continue;
-        }
-
-        // ── Verify OTP → token ──────────────────────────────────────────────
-        const verifyRes = http.post(
-            `${BASE_URL}/auth/verify-otp`,
-            JSON.stringify({ email, code: otp }),
-            { headers: HEADERS_JSON }
-        );
-
-        if (verifyRes.status !== 200) {
-            console.error(`[setup] verify-otp échoué pour ${email}: ${verifyRes.status}`);
-            continue;
-        }
-
-        let accessToken;
-        try {
-            accessToken = JSON.parse(verifyRes.body).accessToken;
-        } catch (e) {
-            console.error(`[setup] parse token échoué pour ${email}: ${e}`);
-            continue;
-        }
-
-        if (!accessToken) {
-            console.error(`[setup] accessToken absent dans verify-otp pour ${email}`);
-            console.log(`[setup] verify-otp body: ${verifyRes.body}`);
-            continue;
-        }
-
-        // ── Seed cashIn ─────────────────────────────────────────────────────
-        // 100 000 XAF : couvre N itérations cashOut (5 000) + transfer (2 000)
-        // avant le premier cashIn du scénario. Le mix net est positif (+2 550 XAF/iter
-        // en moyenne), le solde croît ensuite de lui-même.
-        const seedRes = http.post(
-            `${BASE_URL}/payments/cash-in`,
-            JSON.stringify({ rawPin: PIN, amount: 100_000, currency: 'XAF', paymentMethod: 'ORANGE_MONEY' }),
-            { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` } }
-        );
-        if (seedRes.status !== 200) {
-            console.error(`[setup] seed cashIn échoué pour ${email}: ${seedRes.status} ${seedRes.body}`);
-        }
-
-        users.push({
-            email,
-            pin:         PIN,
-            phonePrefix: PHONE_PREFIX,
-            phoneNumber,
-            fullPhone,
-            accessToken,
-            // secondes depuis epoch — entier 10 chiffres, safe via sérialisation k6
-            tokenExpiresAt: Math.floor(Date.now() / 1000) + 14 * 60,
-        });
-
-        sleep(0.1);  // légère pause entre users — réduit la pression sur l'OTP store
+        users.push(...onboard(candidates));
+        console.log(`[setup] ${users.length}/${n} utilisateurs prêts`);
     }
 
     console.log(`[setup] ${users.length}/${n} utilisateurs prêts (RUN_ID=${RUN_ID})`);
     return { users };
 }
 
-// ── Helpers internes ──────────────────────────────────────────────────────────
+function onboard(candidates) {
+    const registered = register(candidates);
+    const withOtp    = captureOtps(registered);
+    const verified   = verify(withOtp);
+    seed(verified);
 
-function captureOtp(email) {
-    for (let i = 0; i < 20; i++) {
-        const r = http.get(`${BASE_URL}/test/otp/${encodeURIComponent(email)}`);
-        if (r.status === 200) return JSON.parse(r.body).code;
-        sleep(0.5);
+    const nowSec = Math.floor(Date.now() / 1000);
+    return verified.map((c) => ({
+        email:          c.email,
+        pin:            PIN,
+        phonePrefix:    PHONE_PREFIX,
+        phoneNumber:    c.phoneNumber,
+        fullPhone:      c.fullPhone,
+        accessToken:    c.accessToken,
+        refreshToken:   c.refreshToken,
+        tokenExpiresAt: nowSec + 10 * 60 + Math.floor(Math.random() * 4 * 60),
+    }));
+}
+
+function register(candidates) {
+    const responses = http.batch(candidates.map((c) => ({
+        method: 'POST',
+        url:    `${BASE_URL}/auth/register`,
+        body:   JSON.stringify({
+            fullName:    `Perf User ${c.index}`,
+            email:       c.email,
+            phonePrefix: PHONE_PREFIX,
+            phoneNumber: c.phoneNumber,
+            rawPin:      PIN,
+        }),
+        params: SETUP_PARAMS,
+    })));
+
+    // 201 = inscrit, 409 = déjà inscrit (idempotence)
+    return candidates.filter((c, i) => {
+        const status = responses[i].status;
+        if (status === 201 || status === 409) return true;
+        console.error(`[setup] register échoué pour ${c.email}: ${status} ${responses[i].body}`);
+        return false;
+    });
+}
+
+function captureOtps(candidates) {
+    let pending = candidates;
+    const ready = [];
+
+    for (let attempt = 0; attempt < 20 && pending.length > 0; attempt++) {
+        const responses = http.batch(pending.map((c) => ({
+            method: 'GET',
+            url:    `${BASE_URL}/test/otp/${encodeURIComponent(c.email)}`,
+            params: SETUP_PARAMS,
+        })));
+
+        const stillPending = [];
+        pending.forEach((c, i) => {
+            if (responses[i].status === 200) ready.push({ ...c, otp: JSON.parse(responses[i].body).code });
+            else stillPending.push(c);
+        });
+        pending = stillPending;
+        if (pending.length > 0) sleep(0.5);
     }
-    return null;
+
+    pending.forEach((c) => {
+        console.error(`[setup] OTP timeout pour ${c.email} — /test/otp endpoint retourne 404 ?`);
+        console.error(`[setup] Vérifier : SPRING_PROFILES_ACTIVE=perf et curl ${BASE_URL}/test/otp/${encodeURIComponent(c.email)}`);
+    });
+    return ready;
+}
+
+function verify(candidates) {
+    const responses = http.batch(candidates.map((c) => ({
+        method: 'POST',
+        url:    `${BASE_URL}/auth/verify-otp`,
+        body:   JSON.stringify({ email: c.email, code: c.otp }),
+        params: SETUP_PARAMS,
+    })));
+
+    const verified = [];
+    candidates.forEach((c, i) => {
+        const res = responses[i];
+        if (res.status !== 200) {
+            console.error(`[setup] verify-otp échoué pour ${c.email}: ${res.status}`);
+            return;
+        }
+        let body;
+        try { body = JSON.parse(res.body); } catch (e) {
+            console.error(`[setup] parse token échoué pour ${c.email}: ${e}`);
+            return;
+        }
+        if (!body.accessToken) {
+            console.error(`[setup] accessToken absent dans verify-otp pour ${c.email}: ${res.body}`);
+            return;
+        }
+        verified.push({ ...c, accessToken: body.accessToken, refreshToken: body.refreshToken });
+    });
+    return verified;
+}
+
+// 100 000 XAF : couvre N itérations cashOut (5 000) + transfer (2 000) avant le
+// premier cashIn du scénario. Le mix net est positif, le solde croît ensuite.
+function seed(candidates) {
+    const responses = http.batch(candidates.map((c) => ({
+        method: 'POST',
+        url:    `${BASE_URL}/payments/cash-in`,
+        body:   JSON.stringify({ rawPin: PIN, amount: SEED_AMOUNT, currency: 'XAF', paymentMethod: 'ORANGE_MONEY' }),
+        params: {
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${c.accessToken}` },
+            tags:    { operation: 'setup' },
+        },
+    })));
+
+    candidates.forEach((c, i) => {
+        if (responses[i].status !== 200) {
+            console.error(`[setup] seed cashIn échoué pour ${c.email}: ${responses[i].status} ${responses[i].body}`);
+        }
+    });
 }

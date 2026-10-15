@@ -5,14 +5,6 @@ import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.SimpleTransactionStatus;
 
-/**
- * Remembers how each transaction ended.
- *
- * <p>{@link NoopTransactionManager} answers whether an exception propagates;
- * it cannot answer whether the work was undone, because its rollback does nothing.
- * That is the question that actually matters for a business failure, so it needs a
- * manager that keeps score.
- */
 public class RecordingTransactionManager implements PlatformTransactionManager {
 
     private int started;

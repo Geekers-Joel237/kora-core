@@ -6,15 +6,10 @@ import org.springframework.jdbc.BadSqlGrammarException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import com.geekersjoel237.koracore.shared.integration.persistence.AbstractRepositoryTest;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/**
- * Verifies that the @Version column exists on mutable entities and
- * is intentionally absent from immutable (append-only) entities.
- */
 class VersionedEntityContractTest extends AbstractRepositoryTest {
 
     @Autowired

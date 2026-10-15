@@ -1,6 +1,6 @@
 package com.geekersjoel237.koracore.payment.integration.query;
 
-import com.geekersjoel237.koracore.payment.adapters.out.query.JdbcAccountQueryAdapter;
+import com.geekersjoel237.koracore.payment.adapters.out.query.JdbcReadAccountQueryAdapter;
 import com.geekersjoel237.koracore.payment.application.query.balance.BalanceResult;
 import com.geekersjoel237.koracore.shared.integration.persistence.AbstractRepositoryTest;
 import com.geekersjoel237.koracore.shared.domain.vo.Amount;
@@ -15,17 +15,10 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * Resolving a customer to their wallet, and reading its balance.
- *
- * <p>Both statements filter on {@code resource_type} — a customer id and a provider id
- * live in the same column, and the pair is only unique together. Getting that wrong
- * would hand someone the float account, which is why it is asserted rather than assumed.
- */
 class JdbcAccountQueryAdapterTest extends AbstractRepositoryTest {
 
     @Autowired
-    private JdbcAccountQueryAdapter adapter;
+    private JdbcReadAccountQueryAdapter adapter;
     @Autowired
     private NamedParameterJdbcTemplate jdbc;
 

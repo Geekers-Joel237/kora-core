@@ -2,11 +2,11 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button, IconButton } from '@/components/action';
-import { StateTimeline, StatusChip, TransactionRow } from '@/components/display';
+import { StatusChip, TransactionRow } from '@/components/display';
 import { Skeleton } from '@/components/feedback';
 import { Amount } from '@/components/money';
 import { Divider, Icon, ICON_NAMES, Pressable, Spacer, Surface, Text } from '@/components/primitives';
-import { TX_STATES, type StateTransition, type Transaction } from '@/types/domain';
+import type { OutcomeGroup, Transaction } from '@/types/domain';
 import {
   iconSize,
   palette,
@@ -24,51 +24,48 @@ import {
 /** Jeux d'essai de la galerie — jamais de données réseau ici. */
 const GALLERY_TRANSACTIONS: Transaction[] = [
   {
-    id: 'g1',
     reference: 'TRX-20260806-A3F91C2D',
-    type: 'CASH_IN',
-    direction: 'INBOUND',
-    state: 'COMPLETED',
+    kind: 'DEPOSIT',
     outcome: 'success',
+    direction: 'INBOUND',
     amount: { minor: 50000, currency: 'XOF' },
-    paymentMethod: 'ORANGE_MONEY',
+    channel: 'ORANGE_MONEY',
     counterpart: null,
     createdAt: new Date(),
-    stateHistory: null,
   },
   {
-    id: 'g2',
     reference: 'TRX-20260806-B1C2D3E4',
-    type: 'P2P_TRANSFER',
-    direction: 'OUTBOUND',
-    state: 'CAPTURED',
+    kind: 'TRANSFER_SENT',
     outcome: 'pending',
+    direction: 'OUTBOUND',
     amount: { minor: 25000, currency: 'XOF' },
-    paymentMethod: 'WALLET',
+    channel: null,
     counterpart: '+225070***011',
     createdAt: new Date(),
-    stateHistory: null,
   },
   {
-    id: 'g3',
     reference: 'TRX-20260806-C9D8E7F6',
-    type: 'CASH_OUT',
-    direction: 'OUTBOUND',
-    state: 'AUTHORIZATION_FAILED',
+    kind: 'WITHDRAWAL',
     outcome: 'failed',
+    direction: 'OUTBOUND',
     amount: { minor: 10000, currency: 'XOF' },
-    paymentMethod: 'WAVE',
+    channel: 'WAVE',
     counterpart: null,
     createdAt: new Date(),
-    stateHistory: null,
+  },
+  {
+    reference: 'TRX-20260806-D4E5F6A7',
+    kind: 'TRANSFER_RECEIVED',
+    outcome: 'reversed',
+    direction: 'INBOUND',
+    amount: { minor: 15000, currency: 'XOF' },
+    channel: null,
+    counterpart: '+225070***022',
+    createdAt: new Date(),
   },
 ];
 
-const GALLERY_TIMELINE: StateTransition[] = [
-  { from: null, to: 'INITIALIZED', occurredAt: new Date(Date.now() - 3000) },
-  { from: 'INITIALIZED', to: 'AUTHORIZED', occurredAt: new Date(Date.now() - 2000) },
-  { from: 'AUTHORIZED', to: 'CAPTURED', occurredAt: new Date(Date.now() - 1000) },
-];
+const GALLERY_OUTCOMES: readonly OutcomeGroup[] = ['pending', 'success', 'failed', 'reversed'];
 
 /**
  * Galerie du design system — exigée par le lot 2 de `07-implementation-plan.md`.
@@ -336,22 +333,18 @@ export function GalleryScreen() {
         </View>
       </Section>
 
-      <Section title="Puces d'état" subtitle="les 11 états, 4 familles — §2.4">
+      <Section title="Puces d'état" subtitle="4 statuts client — §2.4">
         <View style={styles.row}>
-          {TX_STATES.map((state) => (
-            <StatusChip key={state} state={state} detailed />
+          {GALLERY_OUTCOMES.map((outcome) => (
+            <StatusChip key={outcome} outcome={outcome} showIcon />
           ))}
         </View>
       </Section>
 
       <Section title="Lignes d'historique" subtitle="succès sans puce — §5">
         {GALLERY_TRANSACTIONS.map((transaction) => (
-          <TransactionRow key={transaction.id} transaction={transaction} />
+          <TransactionRow key={transaction.reference} transaction={transaction} />
         ))}
-      </Section>
-
-      <Section title="Frise des états" subtitle="le composant signature — §6.7">
-        <StateTimeline history={GALLERY_TIMELINE} currentState="CAPTURED" />
       </Section>
 
       <Section title="Rôles de texte" subtitle="§3.3">

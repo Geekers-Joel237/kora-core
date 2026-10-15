@@ -8,8 +8,6 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class TransactionStateTest {
 
-    // ── InitializedState ─────────────────────────────────────────────────────
-
     @Test
     void should_allow_transition_from_initialized_to_authorized() {
         assertDoesNotThrow(() -> TransactionState.INITIALIZED.transitionTo(TransactionState.AUTHORIZED));
@@ -25,8 +23,6 @@ class TransactionStateTest {
     void should_allow_transition_from_initialized_to_failed() {
         assertDoesNotThrow(() -> TransactionState.INITIALIZED.transitionTo(TransactionState.FAILED));
     }
-
-    // ── AuthorizedState ───────────────────────────────────────────────────────
 
     @Test
     void should_allow_transition_from_authorized_to_captured() {
@@ -54,8 +50,6 @@ class TransactionStateTest {
                 () -> TransactionState.AUTHORIZED.transitionTo(TransactionState.COMPLETED));
     }
 
-    // ── CapturedState ─────────────────────────────────────────────────────────
-
     @Test
     void should_allow_transition_from_captured_to_settlement_pending() {
         assertDoesNotThrow(() -> TransactionState.CAPTURED.transitionTo(TransactionState.SETTLEMENT_PENDING));
@@ -77,8 +71,6 @@ class TransactionStateTest {
                 () -> TransactionState.CAPTURED.transitionTo(TransactionState.COMPLETED));
     }
 
-    // ── SettlementPendingState ────────────────────────────────────────────────
-
     @Test
     void should_allow_transition_from_settlement_pending_to_settled() {
         assertDoesNotThrow(() -> TransactionState.SETTLEMENT_PENDING.transitionTo(TransactionState.SETTLED));
@@ -95,8 +87,6 @@ class TransactionStateTest {
                 () -> TransactionState.SETTLEMENT_PENDING.transitionTo(TransactionState.COMPLETED));
     }
 
-    // ── SettledState ──────────────────────────────────────────────────────────
-
     @Test
     void should_allow_transition_from_settled_to_completed() {
         assertDoesNotThrow(() -> TransactionState.SETTLED.transitionTo(TransactionState.COMPLETED));
@@ -107,8 +97,6 @@ class TransactionStateTest {
         assertThrows(InvalidStateTransitionException.class,
                 () -> TransactionState.SETTLED.transitionTo(TransactionState.FAILED));
     }
-
-    // ── CompletedState (terminal) ─────────────────────────────────────────────
 
     @Test
     void should_throw_when_transitioning_from_completed_to_authorized() {
@@ -122,8 +110,6 @@ class TransactionStateTest {
                 () -> TransactionState.COMPLETED.transitionTo(TransactionState.FAILED));
     }
 
-    // ── FailedState (terminal) ────────────────────────────────────────────────
-
     @Test
     void should_throw_when_transitioning_from_failed_to_authorized() {
         assertThrows(InvalidStateTransitionException.class,
@@ -136,15 +122,11 @@ class TransactionStateTest {
                 () -> TransactionState.FAILED.transitionTo(TransactionState.COMPLETED));
     }
 
-    // ── AuthorizationFailedState (terminal) ───────────────────────────────────
-
     @Test
     void should_throw_when_transitioning_from_authorization_failed_to_authorized() {
         assertThrows(InvalidStateTransitionException.class,
                 () -> TransactionState.AUTHORIZATION_FAILED.transitionTo(TransactionState.AUTHORIZED));
     }
-
-    // ── CaptureFailedState (terminal) ─────────────────────────────────────────
 
     @Test
     void should_throw_when_transitioning_from_capture_failed_to_captured() {
@@ -152,23 +134,17 @@ class TransactionStateTest {
                 () -> TransactionState.CAPTURE_FAILED.transitionTo(TransactionState.CAPTURED));
     }
 
-    // ── SettlementFailedState (terminal) ──────────────────────────────────────
-
     @Test
     void should_throw_when_transitioning_from_settlement_failed_to_settled() {
         assertThrows(InvalidStateTransitionException.class,
                 () -> TransactionState.SETTLEMENT_FAILED.transitionTo(TransactionState.SETTLED));
     }
 
-    // ── ReversedState (terminal) ──────────────────────────────────────────────
-
     @Test
     void should_throw_when_transitioning_from_reversed_to_authorized() {
         assertThrows(InvalidStateTransitionException.class,
                 () -> TransactionState.REVERSED.transitionTo(TransactionState.AUTHORIZED));
     }
-
-    // ── Return value ─────────────────────────────────────────────────────────
 
     @Test
     void should_return_next_state_on_valid_transition() {
@@ -181,8 +157,6 @@ class TransactionStateTest {
         TransactionState result = TransactionState.SETTLED.transitionTo(TransactionState.COMPLETED);
         assertEquals(TransactionState.COMPLETED, result);
     }
-
-    // ── isTerminal() ──────────────────────────────────────────────────────────
 
     @Test
     void non_terminal_states_should_return_false_for_isTerminal() {

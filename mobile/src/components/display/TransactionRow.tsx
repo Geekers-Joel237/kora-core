@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { Amount } from '@/components/money/Amount';
 import { Icon, Pressable, Text, type IconName } from '@/components/primitives';
 import { formatRowTimestamp } from '@/lib/datetime';
-import { outcomeLabel, paymentMethodLabel, transactionTypeLabel } from '@/features/shared/labels';
+import { kindLabel, outcomeLabel, paymentMethodLabel } from '@/features/shared/labels';
 import { layout, radius, space, useTheme } from '@/theme';
 import type { Transaction } from '@/types/domain';
 
@@ -14,10 +14,11 @@ export interface TransactionRowProps {
   onPress?: (transaction: Transaction) => void;
 }
 
-const TYPE_ICONS: Record<string, IconName> = {
-  CASH_IN: 'arrow-down-circle',
-  CASH_OUT: 'arrow-up-circle',
-  P2P_TRANSFER: 'send',
+const KIND_ICONS: Record<string, IconName> = {
+  DEPOSIT: 'arrow-down-circle',
+  WITHDRAWAL: 'arrow-up-circle',
+  TRANSFER_SENT: 'send',
+  TRANSFER_RECEIVED: 'arrow-down-circle',
 };
 
 const BADGE_SIZE = 44;
@@ -35,12 +36,12 @@ export function TransactionRow({ transaction, onPress }: TransactionRowProps) {
   useTranslation();
   const status = theme.status[transaction.outcome];
 
-  // Le serveur masque déjà le numéro pour les P2P ; il vaut `null` pour les
-  // dépôts et retraits, dont la contrepartie est le compte de flottement.
-  const title = transaction.counterpart ?? paymentMethodLabel(transaction.paymentMethod);
-  const subtitle = `${transactionTypeLabel(transaction.type)} · ${formatRowTimestamp(
-    transaction.createdAt,
-  )}`;
+  // Transfert : le numéro, déjà masqué par le serveur. Dépôt et retrait :
+  // l'opérateur. Une nature inconnue sans l'un ni l'autre affiche son code (R2).
+  const title =
+    transaction.counterpart ??
+    (transaction.channel ? paymentMethodLabel(transaction.channel) : kindLabel(transaction.kind));
+  const subtitle = `${kindLabel(transaction.kind)} · ${formatRowTimestamp(transaction.createdAt)}`;
 
   const content = (
     <View style={styles.row}>
@@ -55,7 +56,7 @@ export function TransactionRow({ transaction, onPress }: TransactionRowProps) {
         ]}
       >
         <Icon
-          name={TYPE_ICONS[transaction.type] ?? 'more-horizontal'}
+          name={KIND_ICONS[transaction.kind] ?? 'more-horizontal'}
           size="sm"
           color={transaction.outcome === 'success' ? theme.text.secondary : status.fg}
         />
@@ -96,7 +97,7 @@ export function TransactionRow({ transaction, onPress }: TransactionRowProps) {
       scale="card"
       haptic="tap"
       accessibilityLabel={`${title}, ${subtitle}`}
-      testID={`tx-${transaction.id}`}
+      testID={`tx-${transaction.reference}`}
     >
       {content}
     </Pressable>

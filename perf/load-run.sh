@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# load-run.sh — Lance le load test k6 (validation SLOs nominaux Step 0).
+# load-run.sh — Lance le load test k6 (validation SLOs nominaux Step 3).
 # Usage : ./perf/load-run.sh [BASE_URL]
 #
-# SLOs validés par ce test :
-#   P95 latency  < 150ms
-#   Error rate   < 1%
-#   Throughput   ≥ 10 req/sec au plateau (11 min total)
+# SLOs validés par ce test (ROADMAP Step 3, ADR-005) :
+#   balance p95 < 100ms · history p95 < 150ms · transfer p95 < 300ms
+#   cash    p95 < 2 500ms (plafond provider)
+#   Error rate < 1% · 100 req/sec au plateau, aucune itération abandonnée
 #
 # Ce script :
 #   1. Démarre InfluxDB + Grafana + MailDev si nécessaire
@@ -56,14 +56,15 @@ banner() {
 }
 
 print_slos() {
-  echo -e "${YELLOW}  SLOs validés par ce test (Step 1)${NC}"
+  echo -e "${YELLOW}  SLOs validés par ce test (Step 3)${NC}"
   echo "  ┌─────────────────────────────────────────────────"
   echo "  │  balance   p95 < 100ms"
-  echo "  │  transfer  p95 < 200ms"
+  echo "  │  history   p95 < 150ms"
+  echo "  │  transfer  p95 < 300ms"
   echo "  │  cash      p95 < 2 500ms"
   echo "  │  Error rate    < 1%"
-  echo "  │  Throughput    25 req/sec au plateau"
-  echo "  │  Durée         ~11 min (ramp 2m + plateau 8m + down 1m)"
+  echo "  │  Throughput    100 req/sec au plateau, 0 itération abandonnée"
+  echo "  │  Durée         ~13 min (ramp 4m + plateau 8m + down 1m) + setup ~1 min"
   echo "  └─────────────────────────────────────────────────"
   echo ""
 }
@@ -149,7 +150,7 @@ reset_db() {
 
 # ── 4. Run k6 load ─────────────────────────────────────────────────────────────
 run_load() {
-  info "Lancement du load test (~11 min, 25 req/sec au plateau)…"
+  info "Lancement du load test (~13 min, 100 req/sec au plateau)…"
   echo ""
 
   local perf_mount

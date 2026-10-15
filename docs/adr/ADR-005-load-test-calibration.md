@@ -181,3 +181,44 @@ Le soak test cherche la dégradation progressive sur la durée (drift de latence
 - Le threshold `p(95)<2500` sur les opérations cash ne peut pas détecter une dégradation subtile (ex. passage de 2.1s à 2.4s). Une telle dérive est détectable uniquement par comparaison de runs dans Grafana.
 - Le seed cashIn en setup() augmente le temps de démarrage des tests (jusqu'à +5min pour stress). Acceptable à ce stade.
 - Les tags `operation` ne sont pas propagés dans les métriques Actuator JVM — le Grafana dashboard k6 (ID 2587) les expose via InfluxDB uniquement.
+---
+
+## Amendement Step 3 — 2026-10-13
+
+### Mesure de référence (scripts Step 1, 2026-10-13)
+
+Premier run complet depuis ADR-004, à 25 req/s :
+
+| Test | Résultat | Lecture |
+|---|---|---|
+| smoke | p95 1.98s, 0% erreur | Sain. Avant ADR-004 : 2.13s et 1.66% d'erreurs |
+| load 25 req/s | balance p95 8.7ms ✓ · cash 2.06s ✓ · **transfer 219ms ✗ (< 200)** · 0% erreur | Débit tenu : 14 249 itérations, la valeur théorique du profil. cash au plafond provider, donc pas de file d'attente sur le pool |
+| stress 5→50 req/s | p95 2.44s, 1 erreur sur 28 063, 186 itérations abandonnées | Tous les users re-loggés une fois : setup séquentiel de 9 min, tokens expirés en cours de run |
+| soak 5 req/s | p95 1.98s, 2 erreurs | Max 5m8s alors que `iteration_duration` max vaut 2.86s : saut d'horloge de l'hôte, pas une requête lente |
+
+Le transfert médian à ~150ms se décompose en BCrypt (strength 10, ~60–80ms CPU) plus une
+transaction à deux verrous et une dizaine d'écritures.
+
+### Décisions
+
+1. **Cible** : 100 req/s au plateau (haut de la fourchette ROADMAP Step 3), soak à 50 req/s.
+2. **Le P95 ROADMAP s'applique aux opérations sans provider.** transfer passe à
+   `p(95)<300`, la valeur Step 3. balance reste à 100ms ; history entre à 150ms. cash garde
+   2 500ms : le plafond provider n'a pas changé.
+3. **Le débit devient un threshold** : `dropped_iterations < 1` sur load et soak. Une
+   itération abandonnée faute de VU libre est une requête non servie, et un run qui passe
+   en en abandonnant n'a pas validé 100 req/s.
+4. **history entre dans le mix** (10%), pris sur cashIn (40 → 35) et transfer (35 → 30).
+   Le mix vit dans `perf/scenarios/mix.js`, partagé par les quatre tests.
+5. **Setup par lots de 20** (`http.batch`), et renouvellement par `/auth/refresh` au lieu
+   d'un login complet. Les expirations sont étalées entre 10 et 14 min.
+6. **`soak_latency_trend` supprimée** : mesurée avec `Date.now()`, elle a enregistré le
+   saut d'horloge comme une latence de 5 min. `iteration_duration` couvre le même besoin.
+
+### Risque à surveiller
+
+À 100 req/s, ~90 vérifications BCrypt par seconde occupent de l'ordre de 6 cœurs. C'est la
+première limite attendue, avant HikariCP (30 connexions, tenues < 100ms) et avant les
+200 threads Tomcat (le stub provider tient un thread ~1.9s, soit ~95 threads à 100 req/s).
+Si transfer dépasse 300ms au plateau alors que cash reste à ~2s, le CPU est en cause, pas
+la base.

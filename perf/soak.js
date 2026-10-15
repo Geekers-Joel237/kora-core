@@ -7,89 +7,56 @@
  *   - Dégradation de latence dans le temps (p95 drift)
  *   - Connexions non libérées, memory leaks dans les caches
  *
- * Profil :
- *   5 req/sec constant pendant 30 minutes
+ * Profil Step 3 :
+ *   50 req/s constant pendant 30 minutes — la moitié du pic Step 3, soit
+ *   ~90 000 itérations. 5 req/s (Step 1) ne produisait que 9 000 itérations,
+ *   trop peu pour qu'une fuite lente se voie.
  *
- * Thresholds (plus souples que load — on cherche la dégradation progressive) :
- *   p(95) < 300ms sur la durée totale
- *   error rate < 1%
- *
- * Surveiller dans Grafana pendant le run :
- *   - jvm_memory_used_bytes doit rester stable (pas de tendance haussière)
- *   - hikaricp_connections_pending doit rester à 0
- *   - http_req_duration p95 ne doit pas dériver dans le temps
+ * Thresholds : les mêmes SLOs par opération que load.js. Un threshold agrégé
+ * sur 30 min ne voit pas un drift qui commence à la 20e minute : la détection
+ * de drift reste dans Grafana (p95 par opération dans le temps).
  *
  * Lancer : ./perf/soak-run.sh
  */
 
-import { sleep }            from 'k6';
-import { Trend }            from 'k6/metrics';
-import { createTestUsers }  from './data/setup.js';
-import { scenarioCashIn }   from './scenarios/cashIn.js';
-import { scenarioCashOut }  from './scenarios/cashOut.js';
-import { scenarioTransfer } from './scenarios/transfer.js';
-import { scenarioBalance }  from './scenarios/balance.js';
+import { BATCH_SIZE, createTestUsers } from './data/setup.js';
+import { pickPair, runMix } from './scenarios/mix.js';
 
-// 40 = maxVUs — garantit 1 user par VU, élimine la contention OTP
-const USER_COUNT = 40;
-
-// Métrique custom : latence dans le temps (pour détecter drift dans Grafana)
-const latencyTrend = new Trend('soak_latency_trend', true);
-
-// ── Config k6 ─────────────────────────────────────────────────────────────────
+// 50 req/s × ~1.0s ≈ 50 VUs en régime ; marge ×2.4 pour la queue provider.
+const USER_COUNT = 120;
 
 export const options = {
-    // 40 users × ~2.7s (register + OTP + verify + seed cashIn) ≈ 1m48s.
-    setupTimeout: '4m',
+    setupTimeout:  '5m',
+    batchPerHost:  BATCH_SIZE,
     scenarios: {
         soak: {
             executor:        'constant-arrival-rate',
-            rate:            5,
+            rate:            50,
             timeUnit:        '1s',
             duration:        '30m',
-            preAllocatedVUs: 20,
-            maxVUs:          40,
+            preAllocatedVUs: 60,
+            maxVUs:          USER_COUNT,
         },
     },
     thresholds: {
-        // Provider ceiling: ~2 100ms max. 2 500ms catch les catastrophes (pool exhaustion,
-        // fuite mémoire tardive) sans échouer sur la latence provider normale.
-        // La détection de drift progressif repose sur Grafana (tendance du p95 dans le temps),
-        // pas sur ce threshold agrégé sur la totalité du run.
-        http_req_duration:   ['p(95)<2500'],
-        http_req_failed:     ['rate<0.01'],
-        soak_latency_trend:  ['p(95)<2500'],
+        'http_req_duration{operation:balance}':  ['p(95)<100'],
+        'http_req_duration{operation:history}':  ['p(95)<150'],
+        'http_req_duration{operation:transfer}': ['p(95)<300'],
+        'http_req_duration{operation:cash}':     ['p(95)<2500'],
+        http_req_failed:    ['rate<0.01'],
+        checks:             ['rate>0.99'],
+        dropped_iterations: ['count<1'],
     },
 };
-
-// ── Setup ─────────────────────────────────────────────────────────────────────
 
 export function setup() {
     return createTestUsers(USER_COUNT, 'soak');
 }
 
-// ── Scénario ──────────────────────────────────────────────────────────────────
-
 export default function (data) {
     const users = data.users;
     if (!users || users.length === 0) return;
 
-    const idx   = __VU % users.length;
-    const userA = users[idx];
-    const userB = users[(idx + 1) % users.length];
-
-    const start = Date.now();
-
-    const roll = Math.random();
-    if (roll < 0.40) {
-        scenarioCashIn(userA);
-    } else if (roll < 0.75) {
-        scenarioTransfer(userA, userB.fullPhone);
-    } else if (roll < 0.90) {
-        scenarioCashOut(userA);
-    } else {
-        scenarioBalance(userA);
-    }
-
-    latencyTrend.add(Date.now() - start);
+    const [userA, userB] = pickPair(users);
+    runMix(userA, userB);
 }

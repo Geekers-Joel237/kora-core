@@ -77,8 +77,6 @@ class CashInE2ETest extends AbstractE2ETest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
-    // ── Validation tests ──────────────────────────────────────────────────────
-
     @Test
     void should_return_400_when_amount_is_null() {
         SetupData ctx = setupCustomerWithAccount(EMAIL, FULL_NAME, PREFIX, PHONE, PIN);

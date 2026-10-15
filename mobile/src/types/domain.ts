@@ -20,96 +20,102 @@ export interface Money {
 
 // ──────────────────────────────────────────────────────── Transactions ──────
 
-/** Les 11 états du contrat §3.1. Liste exhaustive à la date du relevé. */
+/** L'utilisateur voit une famille, jamais un état technique. Contrat §3.1. */
+export type OutcomeGroup = 'pending' | 'success' | 'failed' | 'reversed';
+
+/** Statut client renvoyé par l'historique — contrat §3.1. */
+export const CUSTOMER_STATUSES = ['PENDING', 'COMPLETED', 'FAILED', 'REFUNDED'] as const;
+export type CustomerStatus = (typeof CUSTOMER_STATUSES)[number];
+
+const OUTCOME_OF_STATUS: Readonly<Record<CustomerStatus, OutcomeGroup>> = {
+  PENDING: 'pending',
+  COMPLETED: 'success',
+  FAILED: 'failed',
+  REFUNDED: 'reversed',
+};
+
+/** Règle R2 : un statut inconnu se rend `pending`, jamais un succès affiché à tort. */
+export function outcomeOfStatus(status: string): OutcomeGroup {
+  return OUTCOME_OF_STATUS[status as CustomerStatus] ?? 'pending';
+}
+
+/**
+ * États techniques — ils n'apparaissent plus que dans la réponse immédiate d'un
+ * paiement (`TransactionReceipt.state`). Correspondance **identique** à
+ * `CustomerStatus` côté backend : réussi dès la capture. Contrat §3.1.
+ */
 export const TX_STATES = [
   'INITIALIZED',
   'AUTHORIZED',
+  'UNKNOWN',
   'CAPTURED',
-  'COMPLETED',
   'SETTLEMENT_PENDING',
   'SETTLED',
+  'COMPLETED',
+  'SETTLEMENT_FAILED',
   'AUTHORIZATION_FAILED',
   'CAPTURE_FAILED',
-  'SETTLEMENT_FAILED',
   'FAILED',
   'REVERSED',
 ] as const;
 
 export type TxState = (typeof TX_STATES)[number];
 
-/** L'utilisateur voit la famille, pas les 11 états. Contrat §3.1. */
-export type OutcomeGroup = 'pending' | 'success' | 'failed' | 'reversed';
-
-const OUTCOME: Readonly<Record<TxState, OutcomeGroup>> = {
+const OUTCOME_OF_STATE: Readonly<Record<TxState, OutcomeGroup>> = {
   INITIALIZED: 'pending',
   AUTHORIZED: 'pending',
-  CAPTURED: 'pending',
-  SETTLEMENT_PENDING: 'pending',
-  COMPLETED: 'success',
+  UNKNOWN: 'pending',
+  CAPTURED: 'success',
+  SETTLEMENT_PENDING: 'success',
   SETTLED: 'success',
+  COMPLETED: 'success',
+  SETTLEMENT_FAILED: 'success',
   AUTHORIZATION_FAILED: 'failed',
   CAPTURE_FAILED: 'failed',
-  SETTLEMENT_FAILED: 'failed',
   FAILED: 'failed',
   REVERSED: 'reversed',
 };
 
-/**
- * Règle R2 — tolérance à l'inconnu.
- *
- * Les étapes 6 et 8 du `ROADMAP.md` introduiront de nouveaux états. Un état non
- * répertorié se rend en famille `pending` : jamais un plantage, jamais un
- * succès affiché à tort. Voir `docs/09-api-evolution.md` §5 R2.
- */
+/** Règle R2 — un état non répertorié se rend `pending`. Voir `docs/09-api-evolution.md` §5. */
 export function outcomeOf(state: string): OutcomeGroup {
-  return OUTCOME[state as TxState] ?? 'pending';
+  return OUTCOME_OF_STATE[state as TxState] ?? 'pending';
 }
 
 export function isKnownTxState(state: string): state is TxState {
-  return state in OUTCOME;
+  return state in OUTCOME_OF_STATE;
 }
 
-/** Un état terminal ne changera plus. Conditionne l'arrêt du sondage. */
-export function isTerminalState(state: string): boolean {
-  const outcome = outcomeOf(state);
-  return outcome !== 'pending' && isKnownTxState(state);
+/** Nature d'une opération, lue du côté du wallet de l'utilisateur. Contrat §2. */
+export const TX_KINDS = ['DEPOSIT', 'WITHDRAWAL', 'TRANSFER_SENT', 'TRANSFER_RECEIVED'] as const;
+export type TxKind = (typeof TX_KINDS)[number];
+
+export function isKnownTxKind(kind: string): kind is TxKind {
+  return (TX_KINDS as readonly string[]).includes(kind);
 }
 
-export const TX_TYPES = ['CASH_IN', 'CASH_OUT', 'P2P_TRANSFER'] as const;
-export type TxType = (typeof TX_TYPES)[number];
-
-export const DIRECTIONS = ['INBOUND', 'OUTBOUND'] as const;
-export type Direction = (typeof DIRECTIONS)[number];
-
-export interface StateTransition {
-  /** `null` sur la première transition. */
-  from: string | null;
-  to: string;
-  occurredAt: Date;
-}
+/** Sens de l'argent pour le wallet — pilote le signe et la couleur du montant. */
+export type Direction = 'INBOUND' | 'OUTBOUND';
 
 export interface Transaction {
-  id: string;
-  /** Référence lisible, affichable et copiable. */
+  /** `TRX-…` — identité de l'opération côté client, affichable et copiable. */
   reference: string;
-  /** Chaîne brute : peut valoir une valeur hors de `TxType` — voir R2. */
-  type: string;
-  direction: Direction;
-  /** Chaîne brute : peut valoir un état encore inconnu — voir R2. */
-  state: string;
+  /** Chaîne brute : peut valoir une valeur hors de `TxKind` — voir R2. */
+  kind: string;
   outcome: OutcomeGroup;
+  direction: Direction;
+  /** Toujours positif ; le sens est porté par `direction`. */
   amount: Money;
-  paymentMethod: string;
-  /** Numéro masqué par le serveur pour les P2P, `null` pour dépôt et retrait. */
+  /** Opérateur Mobile Money d'un dépôt ou d'un retrait, `null` pour un transfert. */
+  channel: string | null;
+  /** Numéro masqué par le serveur pour un transfert, `null` sinon. */
   counterpart: string | null;
   createdAt: Date;
-  /** Renseigné uniquement quand la requête demandait `detail=true`. */
-  stateHistory: StateTransition[] | null;
 }
 
 /** Résultat immédiat d'une opération monétaire — plus pauvre qu'une `Transaction`. */
 export interface TransactionReceipt {
   id: string;
+  /** Même valeur que `Transaction.reference` : c'est par elle qu'on retrouve l'opération. */
   reference: string;
   state: string;
   outcome: OutcomeGroup;
@@ -118,11 +124,20 @@ export interface TransactionReceipt {
 
 export interface Page<T> {
   items: T[];
-  page: number;
-  size: number;
-  totalElements: number;
-  totalPages: number;
-  hasNext: boolean;
+  /** Curseur qui a produit cette page ; `null` pour la première. Sert au rejeu §6.7. */
+  cursor: string | null;
+  /** `null` sur la dernière page. */
+  nextCursor: string | null;
+}
+
+// ──────────────────────────────────────────────────────────── Téléphone ─────
+
+/** Numéro en deux parties, telles que le backend les attend. */
+export interface PhoneNumber {
+  /** `+225` */
+  prefix: string;
+  /** `0708091011`, sans le préfixe. */
+  number: string;
 }
 
 // ────────────────────────────────────────────────────────── Portefeuille ────

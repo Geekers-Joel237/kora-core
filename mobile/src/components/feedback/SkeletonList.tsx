@@ -31,35 +31,6 @@ export function SkeletonTransactionList({ count = 5 }: { count?: number }) {
   );
 }
 
-const TIMELINE_NODE = 12;
-const TIMELINE_SEGMENT = 28;
-
-/**
- * Squelette de la frise d'états.
- *
- * Reprend le rail et les nœuds de `StateTimeline` : l'utilisateur voit qu'une
- * chronologie arrive, pas qu'un bloc quelconque charge. Le nombre de nœuds est
- * une supposition assumée — quatre est la longueur d'un parcours nominal.
- */
-export function SkeletonTimeline({ nodes = 4 }: { nodes?: number }) {
-  return (
-    <View>
-      {Array.from({ length: nodes }, (_, index) => (
-        <View key={index} style={styles.timelineRow}>
-          <View style={styles.rail}>
-            <Skeleton width={TIMELINE_NODE} height={TIMELINE_NODE} radius="full" />
-            {index < nodes - 1 && <Skeleton width={2} height={TIMELINE_SEGMENT} />}
-          </View>
-          <View style={styles.timelineBody}>
-            <Skeleton width="45%" height={15} />
-            <Skeleton width="65%" height={13} />
-          </View>
-        </View>
-      ))}
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   row: {
     minHeight: layout.rowHeight,
@@ -70,7 +41,4 @@ const styles = StyleSheet.create({
   },
   body: { flex: 1, gap: space[2] },
   trailing: { alignItems: 'flex-end' },
-  timelineRow: { flexDirection: 'row', gap: space[3] },
-  rail: { alignItems: 'center', width: BADGE / 3, gap: space[1] },
-  timelineBody: { flex: 1, gap: space[2], paddingBottom: space[5] },
 });

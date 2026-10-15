@@ -5,7 +5,7 @@ import com.geekersjoel237.koracore.auth.domain.model.User;
 import com.geekersjoel237.koracore.auth.domain.enums.Role;
 import com.geekersjoel237.koracore.auth.ports.out.security.CustomerPinEncoder;
 import com.geekersjoel237.koracore.shared.domain.vo.Id;
-import com.geekersjoel237.koracore.auth.domain.vo.PhoneNumber;
+import com.geekersjoel237.koracore.shared.domain.vo.PhoneNumber;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import com.geekersjoel237.koracore.shared.domain.vo.Pin;
@@ -35,8 +35,6 @@ class CustomerTest {
         phoneNumber = PhoneNumber.of("+225", "0700000000");
     }
 
-    // ── Construction ──────────────────────────────────────────────────────────
-
     @Test
     void should_create_customer_with_hashed_pin() {
         Customer customer = Customer.create(user, phoneNumber, Pin.of("1234"), ENCODER);
@@ -62,8 +60,6 @@ class CustomerTest {
         assertTrue(customer.isSuspended());
     }
 
-    // ── matchesPin ────────────────────────────────────────────────────────────
-
     @Test
     void should_return_true_when_pin_matches() {
         Customer customer = Customer.create(user, phoneNumber, Pin.of("1234"), ENCODER);
@@ -75,8 +71,6 @@ class CustomerTest {
         Customer customer = Customer.create(user, phoneNumber, Pin.of("1234"), ENCODER);
         assertFalse(customer.matchesPin(Pin.of("9999"), ENCODER));
     }
-
-    // ── Validation construction ───────────────────────────────────────────────
 
     @Test
     void should_throw_when_user_is_null() {
@@ -101,8 +95,6 @@ class CustomerTest {
         assertThrows(IllegalArgumentException.class,
                 () -> Customer.create(user, phoneNumber, Pin.of(""), ENCODER));
     }
-
-    // ── Snapshot — reconstruction ─────────────────────────────────────────────
 
     @Test
     void should_reconstruct_customer_from_snapshot_without_validation() {

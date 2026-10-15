@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { cacheTimes, qk } from '@/lib/queryClient';
-import { isTerminalState, type Page, type Transaction } from '@/types/domain';
+import type { Page, Transaction } from '@/types/domain';
 import { DEFAULT_PAGE_SIZE, getHistory, getTransactionDetail } from './api';
 import { serializeFilters, toHistoryQuery, type ActiveFilters } from './filters';
 import { findInPages } from './grouping';
@@ -12,28 +12,28 @@ export const RECENT_SIZE = 5;
 /** Frontière R1 : renvoie des `Transaction` de domaine, jamais des DTO. */
 export function useRecentTransactions() {
   return useQuery({
-    queryKey: qk.history({ size: RECENT_SIZE }),
-    queryFn: () => getHistory({ size: RECENT_SIZE }),
+    queryKey: qk.history({ limit: RECENT_SIZE }),
+    queryFn: () => getHistory({ limit: RECENT_SIZE }),
     staleTime: cacheTimes.STALE.history,
     gcTime: cacheTimes.GC.history,
   });
 }
 
 /**
- * Historique paginé de l'onglet Activité.
+ * Historique paginé de l'onglet Activité, par curseur.
  *
  * **La clé porte la sélection, pas les bornes résolues.** `toHistoryQuery`
- * produit un `from` calculé à partir de l'instant : le mettre dans la clé
- * fabriquerait une clé neuve à chaque rendu, donc un rechargement en boucle.
+ * produit un `from` calculé à partir du jour courant : le mettre dans la clé
+ * fabriquerait une clé neuve à chaque changement de jour en plein écran.
  * La sélection, elle, est stable — d'où `serializeFilters`.
  */
 export function useHistoryInfinite(filters: ActiveFilters, enabled = true) {
   return useInfiniteQuery({
     queryKey: qk.history({ f: serializeFilters(filters) }),
-    initialPageParam: 0,
+    initialPageParam: null as string | null,
     queryFn: ({ pageParam }) =>
-      getHistory({ ...toHistoryQuery(filters), page: pageParam, size: DEFAULT_PAGE_SIZE }),
-    getNextPageParam: (last) => (last.hasNext ? last.page + 1 : undefined),
+      getHistory({ ...toHistoryQuery(filters), cursor: pageParam, limit: DEFAULT_PAGE_SIZE }),
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
     staleTime: cacheTimes.STALE.history,
     gcTime: cacheTimes.GC.history,
     enabled,
@@ -47,27 +47,29 @@ const POLL_MAX_TICKS = 12;
 /**
  * Détail d'une opération, par **rejeu de sa page d'origine** — contrat §6.7.
  *
- * Une opération encore en cours est re-sollicitée toutes les 5 s afin que la
- * frise se complète sous les yeux de l'utilisateur. Le plafond de douze cycles
- * est repris tel quel du sondage post-paiement : aucun canal temps réel
- * n'existe, et sonder au-delà d'une minute ne rapporte rien.
+ * N'interroge le réseau que si `enabled` : l'écran passe `false` quand le cache
+ * de la liste fournit déjà une opération terminée. Une opération encore en
+ * cours est re-sollicitée toutes les 5 s, plafonnée à douze cycles comme le
+ * sondage post-paiement : aucun canal temps réel n'existe, et sonder au-delà
+ * d'une minute ne rapporte rien.
  *
  * `CONTOURNEMENT(indéterminé)` — `API_CAPABILITIES.transactionById`.
  */
-export function useTransactionDetail(id: string, page: number, filters: ActiveFilters) {
+export function useTransactionDetail(
+  reference: string,
+  cursor: string | null,
+  filters: ActiveFilters,
+  enabled: boolean,
+) {
   return useQuery({
-    queryKey: ['transaction', id, page, serializeFilters(filters)] as const,
-    queryFn: () =>
-      getTransactionDetail(id, {
-        page,
-        size: DEFAULT_PAGE_SIZE,
-        filters: toHistoryQuery(filters),
-      }),
+    queryKey: ['transaction', reference, cursor, serializeFilters(filters)] as const,
+    queryFn: () => getTransactionDetail(reference, { cursor, filters: toHistoryQuery(filters) }),
+    enabled,
     staleTime: cacheTimes.STALE.history,
     gcTime: cacheTimes.GC.history,
     refetchInterval: (query) => {
       const transaction = query.state.data;
-      if (!transaction || isTerminalState(transaction.state)) return false;
+      if (!transaction || transaction.outcome !== 'pending') return false;
       // `dataUpdateCount` fait office de compteur de cycles : pas de compteur
       // parallèle à tenir, donc pas de compteur à désynchroniser.
       if (query.state.dataUpdateCount > POLL_MAX_TICKS) return false;
@@ -79,12 +81,10 @@ export function useTransactionDetail(id: string, page: number, filters: ActiveFi
 /**
  * Opération déjà présente dans le cache de la liste.
  *
- * Permet d'afficher montant, contrepartie et date **immédiatement**, pendant
- * que la requête `detail=true` va chercher l'historique d'états. Sans cela,
- * l'écran de détail s'ouvrirait sur un squelette alors que l'application
- * connaît déjà l'essentiel de ce qu'elle doit montrer.
+ * Une ligne d'historique contient tout ce que le détail affiche : l'écran
+ * s'ouvre donc complet, sans attendre le réseau.
  */
-export function useCachedTransaction(id: string): Transaction | null {
+export function useCachedTransaction(reference: string): Transaction | null {
   const client = useQueryClient();
 
   const entries = client.getQueriesData<{ pages: Page<Transaction>[] } | Page<Transaction>>({
@@ -94,7 +94,7 @@ export function useCachedTransaction(id: string): Transaction | null {
   for (const [, data] of entries) {
     if (!data) continue;
     const pages = 'pages' in data ? data.pages : [data];
-    const found = findInPages(pages, id);
+    const found = findInPages(pages, reference);
     if (found) return found.transaction;
   }
 

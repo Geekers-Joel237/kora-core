@@ -26,7 +26,7 @@ import com.geekersjoel237.koracore.auth.ports.out.security.CustomerPinEncoder;
 import com.geekersjoel237.koracore.payment.ports.out.repository.LedgerRepository;
 import com.geekersjoel237.koracore.shared.domain.vo.Amount;
 import com.geekersjoel237.koracore.shared.domain.vo.Id;
-import com.geekersjoel237.koracore.auth.domain.vo.PhoneNumber;
+import com.geekersjoel237.koracore.shared.domain.vo.PhoneNumber;
 import com.geekersjoel237.koracore.auth.config.SecurityProperties;
 import com.geekersjoel237.koracore.auth.adapters.out.security.BCryptCustomerPinEncoder;
 import com.geekersjoel237.koracore.payment.unit.doubles.InMemoryAccountRepository;
@@ -34,7 +34,7 @@ import com.geekersjoel237.koracore.payment.unit.doubles.InMemoryAuthorizationRec
 import com.geekersjoel237.koracore.auth.unit.doubles.InMemoryCustomerRepository;
 import com.geekersjoel237.koracore.payment.unit.doubles.InMemoryLedgerRepository;
 import com.geekersjoel237.koracore.shared.unit.doubles.InMemoryMailPort;
-import com.geekersjoel237.koracore.payment.unit.doubles.InMemoryProviderAdapter;
+import com.geekersjoel237.koracore.payment.unit.doubles.InMemoryPaymentProviderAdapter;
 import com.geekersjoel237.koracore.payment.unit.doubles.InMemoryTransactionRepository;
 import com.geekersjoel237.koracore.payment.unit.doubles.InMemoryTrxHistoricStatesRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -53,14 +53,12 @@ import com.geekersjoel237.koracore.payment.ports.in.BalanceQueryHandler;
 import com.geekersjoel237.koracore.payment.ports.in.ReversePaymentCommandHandler;
 import com.geekersjoel237.koracore.payment.ports.in.TransferCommandHandler;
 import com.geekersjoel237.koracore.shared.unit.doubles.DirectTransactionBoundary;
-import com.geekersjoel237.koracore.payment.unit.application.UseCaseFixtures;
-import com.geekersjoel237.koracore.shared.domain.vo.Msisdn;
 
 import static com.geekersjoel237.koracore.payment.domain.model.state.TransactionState.AUTHORIZATION_FAILED;
 import static com.geekersjoel237.koracore.payment.domain.model.state.TransactionState.COMPLETED;
 import static com.geekersjoel237.koracore.payment.domain.model.state.TransactionState.REVERSED;
-import static com.geekersjoel237.koracore.payment.unit.doubles.InMemoryProviderAdapter.Behavior.FAIL;
-import static com.geekersjoel237.koracore.payment.unit.doubles.InMemoryProviderAdapter.Behavior.SUCCESS;
+import static com.geekersjoel237.koracore.payment.unit.doubles.InMemoryPaymentProviderAdapter.Behavior.FAIL;
+import static com.geekersjoel237.koracore.payment.unit.doubles.InMemoryPaymentProviderAdapter.Behavior.SUCCESS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -92,7 +90,7 @@ class PaymentUseCaseTest {
     private InMemoryTransactionRepository transactionRepo;
     private InMemoryTrxHistoricStatesRepository historicRepo;
     private InMemoryAuthorizationRecordRepository authorizationRecordRepo;
-    private InMemoryProviderAdapter provider;
+    private InMemoryPaymentProviderAdapter provider;
     private InMemoryMailPort mailPort;
     private CashInCommandHandler cashIn;
     private CashOutCommandHandler cashOut;
@@ -105,12 +103,9 @@ class PaymentUseCaseTest {
         return PhoneNumber.of("+237", "600000001");
     }
 
-    /** The aggregate no longer comes back from the port; read it from the store. */
     private Transaction persisted(PaymentResult result) {
         return transactionRepo.findById(new Id(result.transactionId())).orElseThrow();
     }
-
-    // ── Fixtures ─────────────────────────────────────────────────────────────
 
     private static PhoneNumber phoneNumberB() {
         return PhoneNumber.of("+237", "600000002");
@@ -122,7 +117,7 @@ class PaymentUseCaseTest {
         customerRepo = new InMemoryCustomerRepository();
         transactionRepo = new InMemoryTransactionRepository();
         historicRepo = new InMemoryTrxHistoricStatesRepository();
-        provider = new InMemoryProviderAdapter(SUCCESS);
+        provider = new InMemoryPaymentProviderAdapter(SUCCESS);
         provider.reset();
         ledgerRepository = new InMemoryLedgerRepository(Ledger.create(Id.generate()));
         mailPort = new InMemoryMailPort();
@@ -193,8 +188,6 @@ class PaymentUseCaseTest {
                         + " CREDIT=" + totalCredit.value());
     }
 
-    // ── Groupe 1 — cashIn ─────────────────────────────────────────────────────
-
     @Test
     void should_complete_cash_in_when_provider_succeeds() {
         CashInCommand cmd = new CashInCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD);
@@ -206,8 +199,6 @@ class PaymentUseCaseTest {
 
         List<TrxStateHistoric> history =
                 historicRepo.findByTransactionId(new Id(result.transactionId()));
-        // null→INITIALIZED, INITIALIZED→AUTHORIZED, AUTHORIZED→CAPTURED,
-        // CAPTURED→SETTLEMENT_PENDING, SETTLEMENT_PENDING→SETTLED, SETTLED→COMPLETED
         assertEquals(6, history.size());
         assertNull(                                history.get(0).snapshot().oldState());
         assertEquals("INITIALIZED",               history.get(0).snapshot().newState());
@@ -240,7 +231,6 @@ class PaymentUseCaseTest {
 
         List<TrxStateHistoric> history =
                 historicRepo.findByTransactionId(new Id(result.transactionId()));
-        // null→INITIALIZED, INITIALIZED→AUTHORIZATION_FAILED
         assertEquals(2, history.size());
         assertNull(history.get(0).snapshot().oldState());
         assertEquals("INITIALIZED",          history.get(0).snapshot().newState());
@@ -285,8 +275,6 @@ class PaymentUseCaseTest {
                 .isInstanceOf(IllegalArgumentException.class);
         assertEquals(0, transactionRepo.count());
     }
-
-    // ── Groupe 2 — cashOut ────────────────────────────────────────────────────
 
     @Test
     void should_complete_cash_out_when_provider_succeeds() {
@@ -333,16 +321,14 @@ class PaymentUseCaseTest {
         assertEquals(1, transactionRepo.count());
     }
 
-    // ── Groupe 3 — transfer ───────────────────────────────────────────────────
-
     @Test
     void should_complete_transfer_and_update_both_balances_when_provider_succeeds() {
         preloadCustomerB();
         cashIn.execute(new CashInCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
-        provider.reset(); // isolate transfer — verify it makes no provider call
+        provider.reset();
 
         PaymentResult result = transfer.execute(new TransferCommand(Id.generate(), 
-                CUST_ID_A, RAW_PIN, AMOUNT_5K, Msisdn.of(phoneNumberB().fullNumber())));
+                CUST_ID_A, RAW_PIN, AMOUNT_5K, phoneNumberB()));
 
         assertEquals(COMPLETED.name(), result.state());
 
@@ -364,10 +350,10 @@ class PaymentUseCaseTest {
         cashIn.execute(new CashInCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_5K, PAYMENT_METHOD));
 
         assertThatThrownBy(() -> transfer.execute(new TransferCommand(Id.generate(), 
-                CUST_ID_A, RAW_PIN, AMOUNT_10K, Msisdn.of(phoneNumberB().fullNumber()))))
+                CUST_ID_A, RAW_PIN, AMOUNT_10K, phoneNumberB())))
                 .isInstanceOf(InsufficientFundsException.class);
 
-        assertEquals(1, transactionRepo.count()); // only the cashIn
+        assertEquals(1, transactionRepo.count());
         Account accountA = accountRepo.findByCustomerId(CUST_ID_A).orElseThrow();
         Account accountB = accountRepo.findByCustomerId(CUST_ID_B).orElseThrow();
         assertTrue(AMOUNT_5K.equals(accountA.snapshot().balance().solde()));
@@ -381,7 +367,7 @@ class PaymentUseCaseTest {
         cashIn.execute(new CashInCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
 
         PaymentResult result = transfer.execute(new TransferCommand(Id.generate(), 
-                CUST_ID_A, RAW_PIN, AMOUNT_5K, Msisdn.of(phoneNumberB().fullNumber())));
+                CUST_ID_A, RAW_PIN, AMOUNT_5K, phoneNumberB()));
 
         assertEquals(COMPLETED.name(), result.state());
 
@@ -408,7 +394,7 @@ class PaymentUseCaseTest {
     @Test
     void should_throw_account_not_found_when_recipient_phone_unknown() {
         assertThatThrownBy(() -> transfer.execute(new TransferCommand(Id.generate(), 
-                CUST_ID_A, RAW_PIN, AMOUNT_5K, Msisdn.of("+2250000000000"))))
+                CUST_ID_A, RAW_PIN, AMOUNT_5K, PhoneNumber.of("+225", "0000000000"))))
                 .isInstanceOf(AccountNotFoundException.class);
     }
 
@@ -417,14 +403,17 @@ class PaymentUseCaseTest {
         preloadCustomerB();
         suspendCustomerB();
         assertThatThrownBy(() -> transfer.execute(new TransferCommand(Id.generate(), 
-                CUST_ID_A, RAW_PIN, AMOUNT_5K, Msisdn.of(phoneNumberB().fullNumber()))))
+                CUST_ID_A, RAW_PIN, AMOUNT_5K, phoneNumberB())))
                 .isInstanceOf(AccountSuspendedException.class);
     }
 
     @Test
     void should_throw_self_transfer_exception_when_sender_equals_recipient() {
-        assertThatThrownBy(() -> transfer.execute(new TransferCommand(Id.generate(), 
-                CUST_ID_A, RAW_PIN, AMOUNT_5K, Msisdn.of(phoneNumberA().fullNumber()))))
+        // Funded first: an empty wallet is refused on funds before the self-transfer check.
+        cashIn.execute(new CashInCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
+
+        assertThatThrownBy(() -> transfer.execute(new TransferCommand(Id.generate(),
+                CUST_ID_A, RAW_PIN, AMOUNT_5K, phoneNumberA())))
                 .isInstanceOf(SelfTransferException.class);
     }
 
@@ -432,11 +421,9 @@ class PaymentUseCaseTest {
     void should_throw_insufficient_funds_exception_when_balance_too_low_for_transfer() {
         preloadCustomerB();
         assertThatThrownBy(() -> transfer.execute(new TransferCommand(Id.generate(), 
-                CUST_ID_A, RAW_PIN, AMOUNT_5K, Msisdn.of(phoneNumberB().fullNumber()))))
+                CUST_ID_A, RAW_PIN, AMOUNT_5K, phoneNumberB())))
                 .isInstanceOf(InsufficientFundsException.class);
     }
-
-    // ── Groupe 4 — getBalance ─────────────────────────────────────────────────
 
     @Test
     void should_return_zero_balance_for_new_customer_account() {
@@ -469,8 +456,6 @@ class PaymentUseCaseTest {
         assertThatThrownBy(() -> getBalance.execute(new BalanceQuery(new Id("ghost-customer"))))
                 .isInstanceOf(AccountNotFoundException.class);
     }
-
-    // ── Groupe 5 — reversal ───────────────────────────────────────────────────
 
     @Nested
     class ReversalTests {
@@ -511,7 +496,7 @@ class PaymentUseCaseTest {
             preloadCustomerB();
             cashIn.execute(new CashInCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
             PaymentResult transferResult = transfer.execute(new TransferCommand(Id.generate(), 
-                    CUST_ID_A, RAW_PIN, AMOUNT_5K, Msisdn.of(phoneNumberB().fullNumber())));
+                    CUST_ID_A, RAW_PIN, AMOUNT_5K, phoneNumberB()));
 
             reversePayment.execute(new ReversePaymentCommand(
                     new Id(transferResult.transactionId()), new Id("op-001"), "OPERATOR", "fraud", new Id("corr-003")));

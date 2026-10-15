@@ -74,7 +74,6 @@ public abstract class AbstractE2ETest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
-    /** Lenient RestTemplate — never throws on any HTTP status code. */
     protected RestTemplate http;
 
     @BeforeEach
@@ -87,13 +86,9 @@ public abstract class AbstractE2ETest {
         accountRepository.save(Account.createFloatAccount(Id.generate(), SYSTEM_PROVIDER_ID));
     }
 
-    // ── URL builder ───────────────────────────────────────────────────────────
-
     protected String url(String path) {
         return "http://localhost:" + port + path;
     }
-
-    // ── Auth helpers ──────────────────────────────────────────────────────────
 
     protected ResponseEntity<OtpResponse> register(String fullName, String email,
                                                     String prefix, String phone, String pin) {
@@ -120,9 +115,6 @@ public abstract class AbstractE2ETest {
                 TokensResponse.class);
     }
 
-    /**
-     * Convenience: register → verify OTP → return tokens.
-     */
     protected TokensResponse registerAndLogin(String email, String fullName,
                                                String prefix, String phone, String pin) {
         register(fullName, email, prefix, phone, pin);
@@ -130,10 +122,6 @@ public abstract class AbstractE2ETest {
         return verifyOtp(email, otp).getBody();
     }
 
-    /**
-     * Registers a customer via API, creates their customer account in DB,
-     * and returns tokens + their customerId. Used by payment E2E tests.
-     */
     protected SetupData setupCustomerWithAccount(String email, String fullName,
                                                   String prefix, String phone, String pin) {
         TokensResponse tokens = registerAndLogin(email, fullName, prefix, phone, pin);
@@ -151,8 +139,6 @@ public abstract class AbstractE2ETest {
 
     protected record SetupData(TokensResponse tokens, Id customerId, Id accountId) {}
 
-    // ── OTP helper ─────────────────────────────────────────────────────────────
-
     protected String waitAndGetOtpCode(String email) {
         String key = "otp:" + email;
         for (int i = 0; i < 20; i++) { // up to ~1s total
@@ -167,8 +153,6 @@ public abstract class AbstractE2ETest {
         }
         throw new AssertionError("OTP not found in store for email: " + email);
     }
-
-    // ── HTTP with Bearer token ─────────────────────────────────────────────────
 
     protected <T> ResponseEntity<T> postWithToken(String path, Object body,
                                                    String token, Class<T> responseType) {

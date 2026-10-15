@@ -321,8 +321,7 @@ Le backend émet exclusivement en ISO-8601 UTC. Toute date est convertie dans le
 | Ligne d'historique | `11:42` si aujourd'hui, sinon `6 août` |
 | En-tête de section | `Aujourd'hui` · `Hier` · `6 août 2026` |
 | Détail | `6 août 2026, 11:42` |
-| Frise | `11:42:13` |
-| Paramètre d'API | `2026-08-06T00:00:00Z` |
+| Filtre de l'historique (`from` / `to`) | jour local `2026-08-06`, bornes incluses |
 
 `date-fns` avec la locale `fr` et l'import sélectif. Pas de moment.js.
 
@@ -356,7 +355,7 @@ Aucun secret dans les variables `EXPO_PUBLIC_*` — elles sont incluses dans le 
 | Niveau | Outil | Portée |
 |---|---|---|
 | Unitaire | Jest | Formatage monétaire, dates, normalisation d'erreur, transitions d'état |
-| Composant | React Native Testing Library | `PinPad`, `AmountKeypad`, `TransactionRow`, `StateTimeline` |
+| Composant | React Native Testing Library | `PinPad`, `AmountKeypad`, `TransactionRow`, `StatusChip` |
 | Intégration | MSW | Parcours complets contre des réponses simulées, y compris les erreurs |
 | Bout en bout | Maestro | Inscription → OTP → dépôt → transfert → historique |
 

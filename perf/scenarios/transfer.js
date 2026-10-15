@@ -20,11 +20,11 @@ const BASE_URL = __ENV.BASE_URL || 'http://localhost:8081';
  * Exécute un transfert P2P complet.
  *
  * @param {object} sender         objet user complet (email, pin, accessToken, tokenExpiresAt)
- * @param {string} recipientPhone numéro complet du destinataire, ex: "+237620003141"
+ * @param {object} recipient      destinataire : objet user portant phonePrefix et phoneNumber
  * @param {number} amount         montant en XAF (défaut : 2 000)
  * @returns {object} réponse JSON du transfert
  */
-export function scenarioTransfer(sender, recipientPhone, amount = 2_000) {
+export function scenarioTransfer(sender, recipient, amount = 2_000) {
     const accessToken = getToken(sender);
 
     const res = http.post(
@@ -33,7 +33,8 @@ export function scenarioTransfer(sender, recipientPhone, amount = 2_000) {
             rawPin:        sender.pin,
             amount,
             currency:      'XAF',
-            toPhoneNumber: recipientPhone,
+            toPhonePrefix: recipient.phonePrefix,
+            toPhoneNumber: recipient.phoneNumber,
         }),
         { headers: authHeaders(accessToken), tags: { operation: 'transfer' } }
     );
@@ -46,4 +47,4 @@ export function scenarioTransfer(sender, recipientPhone, amount = 2_000) {
     });
 
     return res.status === 200 ? JSON.parse(res.body) : null;
-}
+}

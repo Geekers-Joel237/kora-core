@@ -14,7 +14,7 @@
  * Aucun écart n'empêche l'app de fonctionner — le but est d'informer.
  */
 
-import { DIRECTIONS, TX_STATES, TX_TYPES } from '@/types/domain';
+import { CUSTOMER_STATUSES, TX_KINDS, TX_STATES } from '@/types/domain';
 
 // ──────────────────────────────────────────────── Vocabulaire du rapport ────
 
@@ -93,29 +93,15 @@ export interface EndpointExpectation {
   response?: FieldExpectation[];
 }
 
-const STATE_ENTRY_FIELDS: FieldExpectation[] = [
-  { name: 'oldState', type: 'string', required: false, knownEnum: TX_STATES },
-  { name: 'newState', type: 'string', required: true, knownEnum: TX_STATES },
-  { name: 'occurredAt', type: 'string', required: true },
-];
-
 const TRANSACTION_ITEM_FIELDS: FieldExpectation[] = [
-  { name: 'transactionId', type: 'string', required: true },
-  { name: 'transactionNumber', type: 'string', required: true },
-  { name: 'type', type: 'string', required: true, knownEnum: TX_TYPES },
-  { name: 'direction', type: 'string', required: true, knownEnum: DIRECTIONS },
-  { name: 'state', type: 'string', required: true, knownEnum: TX_STATES },
+  { name: 'reference', type: 'string', required: true },
+  { name: 'kind', type: 'string', required: true, knownEnum: TX_KINDS },
+  { name: 'status', type: 'string', required: true, knownEnum: CUSTOMER_STATUSES },
   { name: 'amount', type: 'number', required: true },
   { name: 'currency', type: 'string', required: true },
-  { name: 'paymentMethod', type: 'string', required: true },
   { name: 'counterpart', type: 'string', required: false },
-  { name: 'createdAt', type: 'string', required: true },
-  {
-    name: 'stateHistory',
-    type: 'array',
-    required: false,
-    fields: STATE_ENTRY_FIELDS,
-  },
+  { name: 'channel', type: 'string', required: false },
+  { name: 'date', type: 'string', required: true },
 ];
 
 const TOKENS_FIELDS: FieldExpectation[] = [
@@ -162,12 +148,8 @@ export const EXPECTED_ENDPOINTS: readonly EndpointExpectation[] = [
     method: 'get',
     path: '/payments/history',
     response: [
-      { name: 'transactions', type: 'array', required: true, fields: TRANSACTION_ITEM_FIELDS },
-      { name: 'page', type: 'number', required: true },
-      { name: 'size', type: 'number', required: true },
-      { name: 'totalElements', type: 'number', required: true },
-      { name: 'totalPages', type: 'number', required: true },
-      { name: 'hasNext', type: 'boolean', required: true },
+      { name: 'items', type: 'array', required: true, fields: TRANSACTION_ITEM_FIELDS },
+      { name: 'nextCursor', type: 'string', required: false },
     ],
   },
 ];

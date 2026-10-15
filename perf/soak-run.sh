@@ -3,7 +3,7 @@
 # Usage : ./perf/soak-run.sh [BASE_URL]
 #
 # Objectif : détecter fuites mémoire, DB pool exhaustion, dégradation latence.
-# Profil    : 5 req/sec constant pendant 30 minutes
+# Profil    : 50 req/sec constant pendant 30 minutes (moitié du pic Step 3)
 # Durée     : ~30 min
 #
 # Surveiller dans Grafana pendant le run :
@@ -56,9 +56,10 @@ banner() {
 print_objectives() {
   echo -e "${YELLOW}  Objectifs du soak test${NC}"
   echo "  ┌─────────────────────────────────────────────────"
-  echo "  │  Charge      : 5 req/sec constant"
+  echo "  │  Charge      : 50 req/sec constant"
   echo "  │  Durée       : 30 minutes"
-  echo "  │  P95 cible   : < 300ms (tolérance soak)"
+  echo "  │  SLOs        : ceux du load test (balance 100ms, history 150ms,"
+  echo "  │                transfer 300ms, cash 2 500ms)"
   echo "  │  Error rate  : < 1%"
   echo "  │"
   echo "  │  Surveiller dans Grafana :"
@@ -134,7 +135,7 @@ check_app() {
 
 # ── Run k6 soak ────────────────────────────────────────────────────────────────
 run_soak() {
-  info "Lancement du soak test (5 req/sec × 30 min)…"
+  info "Lancement du soak test (50 req/sec × 30 min)…"
   echo ""
 
   local perf_mount

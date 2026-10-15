@@ -5,10 +5,6 @@ import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/**
- * The envelope refuses to be half-addressed, because the failure otherwise surfaces at
- * the SMTP provider — one layer past anything that can explain it.
- */
 class MailTest {
 
     @Test

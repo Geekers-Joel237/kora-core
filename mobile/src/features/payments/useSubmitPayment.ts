@@ -36,6 +36,8 @@ export function useSubmitPayment() {
     async (rawPin: string) => {
       if (lock.current) return;
       if (!flow.kind || !flow.idempotencyKey) return;
+      const recipient = flow.recipient;
+      if (flow.kind === 'send' && !recipient) return;
 
       lock.current = true;
       flow.setSubmitting(true);
@@ -51,12 +53,12 @@ export function useSubmitPayment() {
 
       try {
         const receipt =
-          flow.kind === 'send'
+          flow.kind === 'send' && recipient
             ? await transfer({
                 rawPin,
                 amount,
                 paymentMethod: 'WALLET',
-                toPhoneNumber: flow.recipientPhone,
+                recipient,
                 idempotencyKey,
               })
             : flow.kind === 'deposit'
@@ -75,8 +77,8 @@ export function useSubmitPayment() {
 
         const outcome = outcomeForState(receipt.outcome);
 
-        if (outcome === 'success' && flow.kind === 'send') {
-          rememberRecipient(flow.recipientPhone);
+        if (outcome === 'success' && recipient) {
+          rememberRecipient(recipient);
         }
 
         // Le solde et l'historique sont périmés dès qu'une opération aboutit,

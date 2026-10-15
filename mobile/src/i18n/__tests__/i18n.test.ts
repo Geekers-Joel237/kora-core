@@ -1,4 +1,4 @@
-import { stateLabel, transactionTypeLabel } from '@/features/shared/labels';
+import { kindLabel, outcomeLabel } from '@/features/shared/labels';
 import { loginErrorMessage } from '@/features/auth/messages';
 import { formatSectionHeader } from '@/lib/datetime';
 import { normalizeHttpError } from '@/lib/http';
@@ -113,14 +113,14 @@ describe('bascule de langue — aucune chaîne non traduite', () => {
 
   it('traduit les libellés métier, pas seulement les écrans', async () => {
     expect(currentLanguage()).toBe('fr');
-    expect(stateLabel('AUTHORIZATION_FAILED').label).toBe('Autorisation refusée');
-    expect(transactionTypeLabel('CASH_IN')).toBe('Dépôt');
+    expect(outcomeLabel('reversed')).toBe('Remboursée');
+    expect(kindLabel('TRANSFER_RECEIVED')).toBe('Transfert reçu');
 
     await i18n.changeLanguage('en');
 
     expect(currentLanguage()).toBe('en');
-    expect(stateLabel('AUTHORIZATION_FAILED').label).toBe('Authorisation declined');
-    expect(transactionTypeLabel('CASH_IN')).toBe('Deposit');
+    expect(outcomeLabel('reversed')).toBe('Refunded');
+    expect(kindLabel('TRANSFER_RECEIVED')).toBe('Transfer received');
   });
 
   it('traduit les messages d’erreur, y compris hors composant', async () => {
@@ -142,11 +142,10 @@ describe('bascule de langue — aucune chaîne non traduite', () => {
     expect(formatSectionHeader(today)).toBe('Today');
   });
 
-  it('laisse un état inconnu en clair plutôt que de le traduire — règle R2', async () => {
+  it('laisse une nature inconnue en clair plutôt que de la traduire — règle R2', async () => {
     for (const language of LANGUAGES) {
       await i18n.changeLanguage(language);
-      expect(stateLabel('PARTIALLY_REFUNDED').label).toBe('PARTIALLY_REFUNDED');
-      expect(transactionTypeLabel('CRYPTO_SWAP')).toBe('CRYPTO_SWAP');
+      expect(kindLabel('CRYPTO_SWAP')).toBe('CRYPTO_SWAP');
     }
   });
 });

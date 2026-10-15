@@ -5,55 +5,59 @@ import * as Clipboard from 'expo-clipboard';
 
 import { Button } from '@/components/action';
 import { useToast } from '@/components/feedback';
-import { Divider, Pressable, Spacer, Surface, Text } from '@/components/primitives';
-import { toTransactionPage } from '@/features/shared/mappers';
-import { transactionHistorySchema } from '@/features/shared/schemas';
-import { decode } from '@/lib/decode';
+import { Pressable, Spacer, Surface, Text } from '@/components/primitives';
 import { request } from '@/lib/http';
 import { radius, space, useTheme } from '@/theme';
-import type { Page, Transaction } from '@/types/domain';
-import { formatDuration, interStateDurations, totalDuration } from './durations';
 
 /** Sondage forcé, **sans plafond** — `docs/10-validation-mode.md` §4. */
 const FORCED_POLL_MS = 2000;
-const INSPECTOR_SIZE = 50;
+const INSPECTOR_LIMIT = 50;
+
+interface RawItem {
+  reference?: unknown;
+  kind?: unknown;
+  status?: unknown;
+  amount?: unknown;
+  currency?: unknown;
+  counterpart?: unknown;
+  channel?: unknown;
+  date?: unknown;
+}
 
 interface RawHistory {
-  /** Charge utile telle que reçue, avant toute traduction. */
-  raw: unknown;
-  page: Page<Transaction>;
+  items: RawItem[];
+  nextCursor: unknown;
 }
 
 /**
  * Requête brute — **exception assumée à la règle R1**.
  *
  * Les écrans produit ne voient que des types de domaine. L'inspecteur, lui,
- * existe précisément pour montrer ce que le serveur envoie : il conserve la
- * charge utile intacte à côté de la version traduite, et n'utilise le schéma
- * partagé que pour dériver les durées. Ce module ne quitte jamais
+ * existe précisément pour montrer ce que le serveur envoie : aucune traduction,
+ * aucun schéma. Une charge utile qui ne ressemble pas au contrat s'affiche
+ * telle quelle plutôt que de faire échouer l'écran. Ce module ne quitte jamais
  * `src/devtools/`.
  */
 async function fetchRawHistory(): Promise<RawHistory> {
-  const raw = await request<unknown>('/payments/history', {
-    query: { page: 0, size: INSPECTOR_SIZE, detail: true },
-  });
-  return { raw, page: toTransactionPage(decode(transactionHistorySchema, raw, '/payments/history')) };
+  const raw = await request<unknown>('/payments/history', { query: { limit: INSPECTOR_LIMIT } });
+  const body = typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>) : {};
+  return {
+    items: Array.isArray(body.items) ? (body.items as RawItem[]) : [],
+    nextCursor: body.nextCursor ?? null,
+  };
 }
 
-function rawItemAt(raw: unknown, index: number): unknown {
-  if (typeof raw !== 'object' || raw === null) return null;
-  const transactions = (raw as { transactions?: unknown }).transactions;
-  return Array.isArray(transactions) ? (transactions[index] ?? null) : null;
+function text(value: unknown): string {
+  return value === null || value === undefined ? '∅' : String(value);
 }
 
 /**
  * Inspecteur de transactions — `docs/10-validation-mode.md` §4.
  *
- * Vue brute, sans traduction ni regroupement en familles : les onze états
- * s'affichent tels quels. **La colonne des durées inter-états est ce qui
- * transforme cet écran en outil de diagnostic** — elle rend visible que
- * l'autorisation prend 200 ms et la capture 150 ms, conformément à
- * `kora.provider.latency.*`, et fait ressortir toute anomalie immédiatement.
+ * Vue brute de la réponse client : statut et nature tels que le serveur les
+ * nomme, montant signé, curseur suivant. L'historique d'états n'est plus exposé
+ * au client (backend, 2026-10-13) : les durées inter-états ne se mesurent plus
+ * depuis l'app.
  */
 export function TransactionInspector() {
   const theme = useTheme();
@@ -78,7 +82,7 @@ export function TransactionInspector() {
     [toast],
   );
 
-  const items = history.data?.page.items ?? [];
+  const items = history.data?.items ?? [];
 
   return (
     <ScrollView
@@ -89,11 +93,14 @@ export function TransactionInspector() {
       <View style={styles.toolbar}>
         <View style={styles.toolbarText}>
           <Text variant="labelMd">
-            {items.length} opération{items.length > 1 ? 's' : ''} · size={INSPECTOR_SIZE}
+            {items.length} opération{items.length > 1 ? 's' : ''} · limit={INSPECTOR_LIMIT}
           </Text>
           <Text variant="bodySm" color="tertiary">
             {polling ? `suivi forcé toutes les ${FORCED_POLL_MS / 1000} s` : 'suivi à l’arrêt'}
             {history.isFetching ? ' · en cours' : ''}
+          </Text>
+          <Text variant="bodySm" color="tertiary" numberOfLines={1}>
+            nextCursor : {text(history.data?.nextCursor)}
           </Text>
         </View>
         <Button
@@ -114,61 +121,60 @@ export function TransactionInspector() {
         </Text>
       )}
 
-      {items.map((transaction, index) => (
-        <View key={transaction.id} style={styles.card}>
-          <Surface elevation={1} padding={4}>
-            <Pressable
-              onPress={() => setExpanded((current) => (current === transaction.id ? null : transaction.id))}
-              haptic="tap"
-              scale="card"
-              accessibilityLabel={`Opération ${transaction.reference}, ${transaction.state}`}
-              testID={`devtools-tx-${transaction.id}`}
-            >
-              <View style={styles.row}>
-                <Text variant="monoMd" numberOfLines={1} style={styles.grow}>
-                  {transaction.reference}
-                </Text>
-                <View
-                  style={[
-                    styles.stateTag,
-                    { backgroundColor: theme.bg.surface3, borderRadius: radius.xs },
-                  ]}
-                >
-                  <Text variant="labelSm" color="secondary">
-                    {transaction.state}
+      {items.map((item, index) => {
+        const key = `${text(item.reference)}-${index}`;
+        return (
+          <View key={key} style={styles.card}>
+            <Surface elevation={1} padding={4}>
+              <Pressable
+                onPress={() => setExpanded((current) => (current === key ? null : key))}
+                haptic="tap"
+                scale="card"
+                accessibilityLabel={`Opération ${text(item.reference)}, ${text(item.status)}`}
+                testID={`devtools-tx-${text(item.reference)}`}
+              >
+                <View style={styles.row}>
+                  <Text variant="monoMd" numberOfLines={1} style={styles.grow}>
+                    {text(item.reference)}
                   </Text>
+                  <View
+                    style={[
+                      styles.stateTag,
+                      { backgroundColor: theme.bg.surface3, borderRadius: radius.xs },
+                    ]}
+                  >
+                    <Text variant="labelSm" color="secondary">
+                      {text(item.status)}
+                    </Text>
+                  </View>
                 </View>
-              </View>
-              <Spacer size={1} />
-              <Text variant="bodySm" color="tertiary">
-                {transaction.type} · {transaction.direction} · {transaction.amount.minor}{' '}
-                {transaction.amount.currency} · {transaction.paymentMethod}
-              </Text>
-              <Text variant="bodySm" color="tertiary">
-                {transaction.createdAt.toISOString()}
-              </Text>
-            </Pressable>
+                <Spacer size={1} />
+                <Text variant="bodySm" color="tertiary">
+                  {text(item.kind)} · {text(item.amount)} {text(item.currency)} ·{' '}
+                  {text(item.counterpart ?? item.channel)}
+                </Text>
+                <Text variant="bodySm" color="tertiary">
+                  {text(item.date)}
+                </Text>
+              </Pressable>
 
-            {expanded === transaction.id && (
-              <>
-                <Spacer size={3} />
-                <Divider />
-                <Spacer size={3} />
-                <Timeline transaction={transaction} />
-                <Spacer size={3} />
-                <Button
-                  label="Copier le JSON brut"
-                  variant="ghost"
-                  size="sm"
-                  icon="copy"
-                  onPress={() => void copy(rawItemAt(history.data?.raw, index), 'JSON')}
-                  testID={`devtools-copy-${transaction.id}`}
-                />
-              </>
-            )}
-          </Surface>
-        </View>
-      ))}
+              {expanded === key && (
+                <>
+                  <Spacer size={3} />
+                  <Button
+                    label="Copier le JSON brut"
+                    variant="ghost"
+                    size="sm"
+                    icon="copy"
+                    onPress={() => void copy(item, 'JSON')}
+                    testID={`devtools-copy-${text(item.reference)}`}
+                  />
+                </>
+              )}
+            </Surface>
+          </View>
+        );
+      })}
 
       {items.length === 0 && !history.isPending && !history.isError && (
         <Text variant="bodySm" color="tertiary">
@@ -176,43 +182,6 @@ export function TransactionInspector() {
         </Text>
       )}
     </ScrollView>
-  );
-}
-
-/** Frise brute : instants à la milliseconde et delta avec l'état précédent. */
-function Timeline({ transaction }: { transaction: Transaction }) {
-  const history = transaction.stateHistory ?? [];
-
-  if (history.length === 0) {
-    return (
-      <Text variant="bodySm" color="tertiary">
-        `stateHistory` absent ou vide malgré `detail=true`.
-      </Text>
-    );
-  }
-
-  const durations = interStateDurations(history);
-
-  return (
-    <View>
-      {history.map((transition, index) => {
-        const delta = index === 0 ? null : durations[index - 1];
-        return (
-          <View key={`${transition.to}-${transition.occurredAt.getTime()}`} style={styles.timelineRow}>
-            <Text variant="monoMd" style={styles.grow} numberOfLines={1}>
-              {transition.from ?? '∅'} → {transition.to}
-            </Text>
-            <Text variant="monoMd" color="tertiary">
-              {delta ? `+${formatDuration(delta.ms)}` : '—'}
-            </Text>
-          </View>
-        );
-      })}
-      <Spacer size={2} />
-      <Text variant="bodySm" color="secondary">
-        Total {formatDuration(totalDuration(history))} sur {history.length} transitions
-      </Text>
-    </View>
   );
 }
 
@@ -225,11 +194,4 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: space[2] },
   grow: { flexShrink: 1, flexGrow: 1 },
   stateTag: { paddingHorizontal: space[2], paddingVertical: space[1] },
-  timelineRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: space[3],
-    paddingVertical: space[1],
-  },
 });

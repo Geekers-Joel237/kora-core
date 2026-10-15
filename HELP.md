@@ -105,7 +105,7 @@ We use **TDD** with three test layers. The goal is not “high coverage”, but 
 **Examples**
 - Verify ledger entries persist atomically with the transaction record
 - Verify optimistic locking behaviour under contention
-- Verify a history page's SQL scopes, filters and folds its joins correctly
+- Verify a history page's SQL scopes, filters and continues after its cursor correctly
 
 ---
 
@@ -177,7 +177,7 @@ project deliberately does **not** use.
       enforces the double-entry invariant
 - **Value Objects**:
     - `Amount(BigDecimal value, String currency)` — the money type
-    - `Id`, `Msisdn`, `Pin` in the kernel; `PhoneNumber`, `OtpCode` in auth
+    - `Id`, `PhoneNumber`, `Pin` in the kernel; `OtpCode` in auth
 - **Domain Events** (later stage, Step 5):
     - not implemented; no event type exists yet
 
@@ -236,11 +236,11 @@ business modules still take from each other is recorded as an **equality** in
 - **One Gradle project, one `@SpringBootApplication`, one classpath.** Nothing in the
   build stops an import across the boundary — only a test reports it. The phase ends
   when each package is its own application.
-- **`auth` and `payment` still share aggregates.** Eleven classes cross today:
-  `payment` reaches `auth.domain.model.Customer` and `auth.domain.vo.PhoneNumber`,
+- **`auth` and `payment` still share aggregates.** Eight classes cross today:
+  `payment` reaches `auth.domain.model.Customer`,
   `auth` reaches `payment.domain.model.Account`. A package whose aggregate the
   neighbour imports has a directory, not a boundary. Closing them needs a published
-  `OpenWalletUseCase` and a wallet lookup by msisdn.
+  `OpenWalletUseCase` and a wallet lookup by phone number.
 
 That recorded list is the measure of how far from done this is: the phase is finished
 when it is empty.

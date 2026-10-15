@@ -17,8 +17,6 @@ export const API_CAPABILITIES = {
   realtimeEvents: false,
   /** `GET /payments/{id}`. */
   transactionById: false,
-  /** Filtre `state` acceptant plusieurs valeurs. */
-  multiStateFilter: false,
   /** Résolution nom ↔ numéro de téléphone. */
   beneficiaryLookup: false,
   /** Invalidation serveur des jetons. */

@@ -10,18 +10,16 @@ import Animated, {
 import { useTranslation } from 'react-i18next';
 
 import { Icon, Text } from '@/components/primitives';
-import { outcomeLabel, stateLabel } from '@/features/shared/labels';
+import { outcomeLabel } from '@/features/shared/labels';
 import { radius, space, useReduceMotion, useTheme } from '@/theme';
-import { outcomeOf, type OutcomeGroup } from '@/types/domain';
+import type { OutcomeGroup } from '@/types/domain';
 import type { IconName } from '@/components/primitives';
 
 export interface StatusChipProps {
-  /** État brut du backend — peut valoir une valeur encore inconnue (R2). */
-  state: string;
+  /** Famille vue par le client — contrat §3.1. Jamais un état technique. */
+  outcome: OutcomeGroup;
   size?: 'sm' | 'md';
   showIcon?: boolean;
-  /** Affiche le libellé précis de l'état plutôt que celui de sa famille. */
-  detailed?: boolean;
 }
 
 const ICONS: Record<OutcomeGroup, IconName> = {
@@ -38,18 +36,12 @@ const DOT_SIZE = 6;
  * Puce d'état. Résout couleur et icône via l'unique table du §2.4 du design
  * system — aucun écran ne définit sa propre correspondance.
  */
-export function StatusChip({
-  state,
-  size = 'sm',
-  showIcon = false,
-  detailed = false,
-}: StatusChipProps) {
+export function StatusChip({ outcome, size = 'sm', showIcon = false }: StatusChipProps) {
   const theme = useTheme();
-  // Souscription au changement de langue : `stateLabel` lit i18next à l'appel.
+  // Souscription au changement de langue : `outcomeLabel` lit i18next à l'appel.
   useTranslation();
-  const outcome = outcomeOf(state);
   const colors = theme.status[outcome];
-  const label = detailed ? stateLabel(state).label : outcomeLabel(outcome);
+  const label = outcomeLabel(outcome);
 
   return (
     <View

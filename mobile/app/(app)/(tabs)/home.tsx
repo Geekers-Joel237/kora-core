@@ -298,11 +298,11 @@ export default function HomeScreen() {
     return (
       <View>
         {items.map((transaction, index) => (
-          <View key={transaction.id}>
+          <View key={transaction.reference}>
             {index > 0 && <Divider inset={4} />}
             <TransactionRow
               transaction={transaction}
-              onPress={(tx) => router.push(`/transaction/${tx.id}`)}
+              onPress={(tx) => router.push(`/transaction/${tx.reference}`)}
             />
           </View>
         ))}

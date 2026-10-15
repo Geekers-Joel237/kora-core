@@ -53,7 +53,7 @@ it names both modules by construction.
 
 Whatever `auth` and `payment` still take from each other is recorded in that same test
 as an **equality**, so a new coupling fails the build and closing one fails it too.
-Eleven classes cross today, `Customer` and `Account` among them. That list is meant to
+Eight classes cross today, `Customer` and `Account` among them. That list is meant to
 shrink, and Step 2 is finished when it is empty and each package is its own
 application.
 
@@ -88,11 +88,12 @@ and `Otp` do not exist here.
 | `AuthorizationRecord` | Provider authorization with TTL, used when capture fails |
 | `Customer`, `User` | Identity and credentials |
 | `Amount` | `record(BigDecimal value, String currency)` — the money type; `Balance` wraps one and returns new instances from `credit()` / `debit()` |
-| `Id`, `Msisdn`, `Pin` | Kernel value objects; `Id` is the business identifier |
-| `PhoneNumber`, `OtpCode`, `OtpPurpose` | Auth value objects. `OtpCode` is both the issued and the submitted code — the store owns the lifetime |
-| `AccountType`, `Direction` | Payment value objects |
+| `Id`, `PhoneNumber`, `Pin` | Kernel value objects; `Id` is the business identifier. `PhoneNumber` is `(prefix, number)` and is the wallet identifier |
+| `OtpCode`, `OtpPurpose` | Auth value objects. `OtpCode` is both the issued and the submitted code — the store owns the lifetime |
+| `AccountType` | Payment value object |
+| `CustomerStatus` | What a customer sees of the 12 states: `PENDING`, `COMPLETED` (from capture on), `FAILED`, `REFUNDED`. Not persisted |
 | `PaymentMethod` | Enum `CARD`, `ORANGE_MONEY` (`OM`), `MOBILE_MONEY` (`MOMO`), `WALLET` |
-| `TransactionState` | Interface with 11 singletons: `INITIALIZED`, `AUTHORIZED`, `CAPTURED`, `SETTLEMENT_PENDING`, `SETTLED`, `COMPLETED`, `FAILED`, `AUTHORIZATION_FAILED`, `CAPTURE_FAILED`, `SETTLEMENT_FAILED`, `REVERSED` |
+| `TransactionState` | Interface with 12 singletons: `INITIALIZED`, `AUTHORIZED`, `CAPTURED`, `SETTLEMENT_PENDING`, `SETTLED`, `COMPLETED`, `FAILED`, `AUTHORIZATION_FAILED`, `CAPTURE_FAILED`, `SETTLEMENT_FAILED`, `REVERSED`, `UNKNOWN` |
 
 Kernel contracts:
 
@@ -100,7 +101,7 @@ Kernel contracts:
 |---|---|
 | `Command<R>` / `CommandHandler<C,R>` | A write, and the one use case that answers it. Carries a `correlationId` |
 | `Query<R>` / `QueryHandler<Q,R>` | A read. No correlation id: nothing to correlate, no replay to refuse |
-| `PagedQuery<T>` / `Pagination` / `PageResult<T>` | Paging, opt-in. `Pagination` holds every paging rule: default 20, max 100, bounds, offset |
+| `PagedQuery<T>` / `Pagination` / `PageResult<T>` | Keyset paging, opt-in. `Pagination` holds the limit rules: default 20, max 100; one extra row is fetched so `PageResult.hasNext` needs no `COUNT(*)`. The cursor itself is the module's |
 | `TransactionBoundary` | Runs a supplier in one transaction. **Not a Unit of Work** (ADR-007) |
 | `MailPort` / `Mail` | Sends a written message. Composition belongs to the caller |
 | `ExpiringStore<V>` | Keyed store whose entries expire; the value is opaque |
@@ -120,7 +121,7 @@ Every aggregate exposes `snapshot()` returning an inner record, plus a static
 | Float account is unbounded | `Account.debit()` is a no-op for `FLOAT_ACCOUNT`, so its `balance_amount` stays 0; audit it through `ledger_entries` |
 | Money is `BigDecimal`, never `double` or `float` | `Amount.value` is `BigDecimal`; all money columns are `NUMERIC(19,4)` |
 | Currency is mandatory; cross-currency arithmetic forbidden | `Amount` compact constructor rejects a blank currency; `add` / `subtract` / `isGreaterThan*` throw `CurrencyMismatchException` |
-| No illegal state transition | Each `*State` class validates its own successors and throws `InvalidStateTransitionException`. Legal edges: INITIALIZED to AUTHORIZED, FAILED, AUTHORIZATION_FAILED; AUTHORIZED to CAPTURED, FAILED, AUTHORIZATION_FAILED, CAPTURE_FAILED, REVERSED; CAPTURED to SETTLEMENT_PENDING, CAPTURE_FAILED, REVERSED; SETTLEMENT_PENDING to SETTLED, SETTLEMENT_FAILED, REVERSED; SETTLED to COMPLETED, REVERSED; COMPLETED to REVERSED |
+| No illegal state transition | Each `*State` class validates its own successors and throws `InvalidStateTransitionException`. Legal edges: INITIALIZED to AUTHORIZED, FAILED, AUTHORIZATION_FAILED; AUTHORIZED to CAPTURED, FAILED, AUTHORIZATION_FAILED, CAPTURE_FAILED, REVERSED; CAPTURED to SETTLEMENT_PENDING, CAPTURE_FAILED, REVERSED; SETTLEMENT_PENDING to SETTLED, SETTLEMENT_FAILED, REVERSED; SETTLED to COMPLETED, REVERSED; COMPLETED to REVERSED; UNKNOWN to AUTHORIZED, CAPTURED |
 | No provider network call inside a DB transaction | `CashInService`, `CashOutService` and `ReversePaymentService` split into TX-1 (~10 ms) / provider I/O (~1 400 ms, zero connections held) / TX-2 (~20 ms). Per ADR-004, a class-level `@Transactional` produced p95 60 000 ms and a 73.93 % error rate at 25 req/s through HikariCP pool exhaustion |
 | A rollback happens by throwing | `BusinessException` — or any unchecked throwable — inside `TransactionBoundary.execute` discards the writes; returning normally commits. The port hands out no transaction status, so throwing is the only way for a use case to abort. Pinned in `SpringTransactionBoundaryTest` against a recording transaction manager |
 | Retry wraps the boundary, never the reverse | `ConcurrentUpdateException` surfaces at commit, so the transaction is already dead. Retry is scoped to the phase that is safe to replay — TX-2, after the provider answered (ADR-007) |
@@ -159,7 +160,7 @@ Assertions to apply to a diff. Each one is decidable by reading the diff alone.
 12. An interactor in `<module>/application/usecases/` that imports another interactor,
     or a second driving port, is a defect.
 13. A command, port, or domain type accepting a raw `String` where a domain type
-    exists (`Id`, `Amount`, `PaymentMethod`, `Msisdn`, `Pin`, `PhoneNumber`) is a
+    exists (`Id`, `Amount`, `PaymentMethod`, `PhoneNumber`, `Pin`) is a
     defect. Conversion happens once, in `Request.toCommand()` at the web layer.
 14. A new or altered table column without a new
     `V<yyyyMMddHHmm>__snake_case.sql` under `src/main/resources/db/migration/`
@@ -182,7 +183,7 @@ Assertions to apply to a diff. Each one is decidable by reading the diff alone.
 
 ## 8. Testing strategy
 
-57 test classes under `src/test/java`. The tree states the pyramid level first, and
+58 test classes under `src/test/java`. The tree states the pyramid level first, and
 `TestPyramidTest` checks that the statement is true.
 
 ```
@@ -236,7 +237,7 @@ Deliberate and tracked. Do not raise them on a PR.
   surfaces as `ConcurrentUpdateException` and is retried.
 - `auth -> payment` and `payment -> auth` couplings remain, listed and asserted in
   `ModuleBoundariesTest`. Closing them needs a published `OpenWalletUseCase` and a
-  wallet lookup by msisdn.
+  wallet lookup by phone number.
 
 ## 10. Key files
 
@@ -254,5 +255,7 @@ Deliberate and tracked. Do not raise them on a PR.
   whole schema; `V202609051542__rename_ledger_vocabulary.sql` renames `operations` to
   `ledger_entries` and `from_id`/`to_id` to `from_account_id`/`to_account_id`;
   `V202609071725__constrain_enum_columns.sql` closes every enumerated column with a
-  `CHECK`, and its header records why not a native `ENUM` type
+  `CHECK`, and its header records why not a native `ENUM` type;
+  `V202610131159__allow_unknown_transaction_state.sql` re-adds the three state
+  constraints with `UNKNOWN`
 - `perf/PERF.md`, `perf/SIMULATION.md` — load-test procedure

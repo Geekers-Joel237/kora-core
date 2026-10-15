@@ -14,18 +14,6 @@ import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/**
- * The boundary's two jobs: deciding whether work becomes permanent, and naming its
- * failures in terms the application can act on.
- *
- * <p>Plain JUnit throughout. The transaction manager is a double, so a rollback can be
- * observed as a fact rather than inferred from the absence of rows, and a commit-time
- * failure can be injected where a real one surfaces — no database, no provoked deadlock.
- *
- * <p>The exceptions thrown here are the kernel's own. A test in {@code shared} that
- * reached for {@code InsufficientFundsException} would make the kernel name a module
- * to describe a rule that has nothing to do with payments.
- */
 class SpringTransactionBoundaryTest {
 
     @Test

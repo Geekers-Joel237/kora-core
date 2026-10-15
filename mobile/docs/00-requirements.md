@@ -20,9 +20,9 @@ L'application mobile est le **seul point de contact client**. Elle n'est pas une
 
 ### Le pari produit
 
-La plupart des wallets d'Afrique de l'Ouest traitent une transaction comme une boîte noire : on appuie, on attend, un message apparaît. Kora fait l'inverse — **la transparence du cycle de vie est la fonctionnalité**. Le backend expose déjà un historique d'états horodaté (`INITIALIZED → AUTHORIZED → CAPTURED → COMPLETED`). L'app l'affiche comme une frise temporelle vivante.
+La plupart des wallets d'Afrique de l'Ouest traitent une transaction comme une boîte noire : on appuie, on attend, un message apparaît. Kora fait l'inverse — **un statut toujours juste, dans les mots du client** : en cours, terminée, échouée ou remboursée. Rien de plus, et jamais un succès affiché avant que l'argent ait bougé.
 
-C'est le différenciateur, et c'est aussi ce qui impose la barre d'exécution : une frise d'états mal animée est pire que pas de frise du tout.
+> **Révisé le 2026-10-13.** Le pari initial était d'afficher la frise des états techniques (`INITIALIZED → AUTHORIZED → CAPTURED → …`). Le backend ne l'expose plus au client : pour l'utilisateur, ces états ne veulent rien dire. FR-43 et VR-03 sont retirées en conséquence.
 
 ### Utilisateurs cibles
 
@@ -85,9 +85,9 @@ Priorité : `P0` = bloquant pour la V1 · `P1` = V1 si le planning tient · `P2`
 | ID | Exigence | Prio |
 |---|---|---|
 | FR-40 | Historique paginé, groupé par jour, avec en-têtes de section collants | P0 |
-| FR-41 | Filtres combinables : type d'opération, état, sens (entrant/sortant), plage de dates | P0 |
+| FR-41 | Filtres combinables : nature (dépôt, retrait, transfert envoyé, transfert reçu), statut client, plage de jours | P0 |
 | FR-42 | Pagination par défilement infini, avec indicateur de chargement en pied de liste | P0 |
-| FR-43 | Le détail d'une opération affiche la **frise temporelle complète des transitions d'état**, horodatée | P0 |
+| ~~FR-43~~ | ~~Frise temporelle des transitions d'état~~ — **retirée le 2026-10-13** : le backend n'expose plus les états techniques au client. Le détail affiche le statut client | — |
 | FR-44 | Le détail affiche le numéro d'opération, copiable d'un appui long | P0 |
 | FR-45 | Les opérations en cours sont rafraîchies automatiquement tant qu'elles ne sont pas dans un état terminal | P1 |
 | FR-45b 🔄 | L'app tolère un état de transaction inconnu sans plantage, et le signale en mode validation — les étapes 6 et 8 en introduiront de nouveaux | P0 |
@@ -223,7 +223,7 @@ Ces contraintes sont celles de l'**état actuel** du backend. Elles ne sont pas 
 |---|---|---|
 | VR-01 | L'app expose un mode validation, isolé sous `src/devtools/`, absent du bundle de production | P0 |
 | VR-02 | Toute requête et toute réponse sont inspectables, `rawPin` masqué | P0 |
-| VR-03 | Les 11 états et la frise complète sont consultables sans traduction ni regroupement | P0 |
+| ~~VR-03~~ | ~~Les 11 états et la frise complète sont consultables~~ — **retirée le 2026-10-13** : l'historique client ne les porte plus. L'inspecteur montre `status` et `kind` bruts ; les états techniques relèvent d'un futur outil back-office | — |
 | VR-04 | Un écart entre `/v3/api-docs` et les types locaux est détecté et signalé au démarrage | P1 |
 | VR-05 | L'URL d'API est modifiable sans recompilation, avec purge des jetons au changement | P0 |
 | VR-06 | Latence, coupure réseau et statut de réponse sont simulables côté client | P1 |

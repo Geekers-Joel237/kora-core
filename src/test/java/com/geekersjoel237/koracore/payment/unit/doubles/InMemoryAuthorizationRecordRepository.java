@@ -41,7 +41,6 @@ public class InMemoryAuthorizationRecordRepository implements AuthorizationRecor
                 .toList();
     }
 
-    /** Test utility: load any record for a transaction, regardless of status. */
     public Optional<AuthorizationRecord> findByTransactionId(Id transactionId) {
         return Optional.ofNullable(store.get(transactionId.value()));
     }

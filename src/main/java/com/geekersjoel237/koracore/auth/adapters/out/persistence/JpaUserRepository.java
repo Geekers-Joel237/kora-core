@@ -9,11 +9,6 @@ import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
 
-/**
- * Created on 28/02/2026
- *
- * @author Geekers_Joel237
- **/
 @Repository
 public class JpaUserRepository implements UserRepository {
     private final SpringDataUserRepository userRepository;

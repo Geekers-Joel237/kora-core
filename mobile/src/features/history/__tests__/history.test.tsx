@@ -2,7 +2,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
-import { DEFAULT_PAGE_SIZE } from '@/features/history/api';
+import { DEFAULT_PAGE_SIZE, getTransactionDetail } from '@/features/history/api';
 import {
   activeFilterCount,
   NO_FILTERS,
@@ -21,31 +21,25 @@ import type { Page, Transaction } from '@/types/domain';
 
 // ────────────────────────────────────────────────────────────── Fixtures ────
 
-function tx(id: string, createdAt: Date): Transaction {
+function tx(reference: string, createdAt: Date): Transaction {
   return {
-    id,
-    reference: `TRX-${id}`,
-    type: 'CASH_IN',
-    direction: 'INBOUND',
-    state: 'COMPLETED',
+    reference,
+    kind: 'DEPOSIT',
     outcome: 'success',
+    direction: 'INBOUND',
     amount: { minor: 50000, currency: 'XOF' },
-    paymentMethod: 'ORANGE_MONEY',
+    channel: 'ORANGE_MONEY',
     counterpart: null,
     createdAt,
-    stateHistory: null,
   };
 }
 
-function page(index: number, items: Transaction[], hasNext: boolean): Page<Transaction> {
-  return {
-    items,
-    page: index,
-    size: DEFAULT_PAGE_SIZE,
-    totalElements: 5,
-    totalPages: 2,
-    hasNext,
-  };
+function page(
+  cursor: string | null,
+  items: Transaction[],
+  nextCursor: string | null,
+): Page<Transaction> {
+  return { items, cursor, nextCursor };
 }
 
 const AUG_10 = new Date(2026, 7, 10, 9, 30);
@@ -55,8 +49,8 @@ const AUG_8 = new Date(2026, 7, 8, 7, 15);
 describe('groupement par jour — docs/05-screens.md §5', () => {
   it('n’émet qu’un en-tête pour une journée à cheval sur deux pages', () => {
     const { rows, stickyIndices } = toHistoryRows([
-      page(0, [tx('a', AUG_10), tx('b', AUG_10), tx('c', AUG_9)], true),
-      page(1, [tx('d', AUG_9), tx('e', AUG_8)], false),
+      page(null, [tx('a', AUG_10), tx('b', AUG_10), tx('c', AUG_9)], 'c1'),
+      page('c1', [tx('d', AUG_9), tx('e', AUG_8)], null),
     ]);
 
     expect(rows.map((row) => row.kind)).toEqual([
@@ -73,33 +67,34 @@ describe('groupement par jour — docs/05-screens.md §5', () => {
     expect(stickyIndices).toEqual([0, 3, 6]);
   });
 
-  it('transporte la page d’origine sur chaque ligne — contrat §6.7', () => {
+  it('transporte le curseur de la page d’origine sur chaque ligne — contrat §6.7', () => {
     const { rows } = toHistoryRows([
-      page(0, [tx('a', AUG_10)], true),
-      page(1, [tx('b', AUG_9)], false),
+      page(null, [tx('a', AUG_10)], 'c1'),
+      page('c1', [tx('b', AUG_9)], null),
     ]);
 
-    const pages = rows.filter((row) => row.kind === 'row').map((row) => row.page);
-    expect(pages).toEqual([0, 1]);
+    const cursors = rows.flatMap((row) => (row.kind === 'row' ? [row.cursor] : []));
+    expect(cursors).toEqual([null, 'c1']);
   });
 
-  it('retrouve une opération et sa page d’origine', () => {
-    const pages = [page(0, [tx('a', AUG_10)], true), page(1, [tx('b', AUG_9)], false)];
+  it('retrouve une opération par sa référence, avec le curseur de sa page', () => {
+    const pages = [page(null, [tx('a', AUG_10)], 'c1'), page('c1', [tx('b', AUG_9)], null)];
 
-    expect(findInPages(pages, 'b')).toEqual({ transaction: pages[1]?.items[0], page: 1 });
+    expect(findInPages(pages, 'b')).toEqual({ transaction: pages[1]?.items[0], cursor: 'c1' });
     expect(findInPages(pages, 'absent')).toBeNull();
   });
 
   it('rend une liste vide sans en-tête orphelin', () => {
     expect(toHistoryRows([])).toEqual({ rows: [], stickyIndices: [] });
-    expect(toHistoryRows([page(0, [], false)])).toEqual({ rows: [], stickyIndices: [] });
+    expect(toHistoryRows([page(null, [], null)])).toEqual({ rows: [], stickyIndices: [] });
   });
 });
 
-describe('modèle de filtres — contrat §6.8', () => {
+describe('modèle de filtres', () => {
   it('compte la période et la plage comme un seul filtre', () => {
     expect(activeFilterCount(NO_FILTERS)).toBe(0);
-    expect(activeFilterCount({ ...NO_FILTERS, type: 'CASH_IN', period: '7d' })).toBe(2);
+    expect(activeFilterCount({ ...NO_FILTERS, kind: 'DEPOSIT', period: '7d' })).toBe(2);
+    expect(activeFilterCount({ ...NO_FILTERS, status: 'FAILED' })).toBe(1);
     expect(activeFilterCount({ ...NO_FILTERS, from: AUG_8, to: AUG_10 })).toBe(1);
   });
 
@@ -111,9 +106,8 @@ describe('modèle de filtres — contrat §6.8', () => {
 
   it('fait l’aller-retour par la sérialisation de navigation', () => {
     const filters: ActiveFilters = {
-      type: 'P2P_TRANSFER',
-      direction: 'OUTBOUND',
-      state: 'AUTHORIZATION_FAILED',
+      kind: 'TRANSFER_SENT',
+      status: 'REFUNDED',
       period: null,
       from: AUG_8,
       to: AUG_10,
@@ -121,27 +115,27 @@ describe('modèle de filtres — contrat §6.8', () => {
 
     const parsed = parseFilters(serializeFilters(filters));
 
-    expect(parsed.type).toBe('P2P_TRANSFER');
-    expect(parsed.direction).toBe('OUTBOUND');
-    expect(parsed.state).toBe('AUTHORIZATION_FAILED');
-    // Les bornes reviennent ramenées au jour, pas à l'heure d'origine.
+    expect(parsed.kind).toBe('TRANSFER_SENT');
+    expect(parsed.status).toBe('REFUNDED');
+    // Les bornes sont des jours : elles reviennent à minuit, le même jour.
+    expect(parsed.from?.getDate()).toBe(8);
     expect(parsed.from?.getHours()).toBe(0);
-    expect(parsed.to?.getHours()).toBe(23);
+    expect(parsed.to?.getDate()).toBe(10);
   });
 
   it('produit une chaîne stable pour deux sélections équivalentes', () => {
-    const a: ActiveFilters = { ...NO_FILTERS, type: 'CASH_IN', period: '7d' };
-    const b: ActiveFilters = { ...NO_FILTERS, period: '7d', type: 'CASH_IN' };
+    const a: ActiveFilters = { ...NO_FILTERS, kind: 'DEPOSIT', period: '7d' };
+    const b: ActiveFilters = { ...NO_FILTERS, period: '7d', kind: 'DEPOSIT' };
     expect(serializeFilters(a)).toBe(serializeFilters(b));
   });
 
   it('ignore les valeurs inconnues plutôt que de les propager — règle R2', () => {
-    const parsed = parseFilters('t=CRYPTO_SWAP&s=REFUNDED&d=SIDEWAYS&p=1y');
+    const parsed = parseFilters('k=CRYPTO_SWAP&s=SETTLED&p=1y&f=pas-un-jour');
     expect(parsed).toEqual(NO_FILTERS);
   });
 
   it('fait primer la fenêtre sur la plage quand les deux sont lues', () => {
-    const parsed = parseFilters(`p=30d&f=${AUG_8.toISOString()}&u=${AUG_10.toISOString()}`);
+    const parsed = parseFilters('p=30d&f=2026-08-08&u=2026-08-10');
     expect(parsed.period).toBe('30d');
     expect(parsed.from).toBeNull();
     expect(parsed.to).toBeNull();
@@ -149,7 +143,7 @@ describe('modèle de filtres — contrat §6.8', () => {
 });
 
 describe('traduction en paramètres serveur', () => {
-  it('fait débuter « 7 j » sept jours pleins avant aujourd’hui inclus', () => {
+  it('fait débuter « 7 j » six jours avant aujourd’hui, aujourd’hui compris', () => {
     const now = new Date(2026, 7, 10, 15, 30);
     const query = toHistoryQuery({ ...NO_FILTERS, period: '7d' }, now);
 
@@ -158,18 +152,15 @@ describe('traduction en paramètres serveur', () => {
     expect(query.to).toBeUndefined();
   });
 
-  it('borne une plage personnalisée au jour entier', () => {
+  it('envoie une plage personnalisée en jours, le dernier inclus côté serveur', () => {
     const query = toHistoryQuery({ ...NO_FILTERS, from: AUG_8, to: AUG_10 });
 
-    expect(query.from?.getHours()).toBe(0);
-    expect(query.to?.getHours()).toBe(23);
-    expect(query.to?.getMinutes()).toBe(59);
+    expect(query.from?.getDate()).toBe(8);
+    expect(query.to?.getDate()).toBe(10);
   });
 
-  it('n’envoie qu’un seul état — `TransactionFilter.state` n’en accepte pas plus', () => {
-    const query = toHistoryQuery({ ...NO_FILTERS, state: 'CAPTURED' });
-    expect(query.state).toBe('CAPTURED');
-    expect(typeof query.state).toBe('string');
+  it('envoie le statut client tel quel : le serveur couvre toute la famille', () => {
+    expect(toHistoryQuery({ ...NO_FILTERS, status: 'FAILED' }).status).toBe('FAILED');
   });
 
   it('n’envoie aucun paramètre sans sélection', () => {
@@ -177,31 +168,26 @@ describe('traduction en paramètres serveur', () => {
   });
 });
 
-// ───────────────────────────────────────────────── Pagination infinie ───────
+// ─────────────────────────────────────────────── Réseau : curseur, rejeu ────
 
-function apiPage(index: number, hasNext: boolean) {
+function apiItem(reference: string) {
   return {
-    transactions: [
-      {
-        transactionId: `tx-${index}`,
-        transactionNumber: `TRX-2026081${index}-A3F91C2D`,
-        type: 'CASH_IN',
-        direction: 'INBOUND',
-        state: 'COMPLETED',
-        amount: 50000,
-        currency: 'XOF',
-        paymentMethod: 'ORANGE_MONEY',
-        counterpart: null,
-        createdAt: '2026-08-10T11:42:13Z',
-        stateHistory: null,
-      },
-    ],
-    page: index,
-    size: DEFAULT_PAGE_SIZE,
-    totalElements: 2,
-    totalPages: 2,
-    hasNext,
+    reference,
+    kind: 'DEPOSIT',
+    status: 'COMPLETED',
+    amount: 50000,
+    currency: 'XOF',
+    counterpart: null,
+    channel: 'ORANGE_MONEY',
+    date: '2026-08-10T11:42:13Z',
   };
+}
+
+/** Première page `TRX-0` puis `cursor=c1` → `TRX-1`, dernière page. */
+function pageFor(url: string) {
+  return url.includes('cursor=c1')
+    ? { items: [apiItem('TRX-1')], nextCursor: null }
+    : { items: [apiItem('TRX-0')], nextCursor: 'c1' };
 }
 
 let fetchMock: jest.Mock;
@@ -215,7 +201,7 @@ beforeEach(() => {
   fetchMock = jest.fn(async (url: string) => ({
     status: 200,
     ok: true,
-    text: async () => JSON.stringify(apiPage(String(url).includes('page=1') ? 1 : 0, !String(url).includes('page=1'))),
+    text: async () => JSON.stringify(pageFor(String(url))),
   }));
   globalThis.fetch = fetchMock as unknown as typeof fetch;
   registerTokenProvider({
@@ -229,11 +215,13 @@ beforeEach(() => {
 afterEach(() => registerTokenProvider(null));
 
 describe('pagination infinie de l’historique', () => {
-  it('demande vingt éléments et enchaîne sur la page suivante', async () => {
+  it('demande vingt éléments puis suit le curseur jusqu’à la dernière page', async () => {
     const { result } = await renderHook(() => useHistoryInfinite(NO_FILTERS), { wrapper });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(String(fetchMock.mock.calls[0]?.[0])).toContain(`size=${DEFAULT_PAGE_SIZE}`);
+    const first = String(fetchMock.mock.calls[0]?.[0]);
+    expect(first).toContain(`limit=${DEFAULT_PAGE_SIZE}`);
+    expect(first).not.toContain('cursor=');
     expect(result.current.hasNextPage).toBe(true);
 
     await act(async () => {
@@ -242,18 +230,31 @@ describe('pagination infinie de l’historique', () => {
 
     await waitFor(() => expect(result.current.data?.pages).toHaveLength(2));
     expect(result.current.hasNextPage).toBe(false);
-    expect(String(fetchMock.mock.calls[1]?.[0])).toContain('page=1');
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain('cursor=c1');
+    expect(result.current.data?.pages[1]?.cursor).toBe('c1');
   });
 
-  it('transmet le filtre d’état au serveur', async () => {
-    const filters: ActiveFilters = { ...NO_FILTERS, state: 'CAPTURED', type: 'CASH_OUT' };
+  it('transmet le statut et la nature au serveur', async () => {
+    const filters: ActiveFilters = { ...NO_FILTERS, status: 'PENDING', kind: 'WITHDRAWAL' };
     const { result } = await renderHook(() => useHistoryInfinite(filters), { wrapper });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     const url = String(fetchMock.mock.calls[0]?.[0]);
-    expect(url).toContain('state=CAPTURED');
-    expect(url).toContain('type=CASH_OUT');
+    expect(url).toContain('status=PENDING');
+    expect(url).toContain('kind=WITHDRAWAL');
+  });
+
+  it('envoie les bornes de date en jours, jamais en instants', async () => {
+    const filters: ActiveFilters = { ...NO_FILTERS, from: AUG_8, to: AUG_10 };
+    const { result } = await renderHook(() => useHistoryInfinite(filters), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const url = String(fetchMock.mock.calls[0]?.[0]);
+    expect(url).toContain('from=2026-08-08');
+    expect(url).toContain('to=2026-08-10');
+    expect(url).not.toContain('T00');
   });
 
   it('n’ajoute aucune borne de date sans sélection de période', async () => {
@@ -263,5 +264,29 @@ describe('pagination infinie de l’historique', () => {
     const url = String(fetchMock.mock.calls[0]?.[0]);
     expect(url).not.toContain('from=');
     expect(url).not.toContain('to=');
+  });
+});
+
+describe('détail par rejeu de la page d’origine — contrat §6.7', () => {
+  it('rejoue exactement la page désignée par le curseur', async () => {
+    const found = await getTransactionDetail('TRX-1', { cursor: 'c1' });
+
+    expect(found?.reference).toBe('TRX-1');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain('cursor=c1');
+  });
+
+  it('suit une fois le curseur suivant quand la première page a glissé', async () => {
+    const found = await getTransactionDetail('TRX-1', { cursor: null });
+
+    expect(found?.reference).toBe('TRX-1');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('abandonne sans parcourir l’historique quand une page stable ne la contient pas', async () => {
+    const found = await getTransactionDetail('TRX-absent', { cursor: 'c1' });
+
+    expect(found).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

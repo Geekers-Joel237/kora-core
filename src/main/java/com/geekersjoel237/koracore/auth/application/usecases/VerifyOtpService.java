@@ -1,14 +1,14 @@
 package com.geekersjoel237.koracore.auth.application.usecases;
 
 import com.geekersjoel237.koracore.auth.application.command.VerifyOtpCommand;
-import com.geekersjoel237.koracore.auth.ports.in.VerifyOtpCommandHandler;
-import com.geekersjoel237.koracore.auth.ports.out.otp.OtpChallenge;
-import com.geekersjoel237.koracore.auth.ports.out.security.TokenIssuer;
 import com.geekersjoel237.koracore.auth.domain.exception.CustomerNotFoundException;
 import com.geekersjoel237.koracore.auth.domain.model.Customer;
 import com.geekersjoel237.koracore.auth.domain.model.User;
-import com.geekersjoel237.koracore.auth.ports.out.repository.CustomerRepository;
 import com.geekersjoel237.koracore.auth.domain.vo.Tokens;
+import com.geekersjoel237.koracore.auth.ports.in.VerifyOtpCommandHandler;
+import com.geekersjoel237.koracore.auth.ports.out.otp.OtpChallenge;
+import com.geekersjoel237.koracore.auth.ports.out.repository.CustomerRepository;
+import com.geekersjoel237.koracore.auth.ports.out.security.TokenIssuer;
 import com.geekersjoel237.koracore.shared.ports.out.transaction.TransactionBoundary;
 
 public final class VerifyOtpService implements VerifyOtpCommandHandler {

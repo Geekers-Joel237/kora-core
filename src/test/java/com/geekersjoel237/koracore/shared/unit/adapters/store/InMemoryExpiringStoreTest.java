@@ -12,13 +12,6 @@ import java.time.Instant;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/**
- * The store, tested on a value it knows nothing about.
- *
- * <p>{@code String} here is the point: entries expire without the store ever asking
- * what they are. That is what the old {@code OtpStore} could not do — it called
- * {@code isExpired} on the value, so only self-expiring auth types could live in it.
- */
 class InMemoryExpiringStoreTest {
 
     private static final Instant NOON = Instant.parse("2026-01-01T12:00:00Z");

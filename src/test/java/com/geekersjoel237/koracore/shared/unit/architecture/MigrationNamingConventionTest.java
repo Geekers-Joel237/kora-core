@@ -19,21 +19,11 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * Guards the Flyway migration naming convention (CONTRIBUTING.md section 9).
- * <p>
- * Migrations are versioned by timestamp, not by sequence: two branches adding a
- * migration in parallel would otherwise both claim the next integer. This test
- * scans the real migration directory, so a file that drifts from the convention
- * fails {@code ./gradlew test} rather than surviving until someone notices.
- * <p>
- * Plain JUnit — no Spring context, no database, no Docker.
- */
+// Timestamp versions, not sequences: two branches would otherwise claim the same next integer.
 class MigrationNamingConventionTest {
 
     private static final Path MIGRATION_DIR = Path.of("src", "main", "resources", "db", "migration");
 
-    /** Human-readable form of {@link #MIGRATION_FILE}, quoted in every failure message. */
     private static final String EXPECTED = "V<yyyyMMddHHmm>__snake_case_name.sql";
 
     private static final Pattern MIGRATION_FILE =
@@ -46,9 +36,6 @@ class MigrationNamingConventionTest {
     private static final DateTimeFormatter TIMESTAMP =
             DateTimeFormatter.ofPattern("uuuuMMddHHmm").withResolverStyle(ResolverStyle.STRICT);
 
-    /**
-     * @return why {@code fileName} breaks the convention, or empty if it complies.
-     */
     static Optional<String> violation(String fileName) {
         Matcher matcher = MIGRATION_FILE.matcher(fileName);
         if (!matcher.matches()) {

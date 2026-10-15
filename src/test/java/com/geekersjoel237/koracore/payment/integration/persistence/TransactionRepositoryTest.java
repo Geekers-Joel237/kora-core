@@ -34,7 +34,6 @@ class TransactionRepositoryTest extends AbstractRepositoryTest {
     private JpaTrxHistoricStatesRepository historicRepository;
 
 
-    // ── helpers ───────────────────────────────────────────────────────────────
     @Autowired
     private SpringDataTransactionRepository springDataTransactionRepository;
 
@@ -45,8 +44,6 @@ class TransactionRepositoryTest extends AbstractRepositoryTest {
         tx.recordDoubleEntry(AMOUNT_10K, fromAccountId, toAccountId);
         return tx;
     }
-
-    // ── tests ─────────────────────────────────────────────────────────────────
 
     @Test
     void should_persist_transaction_with_two_operations_atomically() {
@@ -71,7 +68,6 @@ class TransactionRepositoryTest extends AbstractRepositoryTest {
         txRepository.save(tx);
         String duplicateNumber = tx.snapshot().transactionNumber();
 
-        // Build a raw entity with the same transaction_number
         TransactionEntity duplicate = TransactionEntity.builder()
                 .transactionNumber(duplicateNumber)
                 .fromAccountId(fromAccountId.value())
@@ -137,17 +133,16 @@ class TransactionRepositoryTest extends AbstractRepositoryTest {
         Transaction tx = buildTransaction(fromAccountId, toAccountId);
         txRepository.save(tx);
 
-        // Record INITIALIZED → AUTHORIZED → COMPLETED in history
-        historicRepository.save(tx.history().getFirst()); // INITIALIZED (null → INITIALIZED)
+        historicRepository.save(tx.history().getFirst());
         tx.authorize();
         txRepository.save(tx);
-        historicRepository.save(tx.history().get(1)); // INITIALIZED → AUTHORIZED
+        historicRepository.save(tx.history().get(1));
         tx.capture();
         tx.pendSettlement();
         tx.settle();
         tx.markCompleted();
         txRepository.save(tx);
-        historicRepository.save(tx.history().getLast()); // SETTLED → COMPLETED
+        historicRepository.save(tx.history().getLast());
 
         List<TrxStateHistoric> history =
                 historicRepository.findByTransactionId(tx.snapshot().transactionId());

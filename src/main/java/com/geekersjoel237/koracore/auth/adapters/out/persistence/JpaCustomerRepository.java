@@ -4,7 +4,7 @@ import com.geekersjoel237.koracore.auth.domain.model.Customer;
 import com.geekersjoel237.koracore.auth.domain.model.User;
 import com.geekersjoel237.koracore.auth.ports.out.repository.CustomerRepository;
 import com.geekersjoel237.koracore.shared.domain.vo.Id;
-import com.geekersjoel237.koracore.auth.domain.vo.PhoneNumber;
+import com.geekersjoel237.koracore.shared.domain.vo.PhoneNumber;
 import com.geekersjoel237.koracore.auth.adapters.out.persistence.entities.CustomerEntity;
 import com.geekersjoel237.koracore.auth.adapters.out.persistence.entities.UserEntity;
 import org.springframework.stereotype.Repository;

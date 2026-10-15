@@ -6,17 +6,7 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/**
- * A PIN is the one field in a payment command that must never reach a log line.
- *
- * <p>Guarding that by reviewing every logger call does not scale: the anti-replay
- * middleware will fingerprint whole commands, a debug statement prints one, an
- * exception message interpolates another. The type carries the guarantee instead —
- * every one of those paths goes through {@code toString()}.
- *
- * <p>Equality still compares the real value: a redacted {@code toString()} that also
- * broke {@code equals} would make every PIN equal to every other.
- */
+// Equality still compares the real value: a redacted toString() must not make every PIN equal.
 class PinTest {
 
     private static final String SECRET = "483920";

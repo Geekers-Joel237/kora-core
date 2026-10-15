@@ -56,15 +56,19 @@ export default function ActivityScreen() {
 
   const filterCount = activeFilterCount(filters);
   const filtered = hasAnyFilter(filters);
-  const total = history.data?.pages[0]?.totalElements ?? null;
+  // Le serveur ne compte plus le total : la première page dit combien, et s'il y
+  // en a davantage. C'est tout ce que le pied du panneau de filtres annonce.
+  const firstPage = history.data?.pages[0] ?? null;
+  const resultCount = firstPage ? firstPage.items.length : null;
+  const moreResults = firstPage !== null && firstPage.nextCursor !== null;
 
   const openDetail = useCallback(
-    (id: string, page: number) => {
+    (reference: string, cursor: string | null) => {
       router.push({
-        // Faute de `GET /payments/{id}`, la page d'origine et les filtres font
-        // partie de l'identité de l'écran de détail. Contrat §6.7.
+        // Faute de `GET /payments/{id}`, le curseur de la page d'origine et les
+        // filtres font partie de l'identité de l'écran de détail. Contrat §6.7.
         pathname: '/transaction/[id]',
-        params: { id, page: String(page), filters: serializeFilters(filters) },
+        params: { id: reference, cursor: cursor ?? '', filters: serializeFilters(filters) },
       });
     },
     [filters],
@@ -88,7 +92,7 @@ export default function ActivityScreen() {
       return (
         <TransactionRow
           transaction={item.transaction}
-          onPress={(tx) => openDetail(tx.id, item.page)}
+          onPress={(tx) => openDetail(tx.reference, item.cursor)}
         />
       );
     },
@@ -137,7 +141,8 @@ export default function ActivityScreen() {
         onClose={() => setSheetOpen(false)}
         filters={filters}
         onChange={setFilters}
-        resultCount={total}
+        resultCount={resultCount}
+        moreResults={moreResults}
         loading={history.isFetching && !history.isFetchingNextPage}
       />
     </View>

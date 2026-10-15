@@ -72,7 +72,7 @@ class MoneyIntegrityE2ETest extends AbstractE2ETest {
                 sender.tokens().accessToken(), TransactionResponse.class);
 
         postWithToken("/payments/transfer",
-                new TransferRequest("1234", transfer, "XAF", "+22507000004004"),
+                new TransferRequest("1234", transfer, "XAF", "+225", "07000004004"),
                 sender.tokens().accessToken(), TransactionResponse.class);
 
         var senderBalance   = accountRepository.findByCustomerId(sender.customerId()).orElseThrow()
@@ -102,7 +102,6 @@ class MoneyIntegrityE2ETest extends AbstractE2ETest {
         for (Future<Integer> f : futures) statuses.add(f.get());
         pool.shutdown();
 
-        // All requests must return 200 OK (balance consistency under concurrency is a Step 1+ concern)
         assertThat(statuses).allMatch(s -> s == 200);
     }
 
@@ -122,10 +121,9 @@ class MoneyIntegrityE2ETest extends AbstractE2ETest {
                 new CashOutRequest("1234", cashOut, "XAF", "ORANGE_MONEY"),
                 sender.tokens().accessToken(), TransactionResponse.class);
         postWithToken("/payments/transfer",
-                new TransferRequest("1234", transfer, "XAF", "+22507000004007"),
+                new TransferRequest("1234", transfer, "XAF", "+225", "07000004007"),
                 sender.tokens().accessToken(), TransactionResponse.class);
 
-        // For every transaction, credits must equal debits
         Long violations = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*) FROM (
                     SELECT transaction_id

@@ -15,14 +15,7 @@ import java.math.BigDecimal;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * E2E tests exercising provider failure paths through the real Spring context.
- * No mocking — behavior is controlled by {@code kora.provider.behavior} property.
- * Each nested class spins up its own application context with a different behavior.
- */
 class ProviderFailureE2ETest {
-
-    // ── When provider refuses authorization ───────────────────────────────────
 
     @Nested
     @SpringBootTest(
@@ -75,8 +68,6 @@ class ProviderFailureE2ETest {
             assertThat(tx.state()).isEqualTo("AUTHORIZATION_FAILED");
         }
     }
-
-    // ── When provider fails on capture ────────────────────────────────────────
 
     @Nested
     @SpringBootTest(

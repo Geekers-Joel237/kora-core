@@ -3,12 +3,12 @@ package com.geekersjoel237.koracore.payment.adapters.out.provider;
 import com.geekersjoel237.koracore.payment.domain.enums.PaymentMethod;
 import com.geekersjoel237.koracore.payment.domain.enums.ProviderOperationType;
 import com.geekersjoel237.koracore.payment.domain.exception.PaymentProviderException;
-import com.geekersjoel237.koracore.payment.ports.out.provider.ProviderPort;
+import com.geekersjoel237.koracore.payment.ports.out.provider.PaymentProviderPort;
 import com.geekersjoel237.koracore.shared.domain.vo.Amount;
 import com.geekersjoel237.koracore.payment.domain.vo.AuthorizationResult;
 import com.geekersjoel237.koracore.payment.domain.vo.CaptureResult;
 import com.geekersjoel237.koracore.shared.domain.vo.Id;
-import com.geekersjoel237.koracore.auth.domain.vo.PhoneNumber;
+import com.geekersjoel237.koracore.shared.domain.vo.PhoneNumber;
 import com.geekersjoel237.koracore.payment.domain.vo.ReverseResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,33 +19,17 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
-/**
- * Configurable simulation adapter for the Mobile Money provider.
- * Behavior and latency are controlled by {@code kora.provider.*} properties,
- * so E2E and k6 tests can exercise failure paths without any mocking.
- *
- * <p>Replace with a real HTTP client in a later roadmap stage.
- *
- * <h3>Behaviors</h3>
- * <ul>
- *   <li>{@code SUCCESS}          — every call succeeds (default)</li>
- *   <li>{@code SLOW}             — succeeds but with 2× base latency</li>
- *   <li>{@code FAIL_ON_AUTHORIZE}— throws {@link PaymentProviderException} on authorize, credit, debit, send</li>
- *   <li>{@code FAIL_ON_CAPTURE}  — authorizes OK, throws during capture</li>
- *   <li>{@code TIMEOUT}          — simulates a network timeout on every call</li>
- * </ul>
- */
 @Component
-public class MobileMoneyProviderAdapter implements ProviderPort {
+public class MobileMoneyPaymentProviderAdapter implements PaymentProviderPort {
 
-    private static final Logger log = LoggerFactory.getLogger(MobileMoneyProviderAdapter.class);
+    private static final Logger log = LoggerFactory.getLogger(MobileMoneyPaymentProviderAdapter.class);
     private final ProviderBehavior behavior;
     private final boolean simulateLatency;
     private final long authorizeMs;
     private final long captureMs;
     private final long timeoutThresholdMs;
 
-    public MobileMoneyProviderAdapter(
+    public MobileMoneyPaymentProviderAdapter(
             @Value("${kora.provider.behavior:SUCCESS}") String behavior,
             @Value("${kora.provider.simulate-latency:true}") boolean simulateLatency,
             @Value("${kora.provider.latency.authorize-ms:200}") long authorizeMs,
@@ -97,8 +81,6 @@ public class MobileMoneyProviderAdapter implements ProviderPort {
     }
 
 
-    // ── Authorize ─────────────────────────────────────────────────────────────
-
     @Override
     public ReverseResult reverse(String reference, Amount amount, Id correlationId) {
         log.debug("reverse — ref={} amount={} correlationId={}", reference, amount.value(), correlationId.value());
@@ -106,8 +88,6 @@ public class MobileMoneyProviderAdapter implements ProviderPort {
         simulateLatency(captureMs);
         return new ReverseResult(UUID.randomUUID().toString(), true);
     }
-
-    // ── Capture ───────────────────────────────────────────────────────────────
 
     private void checkBehavior(Checkpoint checkpoint) {
         switch (behavior) {
@@ -135,8 +115,6 @@ public class MobileMoneyProviderAdapter implements ProviderPort {
         }
     }
 
-    // ── Reverse ───────────────────────────────────────────────────────────────
-
     private void simulateLatency(long baseMs) {
         if (!simulateLatency) return;
         long jitter = (long) (baseMs * 0.4 * Math.random());
@@ -148,8 +126,6 @@ public class MobileMoneyProviderAdapter implements ProviderPort {
             Thread.currentThread().interrupt();
         }
     }
-
-    // ── Internal helpers ──────────────────────────────────────────────────────
 
     public enum ProviderBehavior {
         SUCCESS,

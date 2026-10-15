@@ -84,9 +84,8 @@ Vue brute, sans traduction ni regroupement, de ce que le backend renvoie réelle
 
 | Fonction | Détail |
 |---|---|
-| Liste brute | Les 11 états affichés tels quels, sans regroupement en familles |
-| Frise complète | `stateHistory` avec les instants à la milliseconde |
-| **Durée entre états** | Delta calculé entre chaque transition — révèle où le temps passe réellement |
+| Liste brute | `status`, `kind`, montant signé et `nextCursor` tels que le serveur les envoie, sans traduction |
+| ~~Frise complète~~, ~~durée entre états~~ | **Retirées le 2026-10-13** (VR-03) : l'historique client ne porte plus `stateHistory`. Mesurer la latence entre états exige désormais un outil back-office |
 | Suivi en direct | Sondage forcé à 2 s sur une transaction choisie, sans plafond |
 | JSON brut | Réponse intégrale, copiable |
 

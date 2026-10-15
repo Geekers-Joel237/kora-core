@@ -7,8 +7,6 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class IdTest {
 
-    // ── Construction valide ───────────────────────────────────────────────────
-
     @Test
     void should_create_id_when_value_is_provided() {
         assertDoesNotThrow(() -> new Id("001"));
@@ -27,16 +25,12 @@ class IdTest {
         assertFalse(generated.value().isBlank());
     }
 
-    // ── Unicité ───────────────────────────────────────────────────────────────
-
     @Test
     void should_generate_different_ids_on_each_call() {
         Id first = Id.generate();
         Id second = Id.generate();
         assertNotEquals(first.value(), second.value());
     }
-
-    // ── Validation ───────────────────────────────────────────────────────────
 
     @Test
     void should_throw_when_value_is_null() {
@@ -53,8 +47,6 @@ class IdTest {
         assertThrows(IllegalArgumentException.class, () -> new Id("   "));
     }
 
-    // ── Égalité (record) ─────────────────────────────────────────────────────
-
     @Test
     void should_be_equal_when_same_value() {
         assertEquals(new Id("001"), new Id("001"));
@@ -64,8 +56,6 @@ class IdTest {
     void should_not_be_equal_when_different_value() {
         assertNotEquals(new Id("001"), new Id("002"));
     }
-
-    // ── Immuabilité ───────────────────────────────────────────────────────────
 
     @Test
     void should_always_return_same_value() {

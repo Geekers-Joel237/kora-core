@@ -16,8 +16,6 @@ class AccountTest {
     private static final Id CUSTOMER_ID = new Id("cust-001");
     private static final Id PROVIDER_ID = new Id("prov-001");
 
-    // ── Construction ──────────────────────────────────────────────────────────
-
     @Test
     void should_create_customer_account_with_zero_balance() {
         Account account = Account.createCustomerAccount(
@@ -64,8 +62,6 @@ class AccountTest {
         assertTrue(account.snapshot().accountNumber().endsWith("-55440000"));
     }
 
-    // ── État ──────────────────────────────────────────────────────────────────
-
     @Test
     void should_be_active_by_default() {
         Account account = Account.createCustomerAccount(
@@ -89,8 +85,6 @@ class AccountTest {
         assertFalse(account.isActive());
     }
 
-    // ── credit ────────────────────────────────────────────────────────────────
-
     @Test
     void should_increase_balance_when_credited() {
         Account account = Account.createCustomerAccount(
@@ -110,8 +104,6 @@ class AccountTest {
                 account.snapshot().balance().solde());
     }
 
-    // ── debit — CUSTOMER_ACCOUNT ──────────────────────────────────────────────
-
     @Test
     void should_decrease_balance_when_customer_account_debited() {
         Account account = Account.createCustomerAccount(
@@ -130,8 +122,6 @@ class AccountTest {
                 () -> account.debit(Amount.of(BigDecimal.valueOf(100), "XAF")));
     }
 
-    // ── debit — FLOAT_ACCOUNT ─────────────────────────────────────────────────
-
     @Test
     void should_not_throw_when_float_account_debited_without_sufficient_balance() {
         Account floatAccount = Account.createFloatAccount(
@@ -142,11 +132,6 @@ class AccountTest {
 
     @Test
     void should_not_track_balance_for_float_account_debit() {
-        // Intentional design: float accounts are unbounded system accounts.
-        // debit() is a no-op on the stored balance so that the treasury account
-        // never blocks operations due to insufficient funds.
-        // Audit of float account movements must go through LedgerEntry rows,
-        // not through balanceAmount. See ADR-001 and Account.debit() Javadoc.
         Account floatAccount = Account.createFloatAccount(Id.generate(), PROVIDER_ID);
         Amount largeDebit = Amount.of(BigDecimal.valueOf(1_000_000), "XAF");
 
@@ -156,8 +141,6 @@ class AccountTest {
                 floatAccount.snapshot().balance().solde(),
                 "Float account balance must remain 0 after debit — it is never decremented");
     }
-
-    // ── Snapshot — reconstruction ─────────────────────────────────────────────
 
     @Test
     void should_reconstruct_account_from_snapshot_without_validation() {

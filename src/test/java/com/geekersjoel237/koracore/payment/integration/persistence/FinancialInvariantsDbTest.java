@@ -14,7 +14,7 @@ import com.geekersjoel237.koracore.auth.ports.out.security.CustomerPinEncoder;
 import com.geekersjoel237.koracore.auth.ports.out.repository.CustomerRepository;
 import com.geekersjoel237.koracore.shared.domain.vo.Amount;
 import com.geekersjoel237.koracore.shared.domain.vo.Id;
-import com.geekersjoel237.koracore.auth.domain.vo.PhoneNumber;
+import com.geekersjoel237.koracore.shared.domain.vo.PhoneNumber;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.Test;
@@ -29,11 +29,7 @@ import com.geekersjoel237.koracore.payment.config.DataInitializer;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * SQL-level invariant tests that verify fintech correctness properties
- * directly in the database after each operation.
- *
- * Uses EntityManager.createNativeQuery() so em.flush() is required before
- * each assertion (native SQL bypasses Hibernate's FlushMode.AUTO).
+ * Native SQL bypasses Hibernate's FlushMode.AUTO, so em.flush() is required before each assertion.
  */
 class FinancialInvariantsDbTest extends AbstractRepositoryTest {
 
@@ -48,8 +44,6 @@ class FinancialInvariantsDbTest extends AbstractRepositoryTest {
 
     @PersistenceContext
     private EntityManager em;
-
-    // ── setup helper ──────────────────────────────────────────────────────────
 
     private SetupResult setup(String email, String phoneNumber) {
         Id customerId = Id.generate();
@@ -66,8 +60,6 @@ class FinancialInvariantsDbTest extends AbstractRepositoryTest {
     }
 
     private record SetupResult(Id customerId, Id customerAccountId) {}
-
-    // ── tests ─────────────────────────────────────────────────────────────────
 
     @Test
     void double_entry_is_maintained_after_cash_in() {
@@ -132,7 +124,6 @@ class FinancialInvariantsDbTest extends AbstractRepositoryTest {
                 new CashOutCommand(Id.generate(), ctx.customerId(), Pin.of("1234"), CASH_OUT_AMOUNT, PaymentMethod.ORANGE_MONEY));
         em.flush();
 
-        // Count transactions where SUM(CREDIT) != SUM(DEBIT) — must be 0
         Number violations = (Number) em.createNativeQuery("""
                 SELECT COUNT(*) FROM (
                     SELECT transaction_id

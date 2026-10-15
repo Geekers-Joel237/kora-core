@@ -135,25 +135,18 @@
     "title": "Filtrer",
     "type": "Type",
     "typeA11y": "Type d’opération",
-    "direction": "Sens",
-    "directionA11y": "Sens de l’opération",
     "period": "Période",
-    "state": "État",
-    "stateHint": "Un seul état à la fois — le serveur n’en accepte pas davantage.",
-    "showAllStates": "Voir les {{count}} états",
-    "collapseStates": "Réduire",
-    "expandStatesA11y": "Voir tous les états",
-    "collapseStatesA11y": "Réduire la liste des états",
+    "status": "Statut",
     "searching": "Recherche…",
     "resultCount_one": "{{count}} opération",
     "resultCount_other": "{{count}} opérations",
+    "resultCountMore": "Plus de {{count}} opérations",
     "apply": "Voir",
     "all": "Tous",
     "deposits": "Dépôts",
     "withdrawals": "Retraits",
-    "transfers": "Transferts",
-    "inbound": "Entrants",
-    "outbound": "Sortants",
+    "sent": "Envoyés",
+    "received": "Reçus",
     "anyPeriod": "Tout",
     "custom": "Perso.",
     "days": "{{count}} j"
@@ -173,18 +166,13 @@
     "backToHistory": "Retour à l’historique",
     "errorTitle": "Détail indisponible",
     "errorDescription": "Nous n’avons pas pu récupérer cette opération.",
-    "noStateHistory": "Aucun historique d’état n’a été renvoyé pour cette opération.",
     "liveTracking": "Suivi en direct — cet écran se met à jour tout seul.",
     "reference": "Réf.",
     "referenceA11y": "Référence {{reference}}, appuyer pour copier",
     "referenceCopied": "Référence copiée",
     "copyReference": "Copier la référence",
     "type": "Type",
-    "method": "Moyen",
-    "direction": "Sens",
-    "rawState": "État brut",
-    "inbound": "Entrant",
-    "outbound": "Sortant"
+    "method": "Moyen"
   },
 
   "flow": {
@@ -282,31 +270,18 @@
     "unlock": "Déverrouiller"
   },
 
-  "states": {
-    "INITIALIZED": { "label": "Initiée", "description": "Opération enregistrée" },
-    "AUTHORIZED": { "label": "Autorisée", "description": "Fonds réservés chez l’opérateur" },
-    "CAPTURED": { "label": "Capturée", "description": "Fonds prélevés" },
-    "COMPLETED": { "label": "Terminée", "description": "Opération finalisée" },
-    "SETTLEMENT_PENDING": { "label": "Règlement en cours", "description": "En attente de l’opérateur" },
-    "SETTLED": { "label": "Réglée", "description": "Règlement confirmé" },
-    "AUTHORIZATION_FAILED": { "label": "Autorisation refusée", "description": "L’opérateur a refusé l’opération" },
-    "CAPTURE_FAILED": { "label": "Prélèvement échoué", "description": "Le prélèvement n’a pas abouti" },
-    "SETTLEMENT_FAILED": { "label": "Règlement échoué", "description": "Le règlement n’a pas abouti" },
-    "FAILED": { "label": "Échouée", "description": "L’opération n’a pas pu être exécutée" },
-    "REVERSED": { "label": "Annulée", "description": "Opération contrepassée" }
-  },
-
   "outcomes": {
     "pending": "En cours",
     "success": "Terminée",
     "failed": "Échouée",
-    "reversed": "Annulée"
+    "reversed": "Remboursée"
   },
 
-  "txTypes": {
-    "CASH_IN": "Dépôt",
-    "CASH_OUT": "Retrait",
-    "P2P_TRANSFER": "Transfert"
+  "txKinds": {
+    "DEPOSIT": "Dépôt",
+    "WITHDRAWAL": "Retrait",
+    "TRANSFER_SENT": "Transfert envoyé",
+    "TRANSFER_RECEIVED": "Transfert reçu"
   },
 
   "feedback": {

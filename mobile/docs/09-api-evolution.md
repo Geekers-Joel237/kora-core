@@ -36,7 +36,7 @@ Lecture directe du code, croisée avec `ROADMAP.md`.
 | Étape | Sujet | Statut | Surface API exposée |
 |---|---|---|---|
 | 0 | Ledger double entrée, comptes | ✅ fait | `/auth/*`, `/payments/balance` |
-| 1 | Cycle de vie du paiement, machine à états | ✅ fait | 11 états, `stateHistory` sur `/payments/history` |
+| 1 | Cycle de vie du paiement, machine à états | ✅ fait | 12 états techniques, ramenés à 4 statuts client sur `/payments/history` (2026-10-13) |
 | 2 | Monolithe modulaire | ✅ fait | — interne |
 | 3 | Migration hexagonale | ✅ fait | — interne, `ports/adapters` en place |
 | **4** | **Idempotency & réalité réseau** | 🔜 **suivante** | **`Idempotency-Key` attendu sur `/payments/*`** |
@@ -93,7 +93,6 @@ export const API_CAPABILITIES = {
   velocityLimits:   false,   // étape 8 → nouveaux motifs de rejet
   realtimeEvents:   false,   // étape 5+ → supprime le sondage
   transactionById:  false,   // GET /payments/{id}
-  multiStateFilter: false,   // filtre state multi-valeurs
   beneficiaryLookup:false,   // résolution nom ↔ téléphone
   logout:           false,   // invalidation serveur des jetons
   userProfile:      false,   // GET /me
@@ -141,8 +140,7 @@ Un contournement, un drapeau, une section du contrat. Cette table est le pendant
 | §6.3 | Profil reconstruit depuis les claims + saisie locale | `userProfile` | indéterminé |
 | §6.4 | Sondage borné 5 s × 12 | `realtimeEvents` | étape 5+ |
 | §6.5 | Déconnexion purement locale | `logout` | indéterminé |
-| §6.7 | Rejeu de la page d'origine pour l'écran de détail | `transactionById` | indéterminé |
-| §6.8 | Filtre d'état à choix unique | `multiStateFilter` | indéterminé |
+| §6.7 | Rejeu de la page d'origine (par curseur) pour suivre une opération en cours | `transactionById` | indéterminé |
 | §4 | Liste d'opérateurs figée côté client | `velocityLimits` | étape 8 |
 
 ---
@@ -231,6 +229,7 @@ Tenu à jour à chaque synchronisation. Une ligne par livraison backend ayant un
 |---|---|---|---|
 | 2026-08-06 | `afd4f78` — Flyway V1 | Aucun | Contrat initial transcrit |
 | 2026-08-06 | — revue du contrat contre le code | 8 corrections | Formats d'identifiants, masquage, `404` destinataire, `500` non mappé, statut `VERIFIED`, absence d'échelle sur `Amount`, plafond `size`, filtre d'état unique |
+| 2026-10-13 | `develop` — transfert en deux champs, historique en vue client | **Cassant** : corps du transfert, forme complète de l'historique | `toPhonePrefix` + `toPhoneNumber` ; historique `status` / `kind` / montant signé / curseur ; détail ouvert depuis le cache ; sondage par référence ; regroupement des états aligné sur `CustomerStatus` (terminée dès la capture) ; §6.8 levé, drapeau `multiStateFilter` supprimé ; frise d'états et durées inter-états retirées (FR-43, VR-03) ; destinataires récents en une chaîne ignorés |
 | | | | |
 
 ### Anomalies backend à remonter

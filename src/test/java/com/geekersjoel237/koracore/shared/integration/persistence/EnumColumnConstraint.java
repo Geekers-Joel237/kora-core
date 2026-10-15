@@ -12,18 +12,6 @@ import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * Reads back the value list a {@code CHECK} constraint actually enforces, straight
- * from the PostgreSQL catalog.
- *
- * <p>A migration that adds {@code CHECK (state IN (...))} is only worth what the
- * database made of it. This asks {@code pg_get_constraintdef} what is in force on the
- * running schema, so a module test can assert that the set the column accepts
- * <em>equals</em> the set the Java side defines — a new enum constant shipped without
- * a migration then fails the build instead of failing an insert in production.
- *
- * <p>Kernel code: it names a constraint and a table, never a module.
- */
 public final class EnumColumnConstraint {
 
     /**
@@ -37,9 +25,6 @@ public final class EnumColumnConstraint {
     private EnumColumnConstraint() {
     }
 
-    /**
-     * @return every value {@code constraintName} on {@code tableName} lets through.
-     */
     public static Set<String> allowedValues(EntityManager em, String tableName, String constraintName) {
         @SuppressWarnings("unchecked")
         List<String> definitions = em.createNativeQuery("""
@@ -61,7 +46,6 @@ public final class EnumColumnConstraint {
         return literalsOf(definitions.getFirst());
     }
 
-    /** The names of a Java enum's constants, as they reach the column through {@code @Enumerated(STRING)}. */
     public static Set<String> namesOf(Enum<?>[] constants) {
         return Arrays.stream(constants)
                 .map(Enum::name)

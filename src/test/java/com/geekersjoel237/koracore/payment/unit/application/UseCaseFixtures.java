@@ -13,7 +13,7 @@ import com.geekersjoel237.koracore.auth.adapters.out.security.CustomerPinVerifie
 import com.geekersjoel237.koracore.payment.application.usecases.CashInService;
 import com.geekersjoel237.koracore.payment.application.usecases.CashOutService;
 import com.geekersjoel237.koracore.payment.application.usecases.ExpireAuthorizationsService;
-import com.geekersjoel237.koracore.payment.unit.doubles.InMemoryAccountQueryPort;
+import com.geekersjoel237.koracore.payment.unit.doubles.InMemoryReadAccountRepository;
 import com.geekersjoel237.koracore.payment.application.usecases.BalanceService;
 import com.geekersjoel237.koracore.payment.application.usecases.ReversePaymentService;
 import com.geekersjoel237.koracore.payment.application.usecases.TransferService;
@@ -22,19 +22,10 @@ import com.geekersjoel237.koracore.payment.ports.out.repository.AuthorizationRec
 import com.geekersjoel237.koracore.auth.ports.out.security.CustomerPinEncoder;
 import com.geekersjoel237.koracore.auth.ports.out.repository.CustomerRepository;
 import com.geekersjoel237.koracore.payment.ports.out.repository.LedgerRepository;
-import com.geekersjoel237.koracore.payment.ports.out.provider.ProviderPort;
+import com.geekersjoel237.koracore.payment.ports.out.provider.PaymentProviderPort;
 import com.geekersjoel237.koracore.payment.ports.out.repository.TransactionRepository;
 import com.geekersjoel237.koracore.payment.ports.out.repository.TrxHistoricStatesRepository;
-import com.geekersjoel237.koracore.payment.config.UseCaseConfiguration;
 
-/**
- * Builds the use cases from their ports, the way {@code UseCaseConfiguration} does in
- * production — by hand, with no container.
- *
- * <p>That the assembly fits here, with no framework and no classpath scan, is the
- * property the hexagonal split is for. A test names what it substitutes and takes the
- * rest as it stands.
- */
 public final class UseCaseFixtures {
 
     /** Retries, but does not sleep: a test that waits is a test nobody runs. */
@@ -54,7 +45,7 @@ public final class UseCaseFixtures {
     public static UseCases build(TransactionBoundary boundary,
                                  AccountRepository accounts,
                                  CustomerRepository customers,
-                                 ProviderPort provider,
+                                 PaymentProviderPort provider,
                                  TransactionRepository transactions,
                                  TrxHistoricStatesRepository history,
                                  LedgerRepository ledgers,
@@ -72,14 +63,14 @@ public final class UseCaseFixtures {
                         transactions, history, ledgers),
                 new ReversePaymentService(boundary, retry, accounts, transactions,
                         history, provider, ledgers, authorizations),
-                new BalanceService(new InMemoryAccountQueryPort(accounts)),
+                new BalanceService(new InMemoryReadAccountRepository(accounts)),
                 new ExpireAuthorizationsService(boundary, transactions, history, authorizations));
     }
 
     public static CashInCommandHandler cashIn(TransactionBoundary boundary,
                                        AccountRepository accounts,
                                        CustomerRepository customers,
-                                       ProviderPort provider,
+                                       PaymentProviderPort provider,
                                        TransactionRepository transactions,
                                        TrxHistoricStatesRepository history,
                                        LedgerRepository ledgers,

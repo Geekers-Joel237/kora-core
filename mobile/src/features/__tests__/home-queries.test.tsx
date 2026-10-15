@@ -15,26 +15,19 @@ const BALANCE = {
 };
 
 const HISTORY = {
-  transactions: [
+  items: [
     {
-      transactionId: 'tx-1',
-      transactionNumber: 'TRX-20260806-A3F91C2D',
-      type: 'CASH_IN',
-      direction: 'INBOUND',
-      state: 'COMPLETED',
+      reference: 'TRX-20260806-A3F91C2D',
+      kind: 'DEPOSIT',
+      status: 'COMPLETED',
       amount: 50000,
       currency: 'XOF',
-      paymentMethod: 'ORANGE_MONEY',
       counterpart: null,
-      createdAt: '2026-08-06T11:42:13Z',
-      stateHistory: null,
+      channel: 'ORANGE_MONEY',
+      date: '2026-08-06T11:42:13Z',
     },
   ],
-  page: 0,
-  size: 5,
-  totalElements: 1,
-  totalPages: 1,
-  hasNext: false,
+  nextCursor: null,
 };
 
 /**
@@ -133,7 +126,8 @@ describe('traduction vers le domaine — frontière R1', () => {
     expect(transaction?.amount).toEqual({ minor: 50000, currency: 'XOF' });
     expect(transaction?.createdAt).toBeInstanceOf(Date);
     // Aucun champ d'API ne doit avoir traversé la frontière.
-    expect(transaction).not.toHaveProperty('transactionId');
+    expect(transaction).not.toHaveProperty('status');
+    expect(transaction).not.toHaveProperty('date');
   });
 
   it('ne demande que cinq opérations à l’accueil', async () => {
@@ -142,7 +136,7 @@ describe('traduction vers le domaine — frontière R1', () => {
     const { result } = await renderHook(() => useRecentTransactions(), { wrapper });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(String(fetchMock.mock.calls[0]?.[0])).toContain('size=5');
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain('limit=5');
   });
 });
 

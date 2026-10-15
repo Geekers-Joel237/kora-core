@@ -1,4 +1,4 @@
-package com.geekersjoel237.koracore.auth.application.mail;
+package com.geekersjoel237.koracore.auth.ports.out.otp;
 
 import com.geekersjoel237.koracore.auth.domain.enums.OtpPurpose;
 import com.geekersjoel237.koracore.shared.ports.out.mail.Mail;

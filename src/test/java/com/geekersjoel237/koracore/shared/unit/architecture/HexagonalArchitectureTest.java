@@ -15,47 +15,20 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * Guards the dependency direction by reading the source, the way
- * {@code ConfigurationHygieneTest} guards the configuration contract. Plain JUnit —
- * no Spring, no database, no extra dependency.
- *
- * <p>Layers are located by <strong>path segment</strong>, never by a fixed directory.
- * Every rule here used to resolve {@code domain} or {@code web} at the root, and every
- * one of them broke the day the modules arrived — twice, silently the first time,
- * because a forbidden prefix that matches nothing passes without guarding anything.
- * {@code auth/domain}, {@code payment/domain} and any module added later are all found
- * by the same expression.
- */
+// Layers are located by path segment, never by a fixed directory, so every module is found by one expression.
 class HexagonalArchitectureTest {
 
     private static final Path ROOT =
             Path.of("src", "main", "java", "com", "geekersjoel237", "koracore");
 
     /**
-     * Every third-party type the application layer and the ports are allowed to name.
-     *
-     * <p>It is empty, and that is the finding rather than an oversight. ADR-004 left a
-     * debt worded as "application must stop naming Spring's transaction manager"; a
-     * grep for {@code TransactionTemplate} would have called that settled while
-     * {@code @Service}, {@code @Transactional} and a handful of persistence exceptions
-     * were still in the layer. An allow-list settles it differently: the rule collects
-     * <em>everything</em> foreign the layer imports and compares the whole set, so the
-     * debt is paid only while this list stays as written.
-     *
-     * <p>Foreign means neither the JDK nor us. Not "Spring" — a validation annotation
-     * or a JSON binding would bind the layer to a library just as firmly, and each
-     * arrived in this codebase before as something nobody thought of as a framework.
-     *
-     * <p>Adding an entry is allowed. It costs a line here and the sentence that
-     * justifies it, which is the entire point: the layer stays framework-free by
-     * decision rather than by accident, and a decision to loosen it is legible in the
-     * diff instead of hidden in an import block.
+     * Every type neither JDK nor ours that application/ and ports/ may name. Empty on purpose;
+     * an entry costs a line here and the sentence that justifies it. Compared as an equality,
+     * so removing the last use of an entry fails too.
      */
     private static final Set<String> FRAMEWORK_ALLOW_LIST = Set.of();
 
 
-    /** The domain names the JDK and itself. Nothing else. */
     @Test
     void domain_names_no_framework_and_no_outer_layer() {
         assertNoImportContaining(filesUnder("domain"), "domain",
@@ -66,16 +39,6 @@ class HexagonalArchitectureTest {
         assertNoImportOfADrivingAdapter(filesUnder("domain"), "domain");
     }
 
-    /**
-     * The application layer no longer names how a transaction is opened, nor what an
-     * ORM calls a lost race. That is the debt ADR-004 recorded and deferred.
-     *
-     * <p>Not one type, not one annotation. The question of how far "zero Spring"
-     * reaches here was open for eight steps and is now closed: every interactor is a
-     * plain class, and the two collaborators that still carried a stereotype are
-     * declared in their module's configuration like everything else. A layer that
-     * needs no framework to be instantiated is a layer a test instantiates in a line.
-     */
     @Test
     void the_application_layer_names_no_framework() {
         assertNoImportContaining(frameworkFreeLayers(), "application and ports",
@@ -86,18 +49,6 @@ class HexagonalArchitectureTest {
         assertNoImportOfADrivingAdapter(frameworkFreeLayers(), "application and ports");
     }
 
-    /**
-     * A driving port is an entry point, not a dependency.
-     *
-     * <p>An interactor names exactly one: the one it implements. Naming a second means
-     * one use case is calling another, which is how a transaction boundary ends up
-     * nested inside a boundary that does not know about it, and how two use cases stop
-     * being separately deployable, testable or replaceable.
-     *
-     * <p>This replaces a rule that watched for a single type, {@code AuthUseCase}.
-     * That type was split into four in an earlier step, and the rule kept passing on a
-     * string that could no longer appear anywhere — green, and guarding nothing.
-     */
     @Test
     void an_interactor_names_only_the_driving_port_it_implements() {
         List<String> offenders = interactors()
@@ -111,13 +62,6 @@ class HexagonalArchitectureTest {
                 .isEmpty();
     }
 
-    /**
-     * A driving port names one use case, so it declares one method. A port that
-     * gathers five makes every adapter depend on four things it does not call.
-     *
-     * <p>No exemption left: auth was the last module with a port gathering seven, and
-     * splitting it is what removed the exception this rule used to carry.
-     */
     @Test
     void a_driving_port_declares_one_method() {
         List<String> oversized = drivingPorts()
@@ -128,17 +72,6 @@ class HexagonalArchitectureTest {
         assertThat(oversized).describedAs("one driving port, one use case").isEmpty();
     }
 
-    /**
-     * Every command has a use case that answers to the common contract.
-     *
-     * <p>Without it a command could be bound to an arbitrary lambda, and the shape of
-     * a use case would be whatever its author felt like that day. With it, the binding
-     * in a registrar is the use case itself, and the registry has nothing to hold but
-     * the pair.
-     *
-     * <p>Queries are absent by construction: they declare no command, so nothing here
-     * looks for a handler for them.
-     */
     @Test
     void every_command_has_a_port_that_handles_it() {
         List<String> unhandled = filesUnder("application", "command")
@@ -161,20 +94,7 @@ class HexagonalArchitectureTest {
         return name.substring(0, name.length() - ".java".length());
     }
 
-    /**
-     * An aggregate never reaches a driving adapter.
-     *
-     * <p>Handing {@code Transaction} to a controller lets it walk the domain — the
-     * ledger entries, the state history — which is rule 10 of CLAUDE.md turned inside
-     * out. A use case answers with a result model, and the adapter has nothing to walk.
-     *
-     * <p>Value objects stay allowed: {@code Amount} crosses in both directions and is
-     * the shared language, not a way in. Only {@code domain.model} is closed.
-     *
-     * <p>{@code ResetTestSupportAction} is exempt: perf-profile tooling that puts the
-     * float account back after a truncate. A real breach, kept visible rather than
-     * silently tolerated.
-     */
+    // ResetTestSupportAction is exempt: perf-profile tooling restoring the float after a truncate.
     @Test
     void no_aggregate_reaches_a_driving_adapter() {
         List<String> leaks = drivingAdapters()
@@ -189,13 +109,6 @@ class HexagonalArchitectureTest {
                 .isEmpty();
     }
 
-    /**
-     * The bus is a driving adapter, not the way in.
-     *
-     * <p>An interactor that named it would only be reachable through it — and the TTL
-     * scheduler drives its use case with no command at all, a test builds one in a
-     * line, and a provider callback consumer will drive another tomorrow.
-     */
     @Test
     void no_interactor_knows_the_bus() {
         List<String> coupled = interactors()
@@ -208,10 +121,6 @@ class HexagonalArchitectureTest {
                 .isEmpty();
     }
 
-    /**
-     * One adapter holds the template, so there is exactly one place where the
-     * translation of a lost race can be got wrong.
-     */
     @Test
     void transaction_template_lives_in_its_adapter_and_nowhere_else() {
         List<Path> holders = javaFilesUnder(ROOT)
@@ -226,15 +135,6 @@ class HexagonalArchitectureTest {
     }
 
 
-    /**
-     * The allow-list, applied. This is the rule that formally settles ADR-004: not the
-     * disappearance of {@code TransactionTemplate} from the layer, which a grep could
-     * confirm and a single new import could quietly undo.
-     *
-     * <p>An equality, not a subset — the same choice as the recorded couplings in
-     * {@code ModuleBoundariesTest}. Removing the last use of an allowed type has to
-     * fail too, otherwise the list only ever grows and stops describing anything.
-     */
     @Test
     void the_application_layer_names_only_what_the_allow_list_permits() {
         Set<String> foreign = frameworkFreeLayers()
@@ -250,18 +150,7 @@ class HexagonalArchitectureTest {
                 .isEqualTo(FRAMEWORK_ALLOW_LIST);
     }
 
-    /**
-     * One use case never calls another.
-     *
-     * <p>Two of them chained share one caller's transaction boundary without either
-     * knowing it, so the inner one commits work the outer one is about to roll back —
-     * or worse, does not, and the failure is invisible. It also ends the property that
-     * makes the layer worth having: a use case that names a second is no longer
-     * instantiable, replaceable or testable on its own.
-     *
-     * <p>Composition roots are exempt by construction: they live in {@code config/},
-     * not in {@code application/usecases/}, and naming every interactor is their job.
-     */
+    // Composition roots are exempt by construction: they live in config/, not application/usecases/.
     @Test
     void no_interactor_depends_on_another_interactor() {
         List<String> chained = interactors()
@@ -275,17 +164,7 @@ class HexagonalArchitectureTest {
                 .isEmpty();
     }
 
-    /**
-     * An endpoint is one use case wide.
-     *
-     * <p>A driving adapter that names two driving ports is deciding between them, and
-     * that decision is application logic sitting in a controller — CLAUDE.md rule 10,
-     * arrived at from the other side. Splitting the endpoint is the fix; there is no
-     * case where an {@code *Action} needs both.
-     *
-     * <p>The perf-profile support endpoints name none at all, which is why the
-     * assertion is a ceiling and not an equality.
-     */
+    // A ceiling, not an equality: the perf-profile support endpoints name no driving port.
     @Test
     void a_driving_adapter_depends_on_at_most_one_driving_port() {
         List<String> wide = drivingAdapters()
@@ -313,8 +192,6 @@ class HexagonalArchitectureTest {
                 .replace(";", "")
                 .strip();
     }
-
-    // ── rules expressed over a layer, wherever the modules put it ─────────────
 
     private void assertNoImportContaining(Stream<Path> layer, String name, String... forbidden) {
         List<String> violations = layer
@@ -350,18 +227,7 @@ class HexagonalArchitectureTest {
                 .count();
     }
 
-    // ── locating layers, not directories ──────────────────────────────────────
-
-    /**
-     * A layer is a concept, and the three modules now express each one the same way.
-     * The transitional shapes — {@code web/}, {@code application/port/in},
-     * {@code infrastructure/} — are gone, so the rules speak one vocabulary again.
-     *
-     * <p>Every locator is checked for emptiness by {@code every_layer_is_populated}.
-     * That is not decoration: naming a directory that no longer exists is how these
-     * rules went green and silent twice, and a locator that finds nothing makes every
-     * rule built on it pass without guarding anything.
-     */
+    // Every locator is checked non-empty by every_layer_is_populated: a rule over an empty set passes silently.
     private Stream<Path> drivingAdapters() {
         return filesUnder("adapters", "in");
     }
@@ -374,7 +240,6 @@ class HexagonalArchitectureTest {
         return filesUnder("application", "usecases");
     }
 
-    /** The layers that must name no framework: the use cases and every boundary. */
     private Stream<Path> frameworkFreeLayers() {
         return filesUnderAny(new String[]{"application"}, new String[]{"ports"});
     }

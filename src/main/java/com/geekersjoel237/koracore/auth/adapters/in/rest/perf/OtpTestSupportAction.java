@@ -23,7 +23,6 @@ public class OtpTestSupportAction {
         this.otpCodes = otpCodes;
     }
 
-    /** 404 when no OTP exists for the address, or it has expired. */
     @GetMapping("/otp/{email}")
     public ResponseEntity<Map<String, String>> getOtp(@PathVariable String email) {
         return otpCodes.get("otp:" + email)

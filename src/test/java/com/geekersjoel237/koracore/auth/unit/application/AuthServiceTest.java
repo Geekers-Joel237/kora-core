@@ -15,7 +15,7 @@ import com.geekersjoel237.koracore.auth.domain.model.Customer;
 import com.geekersjoel237.koracore.auth.domain.model.User;
 import com.geekersjoel237.koracore.auth.ports.out.security.CustomerPinEncoder;
 import com.geekersjoel237.koracore.shared.domain.vo.Id;
-import com.geekersjoel237.koracore.auth.domain.vo.PhoneNumber;
+import com.geekersjoel237.koracore.shared.domain.vo.PhoneNumber;
 import com.geekersjoel237.koracore.auth.domain.vo.Tokens;
 import com.geekersjoel237.koracore.auth.config.SecurityProperties;
 import com.geekersjoel237.koracore.auth.adapters.out.security.BCryptCustomerPinEncoder;
@@ -56,7 +56,6 @@ class AuthServiceTest {
             new SecurityProperties.Otp(5)
     );
 
-    /** The value the challenge actually needs — no configuration record in sight. */
     private static final Duration OTP_VALIDITY = Duration.ofMinutes(5);
 
     private final CustomerPinEncoder pinEncoder = new BCryptCustomerPinEncoder();
@@ -86,20 +85,11 @@ class AuthServiceTest {
     private static final OtpPurpose PURPOSE = OtpPurpose.LOGIN;
     private static final Pattern SIX_DIGITS = Pattern.compile("\\b(\\d{6})\\b");
 
-    /**
-     * The challenge no longer hands the code back. It is read out of the mail, as its
-     * recipient would — not out of the store, which hides an entry once it expires.
-     */
     private String issueAndReadCode() {
         otpChallenge.issue(EMAIL, PURPOSE);
         return codeInTheMailTo(EMAIL);
     }
 
-    /**
-     * Digs the code out of the message body, which is the only place a recipient could
-     * find it. Reading it from anywhere else would let a body that never contained it
-     * pass — which is exactly what happened while the adapter dropped the argument.
-     */
     private String codeInTheMailTo(String email) {
         Mail mail = mailPort.lastMailTo(email).orElseThrow(
                 () -> new AssertionError("No mail was sent to " + email));
@@ -108,8 +98,6 @@ class AuthServiceTest {
             throw new AssertionError("No six-digit code in the mail body: " + mail.body());
         return matcher.group(1);
     }
-
-    // ── Helpers ───────────────────────────────────────────────────────────────
 
     private User buildVerifiedUser() {
         return User.create(USER_ID, "Joel Geekers", EMAIL, Role.CUSTOMER);
@@ -120,8 +108,6 @@ class AuthServiceTest {
         PhoneNumber phone = PhoneNumber.of("+237", "699887766");
         return Customer.create(user, phone, pin, pinEncoder);
     }
-
-    // ── Groupe 1 — validatePin ────────────────────────────────────────────────
 
     @Test
     void should_not_throw_when_pin_is_correct() {
@@ -147,8 +133,6 @@ class AuthServiceTest {
         assertThatThrownBy(() -> pinVerifier.verify(new Id("ghost"), RAW_PIN))
                 .isInstanceOf(CustomerNotFoundException.class);
     }
-
-    // ── Groupe 2 — generateOtp + verifyOtp ───────────────────────────────────
 
     @Test
     void should_generate_six_digit_numeric_otp() {
@@ -188,8 +172,6 @@ class AuthServiceTest {
 
     @Test
     void should_throw_otp_expired_exception_when_otp_is_expired() {
-        // One store, one challenge, and time moving past the window. The store owns
-        // the lifetime now, so nothing here has to hold a second opinion about it.
         otpChallenge.issue(EMAIL, PURPOSE);
         String code = codeInTheMailTo(EMAIL);
 
@@ -206,8 +188,6 @@ class AuthServiceTest {
         assertThatThrownBy(() -> otpChallenge.consume(EMAIL, OtpCode.of(code)))
                 .isInstanceOf(OtpExpiredException.class);
     }
-
-    // ── Groupe 3 — generateTokens ─────────────────────────────────────────────
 
     @Test
     void should_generate_access_token_with_expiry_in_expected_window() {

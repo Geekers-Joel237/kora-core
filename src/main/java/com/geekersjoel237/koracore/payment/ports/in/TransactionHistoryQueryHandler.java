@@ -5,7 +5,6 @@ import com.geekersjoel237.koracore.payment.application.query.history.Transaction
 import com.geekersjoel237.koracore.payment.application.query.history.TransactionSummary;
 import com.geekersjoel237.koracore.shared.ports.in.QueryHandler;
 
-/** Reads one page of a wallet's movements. */
 public interface TransactionHistoryQueryHandler
         extends QueryHandler<TransactionHistoryQuery, PageResult<TransactionSummary>> {
 }

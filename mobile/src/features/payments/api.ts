@@ -12,7 +12,7 @@ import { request } from '@/lib/http';
 import { toApiAmount } from '@/lib/money';
 import { transactionReceiptSchema } from '@/features/shared/schemas';
 import { toReceipt } from '@/features/shared/mappers';
-import type { Money, TransactionReceipt } from '@/types/domain';
+import type { Money, PhoneNumber, TransactionReceipt } from '@/types/domain';
 
 export interface CashInput {
   rawPin: string;
@@ -29,8 +29,8 @@ export interface CashInput {
 }
 
 export interface TransferInput extends CashInput {
-  /** Numéro complet, préfixe inclus, sans séparateur : `+2250708091011`. */
-  toPhoneNumber: string;
+  /** Envoyé en deux champs, `toPhonePrefix` + `toPhoneNumber` — contrat §2. */
+  recipient: PhoneNumber;
 }
 
 async function postPayment(
@@ -86,7 +86,8 @@ export function transfer(input: TransferInput): Promise<TransactionReceipt> {
       rawPin: input.rawPin,
       amount: toApiAmount(input.amount.minor, input.amount.currency),
       currency: input.amount.currency,
-      toPhoneNumber: input.toPhoneNumber,
+      toPhonePrefix: input.recipient.prefix,
+      toPhoneNumber: input.recipient.number,
     },
     input.idempotencyKey,
   );

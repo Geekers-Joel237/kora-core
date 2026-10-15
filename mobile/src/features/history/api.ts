@@ -2,78 +2,69 @@
 
 import { decode } from '@/lib/decode';
 import { request } from '@/lib/http';
-import { toApiInstant } from '@/lib/datetime';
+import { toApiDay } from '@/lib/datetime';
 import { transactionHistorySchema } from '@/features/shared/schemas';
 import { toTransactionPage } from '@/features/shared/mappers';
-import type { Direction, Page, Transaction } from '@/types/domain';
+import type { CustomerStatus, Page, Transaction, TxKind } from '@/types/domain';
 
 /** Plafond appliqué par le serveur : au-delà, `400`. Contrat §2. */
 export const MAX_PAGE_SIZE = 100;
 export const DEFAULT_PAGE_SIZE = 20;
 
 export interface HistoryFilters {
-  type?: string;
-  /**
-   * **Un seul état**, jamais une famille : `TransactionFilter.state` n'accepte
-   * pas de valeur multiple. Contrat §6.8. CONTOURNEMENT(indéterminé).
-   */
-  state?: string;
-  direction?: Direction;
+  kind?: TxKind;
+  /** Statut client : le serveur recouvre tous les états de la famille. Contrat §3.1. */
+  status?: CustomerStatus;
+  /** Premier jour inclus, sur le calendrier local. */
   from?: Date;
+  /** Dernier jour inclus, sur le calendrier local. */
   to?: Date;
 }
 
 export interface HistoryQuery extends HistoryFilters {
-  page?: number;
-  size?: number;
-  /** N'activer que pour l'écran de détail : la réponse s'alourdit fortement. */
-  detail?: boolean;
+  /** `nextCursor` de la page précédente ; absent pour la première page. */
+  cursor?: string | null;
+  limit?: number;
 }
 
 export async function getHistory(query: HistoryQuery = {}): Promise<Page<Transaction>> {
-  const size = Math.min(query.size ?? DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
+  const limit = Math.min(query.limit ?? DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
+  const cursor = query.cursor ?? null;
 
   const payload = await request<unknown>('/payments/history', {
     query: {
-      ...(query.type && { type: query.type }),
-      ...(query.state && { state: query.state }),
-      ...(query.direction && { direction: query.direction }),
-      ...(query.from && { from: toApiInstant(query.from) }),
-      ...(query.to && { to: toApiInstant(query.to) }),
-      page: query.page ?? 0,
-      size,
-      ...(query.detail && { detail: true }),
+      ...(query.kind && { kind: query.kind }),
+      ...(query.status && { status: query.status }),
+      ...(query.from && { from: toApiDay(query.from) }),
+      ...(query.to && { to: toApiDay(query.to) }),
+      ...(cursor && { cursor }),
+      limit,
     },
   });
 
-  return toTransactionPage(decode(transactionHistorySchema, payload, '/payments/history'));
+  return toTransactionPage(decode(transactionHistorySchema, payload, '/payments/history'), cursor);
 }
 
 /**
- * Récupère une opération par rejeu de la page dont elle provient — contrat §6.7.
+ * Retrouve une opération par **rejeu de la page dont elle provient** — contrat §6.7.
  *
- * Aucun `GET /payments/{id}` n'existe, et l'historique n'accepte pas de filtre
- * par identifiant. Chercher « dans les 100 premières » serait faux pour une
- * opération ancienne : la navigation transporte donc la page d'origine, et l'on
- * rejoue exactement cette requête avec `detail=true`.
+ * Aucun `GET /payments/{id}` n'existe. Une page obtenue avec un curseur est
+ * stable : la rejouer redonne les mêmes lignes. Seule la première page peut
+ * glisser quand de nouvelles opérations arrivent — d'où un unique pas de plus
+ * le long de `nextCursor` avant d'abandonner.
  *
  * CONTOURNEMENT(indéterminé) — drapeau `API_CAPABILITIES.transactionById`.
  */
 export async function getTransactionDetail(
-  id: string,
-  origin: { page: number; size?: number; filters?: HistoryFilters },
+  reference: string,
+  origin: { cursor: string | null; filters?: HistoryFilters },
 ): Promise<Transaction | null> {
-  const size = origin.size ?? DEFAULT_PAGE_SIZE;
+  const page = await getHistory({ ...origin.filters, cursor: origin.cursor });
+  const found = page.items.find((tx) => tx.reference === reference);
+  if (found) return found;
 
-  // La pagination peut avoir glissé si de nouvelles opérations sont arrivées :
-  // on élargit d'une page de part et d'autre avant d'abandonner.
-  const candidates = [origin.page, origin.page - 1, origin.page + 1].filter((p) => p >= 0);
+  if (origin.cursor !== null || !page.nextCursor) return null;
 
-  for (const page of candidates) {
-    const result = await getHistory({ ...origin.filters, page, size, detail: true });
-    const found = result.items.find((tx) => tx.id === id);
-    if (found) return found;
-  }
-
-  return null;
+  const next = await getHistory({ ...origin.filters, cursor: page.nextCursor });
+  return next.items.find((tx) => tx.reference === reference) ?? null;
 }

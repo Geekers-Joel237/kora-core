@@ -7,10 +7,10 @@ import com.geekersjoel237.koracore.shared.domain.vo.Amount;
 import com.geekersjoel237.koracore.payment.domain.vo.AuthorizationResult;
 import com.geekersjoel237.koracore.payment.domain.vo.CaptureResult;
 import com.geekersjoel237.koracore.shared.domain.vo.Id;
-import com.geekersjoel237.koracore.auth.domain.vo.PhoneNumber;
+import com.geekersjoel237.koracore.shared.domain.vo.PhoneNumber;
 import com.geekersjoel237.koracore.payment.domain.vo.ReverseResult;
 
-public interface ProviderPort {
+public interface PaymentProviderPort {
 
     AuthorizationResult authorize(Amount amount,
                                   PaymentMethod paymentMethod,

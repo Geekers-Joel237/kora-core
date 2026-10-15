@@ -15,6 +15,4 @@ import com.geekersjoel237.koracore.shared.adapters.out.persistence.entities.Base
 @ToString(callSuper = true)
 @NoArgsConstructor
 public class LedgerEntity extends BaseEntity {
-    // The ledger is identified by its id (from BaseEntity).
-    // Additional metadata (name, description) can be added here in future stages.
 }

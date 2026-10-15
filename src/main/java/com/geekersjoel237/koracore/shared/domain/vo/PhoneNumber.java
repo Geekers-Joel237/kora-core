@@ -1,4 +1,4 @@
-package com.geekersjoel237.koracore.auth.domain.vo;
+package com.geekersjoel237.koracore.shared.domain.vo;
 
 public record PhoneNumber(String prefix, String number) {
 
@@ -39,4 +39,4 @@ public record PhoneNumber(String prefix, String number) {
     public String toString() {
         return masked();
     }
-}
+}

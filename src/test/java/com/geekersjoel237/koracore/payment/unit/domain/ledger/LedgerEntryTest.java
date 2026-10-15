@@ -16,8 +16,6 @@ class LedgerEntryTest {
     private static final Id ACC_ID   = new Id("acc-001");
     private static final Amount AMT  = Amount.of(BigDecimal.valueOf(100), "XAF");
 
-    // ── Construction valide ───────────────────────────────────────────────────
-
     @Test
     void should_create_debit_operation_when_valid_params() {
         LedgerEntry op = LedgerEntry.create(OP_ID, LedgerEntryType.DEBIT, AMT, ACC_ID);
@@ -42,8 +40,6 @@ class LedgerEntryTest {
         LedgerEntry op = LedgerEntry.create(OP_ID, LedgerEntryType.DEBIT, AMT, ACC_ID);
         assertEquals(ACC_ID, op.snapshot().accountId());
     }
-
-    // ── Validation construction ───────────────────────────────────────────────
 
     @Test
     void should_throw_when_operation_id_is_null() {

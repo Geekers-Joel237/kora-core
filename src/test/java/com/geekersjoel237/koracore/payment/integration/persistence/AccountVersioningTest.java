@@ -33,36 +33,29 @@ class AccountVersioningTest extends AbstractRepositoryTest {
     @Autowired
     private PlatformTransactionManager transactionManager;
 
-    // ── version increment ─────────────────────────────────────────────────────
-
     @Test
     void version_field_increments_on_each_update() {
         Id accountId = Id.generate();
         Id customerId = Id.generate();
         Account account = Account.createCustomerAccount(accountId, customerId);
 
-        // First save → INSERT, version initialised to 0 by Hibernate
         repository.save(account);
         jpaRepository.flush();
         assertThat(jpaRepository.findById(accountId.value()).orElseThrow().getVersion())
                 .isEqualTo(0L);
 
-        // Second save → UPDATE, version incremented to 1
         account.credit(Amount.of(BigDecimal.valueOf(100), "XAF"));
         repository.save(account);
         jpaRepository.flush();
         assertThat(jpaRepository.findById(accountId.value()).orElseThrow().getVersion())
                 .isEqualTo(1L);
 
-        // Third save → UPDATE, version incremented to 2
         account.credit(Amount.of(BigDecimal.valueOf(50), "XAF"));
         repository.save(account);
         jpaRepository.flush();
         assertThat(jpaRepository.findById(accountId.value()).orElseThrow().getVersion())
                 .isEqualTo(2L);
     }
-
-    // ── concurrent update conflict ────────────────────────────────────────────
 
     @Test
     @Transactional(propagation = Propagation.NOT_SUPPORTED)

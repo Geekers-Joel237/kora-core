@@ -324,9 +324,9 @@ Sur l'accueil, la carte héros se transforme progressivement à mesure que la li
 
 Le tout est piloté par `useAnimatedScrollHandler`, entièrement sur le thread UI. **Aucun `onScroll` JavaScript.**
 
-### 6.7 La frise des états de transaction
+### 6.7 ~~La frise des états de transaction~~ — retirée le 2026-10-13
 
-Sur l'écran de détail, la frise des transitions se dessine à l'ouverture. C'est la manifestation visible du différenciateur produit.
+Le backend n'expose plus les états techniques au client ; la frise a été supprimée de l'écran de détail (FR-43). Spécification conservée pour mémoire.
 
 | Élément | Animation |
 |---|---|

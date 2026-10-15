@@ -81,7 +81,6 @@ class CashOutE2ETest extends AbstractE2ETest {
     @Test
     void should_return_422_when_insufficient_funds() {
         SetupData ctx = setupCustomerWithAccount(EMAIL, FULL_NAME, PREFIX, PHONE, PIN);
-        // No cash-in → balance is 0
 
         ResponseEntity<String> response = postWithToken(
                 "/payments/cash-out",

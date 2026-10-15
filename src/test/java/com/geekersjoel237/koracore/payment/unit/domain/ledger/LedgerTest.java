@@ -24,26 +24,15 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * Covers the two-phase API that PaymentTransactionalExecutor actually calls:
- * {@code initiate()} builds the transaction shell, {@code writeEntries()} writes
- * the ledger entries at capture time, {@code reverse()} writes the
- * compensating pair.
- *
- * <p>The former one-shot API (cashIn / cashOut / transfer) was removed. It was a
- * second way to build a Transaction — entries and all, in a single step —
- * which is the shape ADR-004 dismantled. Keeping it left the door open for the
- * problem to walk back in.
- */
 class LedgerTest {
 
     private static final Amount HUNDRED = Amount.of(BigDecimal.valueOf(100), "XAF");
 
     private Ledger ledger;
-    private Account customerAccount;   // zero balance
-    private Account floatAccount;      // zero balance, unbounded (ADR-001)
-    private Account accountA;          // 200 XAF
-    private Account accountB;          // zero balance
+    private Account customerAccount;
+    private Account floatAccount;
+    private Account accountA;
+    private Account accountB;
 
     @BeforeEach
     void setUp() {
@@ -54,8 +43,6 @@ class LedgerTest {
         accountA.credit(Amount.of(BigDecimal.valueOf(200), "XAF"));
         accountB        = Account.createCustomerAccount(Id.generate(), new Id("cust-B"));
     }
-
-    // ── Helpers ───────────────────────────────────────────────────────────────
 
     private Id idOf(Account account) {
         return account.snapshot().accountId();
@@ -84,8 +71,6 @@ class LedgerTest {
         return ledger.initiate(accountA, accountB,
                 TransactionType.P2P_TRANSFER, PaymentMethod.WALLET, HUNDRED);
     }
-
-    // ── initiate: the shell ───────────────────────────────────────────────────
 
     @Test
     void should_set_the_requested_transaction_type() {
@@ -123,8 +108,6 @@ class LedgerTest {
         assertTrue(initiateTransfer().entries().isEmpty());
     }
 
-    // ── initiate: guards ──────────────────────────────────────────────────────
-
     @Test
     void should_throw_when_source_account_is_blocked() {
         Account blocked = Account.createCustomerAccount(Id.generate(), new Id("b-001"));
@@ -134,11 +117,6 @@ class LedgerTest {
                         TransactionType.P2P_TRANSFER, PaymentMethod.WALLET, HUNDRED));
     }
 
-    /**
-     * On a cash-in the customer account is the DESTINATION, not the source —
-     * the source is the float. initiate() checked only the source, so crediting
-     * a blocked account went through unguarded. The check is symmetric now.
-     */
     @Test
     void should_throw_when_customer_account_blocked_on_cash_in() {
         Account blocked = Account.createCustomerAccount(Id.generate(), new Id("b-002"));
@@ -193,20 +171,19 @@ class LedgerTest {
                         Amount.of(BigDecimal.valueOf(100), "EUR")));
     }
 
-    /**
-     * Ordering guarantee documented on initiate(): Transaction.create() runs
-     * before requireSufficientFunds, so the aggregate's own invariant wins.
-     * accountB has a zero balance — without that ordering this would surface as
-     * InsufficientFundsException and hide the real defect.
-     */
     @Test
-    void should_prefer_self_transfer_over_insufficient_funds() {
-        assertThrows(SelfTransferException.class,
+    void should_check_funds_before_building_the_transaction() {
+        assertThrows(InsufficientFundsException.class,
                 () -> ledger.initiate(accountB, accountB,
                         TransactionType.P2P_TRANSFER, PaymentMethod.WALLET, HUNDRED));
     }
 
-    // ── writeEntries: the ledger write ────────────────────────────────────────
+    @Test
+    void should_refuse_self_transfer_when_funds_cover_it() {
+        assertThrows(SelfTransferException.class,
+                () -> ledger.initiate(accountA, accountA,
+                        TransactionType.P2P_TRANSFER, PaymentMethod.WALLET, HUNDRED));
+    }
 
     @Test
     void should_produce_exactly_two_operations_on_write_entries() {
@@ -231,23 +208,16 @@ class LedgerTest {
         assertTrue(isDoubleEntryBalanced(tx));
     }
 
-    // ── reverse: the compensating pair ────────────────────────────────────────
-
     @Test
     void should_write_the_mirrored_pair_on_reverse() {
         Transaction tx = initiateTransfer();
         ledger.writeEntries(tx, accountA, accountB, HUNDRED);
         ledger.reverse(tx);
 
-        // The reversal debits the original recipient and credits the original sender.
         assertEquals(List.of(idOf(accountA), idOf(accountB)), accountsOf(tx, LedgerEntryType.DEBIT));
         assertEquals(List.of(idOf(accountB), idOf(accountA)), accountsOf(tx, LedgerEntryType.CREDIT));
     }
 
-    /**
-     * A correction is a compensating entry, never an erasure: the original pair
-     * is still there afterwards.
-     */
     @Test
     void should_append_the_compensating_pair_without_removing_the_originals() {
         Transaction tx = initiateTransfer();

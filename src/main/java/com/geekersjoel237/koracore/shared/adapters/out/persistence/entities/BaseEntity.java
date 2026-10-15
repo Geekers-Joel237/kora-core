@@ -11,11 +11,6 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.Instant;
 
-/**
- * Created on 28/02/2026
- *
- * @author Geekers_Joel237
- **/
 @MappedSuperclass
 @Getter
 @Setter

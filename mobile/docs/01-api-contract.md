@@ -3,7 +3,7 @@
 **Source de vérité unique.** Extrait par lecture directe du code de `kora-core` @ `develop`.
 Si un besoin d'écran n'apparaît pas ici, il n'existe pas côté backend. Voir §6.
 
-> **⚠️ Contrat daté, pas définitif.** Relevé le **2026-08-06**, backend à l'**étape 3** de `ROADMAP.md`.
+> **⚠️ Contrat daté, pas définitif.** Relevé le **2026-08-06**, backend à l'**étape 3** de `ROADMAP.md`. Resynchronisé le **2026-10-13** : transfert en `toPhonePrefix` + `toPhoneNumber`, historique en vue client (statut, kind, curseur).
 > Le backend est en développement actif : ce document se met à jour **avant** le code, jamais après. Un contrat de documentation en retard sur le code ment avec autorité.
 > Protocole de synchronisation : `09-api-evolution.md` §6. Journal des changements et anomalies backend : §7 du même document.
 
@@ -156,9 +156,12 @@ Corps strictement identique à `cash-in`.
   "rawPin":        "1234",
   "amount":         25000,
   "currency":      "XAF",
-  "toPhoneNumber": "+2250708091011"  // non vide
+  "toPhonePrefix": "+225",         // regex \+\d{1,4}
+  "toPhoneNumber": "0708091011"    // regex \d{8,15}, sans le préfixe
 }
 ```
+
+Le destinataire est transmis **en deux champs**, comme à l'inscription. Un préfixe absent ou mal formé, ou un numéro hors format, produit un `400` avec `violations[]`. Envoyer le numéro complet dans `toPhoneNumber` est désormais un `400`.
 
 ### Réponse commune aux trois opérations
 
@@ -192,98 +195,79 @@ Codes d'erreur possibles :
 
 ### `GET /payments/history`
 
-Paramètres, tous optionnels sauf indication :
+Vue **client** de l'historique : aucun état technique, aucun identifiant interne. Les plus récentes d'abord.
+
+Paramètres, tous optionnels :
 
 | Paramètre | Valeurs | Défaut |
 |---|---|---|
-| `type` | `CASH_IN` · `CASH_OUT` · `P2P_TRANSFER` | — |
-| `state` | l'un des 11 états du §3.1 | — |
-| `direction` | `INBOUND` · `OUTBOUND` | — |
-| `from` | instant ISO-8601 UTC, ex. `2026-01-15T00:00:00Z` | — |
-| `to` | idem | — |
-| `page` | entier, base 0 | `0` |
-| `size` | entier, maximum 100 | `20` |
-| `detail` | booléen — inclut `stateHistory` | `false` |
+| `status` | `PENDING` · `COMPLETED` · `FAILED` · `REFUNDED` — voir §3.1 | — |
+| `kind` | `DEPOSIT` · `WITHDRAWAL` · `TRANSFER_SENT` · `TRANSFER_RECEIVED` | — |
+| `from` | jour `YYYY-MM-DD`, **inclus** | — |
+| `to` | jour `YYYY-MM-DD`, **inclus** | — |
+| `cursor` | `nextCursor` de la page précédente ; absent pour la première page | — |
+| `limit` | entier, 1 à 100 | `20` |
 
 ```jsonc
 // 200
 {
-  "transactions": [
+  "items": [
     {
-      "transactionId":     "7b2e...",
-      "transactionNumber": "TRX-20260806-A3F91C2D",
-      "type":              "P2P_TRANSFER",
-      "direction":         "OUTBOUND",
-      "state":             "COMPLETED",
-      "amount":             25000,
-      "currency":          "XAF",
-      "paymentMethod":     "WALLET",
-      "counterpart":       "+225070***011",   // null si CASH_IN / CASH_OUT
-      "createdAt":         "2026-08-06T11:42:13Z",
-      "stateHistory": [                         // null si detail=false
-        { "oldState": null,         "newState": "INITIALIZED", "occurredAt": "2026-08-06T11:42:13Z" },
-        { "oldState": "INITIALIZED","newState": "AUTHORIZED",  "occurredAt": "2026-08-06T11:42:13.412Z" },
-        { "oldState": "AUTHORIZED", "newState": "CAPTURED",    "occurredAt": "2026-08-06T11:42:13.638Z" },
-        { "oldState": "CAPTURED",   "newState": "COMPLETED",   "occurredAt": "2026-08-06T11:42:13.701Z" }
-      ]
+      "reference":   "TRX-20260806-A3F91C2D",  // identité de l'opération côté client
+      "kind":        "TRANSFER_SENT",
+      "status":      "COMPLETED",
+      "amount":      -25000,                    // signé : négatif quand l'argent sort
+      "currency":    "XAF",
+      "counterpart": "+225070***011",           // transferts uniquement, sinon null
+      "channel":     null,                      // dépôt et retrait uniquement : "ORANGE_MONEY"…
+      "date":        "2026-08-06T11:42:13Z"
     }
   ],
-  "page": 0, "size": 20, "totalElements": 143, "totalPages": 8, "hasNext": true
+  "nextCursor": "MjAyNi0wOC0wNlQxMTo0MjoxM1p8N2IyZS4uLg"  // null sur la dernière page
 }
 ```
 
 Notes de contrat :
 
-- `from` et `to` mal formatés produisent un `400` avec un message explicite. **Toujours sérialiser en ISO-8601 UTC**, jamais en heure locale.
-- `type`, `state` et `direction` invalides déclenchent une `IllegalArgumentException` côté serveur → `400`.
-- `size > 100` est **effectivement rejeté** par `TransactionHistoryService` → `IllegalArgumentException` → `400`. Le plafond n'est pas indicatif.
-- `counterpart` est **déjà masqué par le serveur** pour les transferts P2P. Ne pas le remasquer. Il vaut `null` pour dépôt et retrait.
-  Règle de masquage exacte : `préfixe + 3 premiers chiffres + "***" + 3 derniers`. Un numéro local de 6 chiffres ou moins n'est **pas masqué du tout** — il est renvoyé en clair. Exemple : `+225` + `0708091011` → `+225070***011`.
-- `detail=true` alourdit sensiblement la réponse. **Ne l'utiliser que pour l'écran de détail**, jamais pour la liste.
-- `state` n'accepte **qu'une seule valeur**. Aucun filtrage multi-états côté serveur. Conséquence directe en §6.8.
+- **Pagination par curseur.** `nextCursor` est opaque : le renvoyer tel quel dans `cursor`, ne jamais le construire ni le décoder. Une page obtenue avec un curseur est **stable** : une nouvelle opération ne la décale pas. Aucun total n'est fourni.
+- `kind` est lu **du côté du wallet de l'appelant** : un même transfert est `TRANSFER_SENT` chez l'émetteur et `TRANSFER_RECEIVED` chez le destinataire.
+- `from` / `to` sont des **jours du calendrier client** (fuseau `Africa/Douala`), pas des instants. `to` inclut toute la journée. `from` postérieur à `to` → `400`.
+- `status`, `kind`, `from`, `to`, `cursor` ou `limit` invalides → `400`, message listant les valeurs attendues.
+- `counterpart` est **déjà masqué par le serveur**. Ne pas le remasquer. Règle : `préfixe + 3 premiers chiffres + "***" + 3 derniers` — `+225` + `0708091011` → `+225070***011`.
+- `transactionId`, `state`, `stateHistory`, `type`, `direction`, `paymentMethod`, `page`, `size`, `totalElements`, `detail` **n'existent plus** (backend, 2026-10-13).
 
 ---
 
 ## 3. Vocabulaire du domaine
 
-### 3.1 États de transaction — les 11 valeurs exhaustives
+### 3.1 Statut client et états techniques
 
-| État | Terminal | Signification | Rendu app |
+**L'historique ne renvoie que le statut client** (`status`), quatre valeurs. Les états techniques n'apparaissent plus que dans la réponse immédiate des trois opérations (`state`, §2), et l'app les ramène au même statut.
+
+La correspondance est **celle du backend** (`CustomerStatus`) — elle ne se décide pas côté app :
+
+| Statut client | Famille app | États techniques | Ce que l'utilisateur comprend |
 |---|---|---|---|
-| `INITIALIZED` | non | Opération créée, rien de débité | En cours |
-| `AUTHORIZED` | non | Fonds réservés chez le fournisseur | En cours |
-| `CAPTURED` | non | Fonds prélevés, écriture au registre faite | En cours |
-| `COMPLETED` | **oui** | Opération terminée avec succès | Succès |
-| `SETTLEMENT_PENDING` | non | En attente de règlement interbancaire (T+1) | En cours |
-| `SETTLED` | **oui** | Réglé côté fournisseur | Succès |
-| `AUTHORIZATION_FAILED` | **oui** | Refus à l'autorisation | Échec |
-| `CAPTURE_FAILED` | **oui** | Échec au prélèvement | Échec |
-| `SETTLEMENT_FAILED` | **oui** | Échec au règlement | Échec |
-| `FAILED` | **oui** | Échec générique | Échec |
-| `REVERSED` | **oui** | Contrepassé par un administrateur | Annulé |
+| `PENDING` | `pending` — En cours | `INITIALIZED` · `AUTHORIZED` · `UNKNOWN` | On attend l'opérateur |
+| `COMPLETED` | `success` — Terminée | `CAPTURED` · `SETTLEMENT_PENDING` · `SETTLED` · `COMPLETED` · `SETTLEMENT_FAILED` | L'argent a bougé |
+| `FAILED` | `failed` — Échoué | `FAILED` · `AUTHORIZATION_FAILED` · `CAPTURE_FAILED` | Refusé, rien n'a bougé |
+| `REFUNDED` | `reversed` — Remboursée | `REVERSED` | L'argent est revenu |
 
-Regroupement imposé côté app — **trois familles, pas onze** :
+**Terminée dès la capture.** Le règlement (`SETTLEMENT_*`) se joue entre Kora et l'opérateur ; l'argent du client a déjà bougé. Un `SETTLEMENT_FAILED` reste donc « Terminée » pour lui.
 
 ```ts
 type OutcomeGroup = 'pending' | 'success' | 'failed' | 'reversed';
 
-const OUTCOME: Record<TxState, OutcomeGroup> = {
-  INITIALIZED: 'pending',  AUTHORIZED: 'pending',  CAPTURED: 'pending',
-  SETTLEMENT_PENDING: 'pending',
-  COMPLETED: 'success',    SETTLED: 'success',
-  AUTHORIZATION_FAILED: 'failed', CAPTURE_FAILED: 'failed',
-  SETTLEMENT_FAILED: 'failed',    FAILED: 'failed',
-  REVERSED: 'reversed',
-};
+const OUTCOME_OF_STATUS = { PENDING: 'pending', COMPLETED: 'success', FAILED: 'failed', REFUNDED: 'reversed' };
 ```
 
-L'utilisateur voit la famille. Il voit le détail des onze états **uniquement** sur la frise de l'écran de détail — c'est là que la richesse du backend devient une fonctionnalité plutôt qu'un bruit.
+Règle R2 : un statut ou un état inconnu se rend `pending` — jamais un succès affiché à tort.
 
 ### 3.2 Autres énumérations
 
 ```
-TransactionType   CASH_IN · CASH_OUT · P2P_TRANSFER
-Direction         INBOUND · OUTBOUND
+TransactionKind   DEPOSIT · WITHDRAWAL · TRANSFER_SENT · TRANSFER_RECEIVED
+CustomerStatus    PENDING · COMPLETED · FAILED · REFUNDED
 Role              CUSTOMER · ADMIN
 UserStatus        PENDING · VERIFIED · SUSPENDED
 ```
@@ -440,7 +424,9 @@ Conséquence : un utilisateur qui se connecte sur un nouvel appareil **n'a pas s
 
 Ni webhook, ni WebSocket, ni notification push. Une opération laissée en état `pending` ne signalera jamais son achèvement d'elle-même.
 
-Stratégie imposée : sondage ciblé. Tant qu'au moins une opération visible est dans la famille `pending`, interroger `GET /payments/history?size=10` toutes les 5 secondes, avec un plafond de 12 tentatives (soit 1 minute), et arrêt immédiat dès que l'application passe en arrière-plan. Ne jamais sonder au-delà.
+Stratégie imposée : sondage ciblé. Tant qu'au moins une opération visible est dans la famille `pending`, interroger `GET /payments/history?limit=10` toutes les 5 secondes, avec un plafond de 12 tentatives (soit 1 minute), et arrêt immédiat dès que l'application passe en arrière-plan. Ne jamais sonder au-delà.
+
+L'opération se retrouve par sa **`reference`** : l'historique n'expose plus `transactionId`, mais la réponse immédiate d'un paiement porte `transactionNumber`, qui est la même valeur. Le sondage s'arrête dès que `status` n'est plus `PENDING`.
 
 ### 6.5 Aucun endpoint de déconnexion
 
@@ -454,38 +440,26 @@ Un jeton de rafraîchissement volé reste valide jusqu'à son expiration naturel
 
 ### 6.7 Aucun accès unitaire à une transaction
 
-Il n'existe **ni `GET /payments/{id}`, ni filtre par `transactionId`**. La seule façon d'obtenir le `stateHistory` d'une opération est de rappeler `GET /payments/history?detail=true` et de la retrouver dans la page.
+Il n'existe **ni `GET /payments/{id}`, ni filtre par référence**. Une ligne d'historique contient déjà tout ce que l'écran de détail affiche : le détail s'ouvre donc **depuis le cache de la liste**, sans requête.
 
-Une recherche naïve dans « les 100 premières » est **fausse** : une opération ancienne n'y figure pas.
-
-Stratégie imposée : la navigation vers le détail transporte **l'index de page d'où la ligne provient**, ainsi que les filtres actifs. L'écran de détail rejoue exactement cette requête avec `detail=true` et sélectionne par identifiant.
+La requête n'a lieu que pour **suivre une opération encore en cours**, ou si le cache a été purgé. Une recherche naïve dans « les 100 premières » serait fausse pour une opération ancienne : la navigation transporte donc **le curseur de la page d'où la ligne provient** (vide pour la première page), ainsi que les filtres actifs. L'écran rejoue exactement cette page et sélectionne par `reference`.
 
 ```ts
 router.push({
   pathname: '/transaction/[id]',
-  params: { id: tx.id, page: String(pageIndex), filters: serialize(activeFilters) },
+  params: { id: tx.reference, cursor: pageCursor ?? '', filters: serialize(activeFilters) },
 });
-// Détail : GET /payments/history?detail=true&page={page}&size=20&{filters}
-//          puis .find(t => t.transactionId === id)
+// Détail : GET /payments/history?limit=20&{cursor}&{filters}
+//          puis .find(t => t.reference === id)
 ```
 
-La requête reste bornée à une page, quelle que soit l'ancienneté de l'opération. Le `stateHistory` se charge en arrière-plan pendant que le reste de l'écran s'affiche depuis le cache de la liste.
-
-Repli si l'opération est absente de la page rejouée — cas possible si une nouvelle opération a décalé la pagination entre-temps : élargir à `page-1` et `page+1`, puis abandonner avec un `ErrorState` proposant le retour à l'historique.
+Une page obtenue **avec** un curseur est stable : la rejouer redonne les mêmes lignes. Seule la première page peut glisser si de nouvelles opérations sont arrivées ; repli : suivre une fois `nextCursor`, puis abandonner avec un `ErrorState` proposant le retour à l'historique.
 
 `CONTOURNEMENT(indéterminé)` — disparaît si `GET /payments/{id}` est ajouté. Drapeau : `API_CAPABILITIES.transactionById`.
 
-### 6.8 Le filtre d'état n'accepte qu'une seule valeur
+### 6.8 ~~Le filtre d'état n'accepte qu'une seule valeur~~ — levé le 2026-10-13
 
-`TransactionFilter.state` est un `String` unique. **Aucun filtrage multi-états côté serveur.**
-
-Conséquence sur l'interface : le regroupement en trois familles (`pending` / `success` / `failed`) du §3.1 est excellent pour l'**affichage**, mais il n'est **pas utilisable comme filtre serveur** — « En cours » recouvre quatre états distincts.
-
-Un filtrage local de la famille sur la page chargée serait faux : il filtrerait 20 lignes sur 500, en affichant un total et une pagination incohérents.
-
-Stratégie imposée pour la V1 : le filtre d'état est un **sélecteur à choix unique parmi les 11 états concrets**, envoyé tel quel au serveur. Les libellés restent lisibles (`Terminée`, `Autorisée`, `Échouée`…) via la table de traduction de `04-components.md`, mais un choix = un état = un filtre serveur exact.
-
-Le filtre par famille est reporté et conditionné à `API_CAPABILITIES.multiStateFilter`. `CONTOURNEMENT(indéterminé)`.
+Le backend filtre désormais par **statut client** (`status`, §3.1), qui recouvre côté serveur tous les états d'une famille. Le filtre par famille, reporté jusqu'ici, est le filtre natif. Contournement retiré, drapeau `multiStateFilter` supprimé.
 
 ### 6.9 Endpoints de support de test
 

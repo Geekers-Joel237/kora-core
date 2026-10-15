@@ -10,61 +10,46 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class PageResultTest {
 
-    private static final Pagination FIRST_OF_TEN = new Pagination(0, 10);
+    private static final Pagination TWO = Pagination.of(2);
 
     @Test
-    void should_take_its_metadata_from_the_pagination_it_answered() {
-        PageResult<String> page = PageResult.of(List.of("a", "b"), new Pagination(2, 10), 25);
+    void should_announce_a_next_page_when_more_than_the_limit_was_fetched() {
+        PageResult<String> page = PageResult.fromFetched(List.of("a", "b", "c"), TWO);
 
-        assertThat(page.page()).isEqualTo(2);
-        assertThat(page.size()).isEqualTo(10);
-        assertThat(page.totalElements()).isEqualTo(25);
+        assertThat(page.content()).containsExactly("a", "b");
+        assertThat(page.hasNext()).isTrue();
     }
 
     @Test
-    void should_count_the_partial_last_page() {
-        assertThat(PageResult.of(List.of(), FIRST_OF_TEN, 25).totalPages()).isEqualTo(3);
-        assertThat(PageResult.of(List.of(), FIRST_OF_TEN, 30).totalPages()).isEqualTo(3);
-        assertThat(PageResult.of(List.of(), FIRST_OF_TEN, 0).totalPages()).isZero();
+    void should_announce_no_next_page_when_the_limit_was_not_exceeded() {
+        PageResult<String> exact = PageResult.fromFetched(List.of("a", "b"), TWO);
+        PageResult<String> short_ = PageResult.fromFetched(List.of("a"), TWO);
+
+        assertThat(exact.content()).containsExactly("a", "b");
+        assertThat(exact.hasNext()).isFalse();
+        assertThat(short_.hasNext()).isFalse();
     }
 
     @Test
-    void should_announce_a_next_page_only_while_one_remains() {
-        assertThat(PageResult.of(List.of(), new Pagination(0, 10), 25).hasNext()).isTrue();
-        assertThat(PageResult.of(List.of(), new Pagination(2, 10), 25).hasNext()).isFalse();
-    }
+    void should_be_empty_without_a_next_page() {
+        PageResult<String> page = PageResult.fromFetched(List.of(), TWO);
 
-    /**
-     * An empty page is not evidence of an empty set — it may be past the end. The count
-     * comes from the query, never from the content.
-     */
-    @Test
-    void should_keep_the_total_of_an_empty_page_past_the_end() {
-        PageResult<String> beyond = PageResult.of(List.of(), new Pagination(9, 10), 25);
-
-        assertThat(beyond.content()).isEmpty();
-        assertThat(beyond.totalElements()).isEqualTo(25);
-        assertThat(beyond.hasNext()).isFalse();
+        assertThat(page.content()).isEmpty();
+        assertThat(page.hasNext()).isFalse();
     }
 
     @Test
-    void should_carry_the_metadata_across_a_mapping() {
-        PageResult<Integer> lengths = PageResult
-                .of(List.of("aa", "bbb"), new Pagination(1, 10), 25)
+    void should_keep_the_next_page_flag_through_a_mapping() {
+        PageResult<Integer> lengths = PageResult.fromFetched(List.of("a", "bb", "ccc"), TWO)
                 .map(String::length);
 
-        assertThat(lengths.content()).containsExactly(2, 3);
-        assertThat(lengths.page()).isEqualTo(1);
-        assertThat(lengths.size()).isEqualTo(10);
-        assertThat(lengths.totalElements()).isEqualTo(25);
+        assertThat(lengths.content()).containsExactly(1, 2);
+        assertThat(lengths.hasNext()).isTrue();
     }
 
     @Test
-    void should_build_an_empty_page_for_a_pagination() {
-        PageResult<String> empty = PageResult.empty(new Pagination(1, 10));
-
-        assertThat(empty.content()).isEmpty();
-        assertThat(empty.totalElements()).isZero();
-        assertThat(empty.page()).isEqualTo(1);
+    void should_expose_the_last_item_to_build_the_next_cursor_from() {
+        assertThat(PageResult.fromFetched(List.of("a", "b", "c"), TWO).lastItem()).contains("b");
+        assertThat(PageResult.fromFetched(List.<String>of(), TWO).lastItem()).isEmpty();
     }
 }

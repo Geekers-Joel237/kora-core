@@ -135,25 +135,18 @@
     "title": "Filter",
     "type": "Type",
     "typeA11y": "Payment type",
-    "direction": "Direction",
-    "directionA11y": "Payment direction",
     "period": "Period",
-    "state": "State",
-    "stateHint": "One state at a time — the server accepts no more.",
-    "showAllStates": "Show all {{count}} states",
-    "collapseStates": "Collapse",
-    "expandStatesA11y": "Show all states",
-    "collapseStatesA11y": "Collapse the state list",
+    "status": "Status",
     "searching": "Searching…",
     "resultCount_one": "{{count}} payment",
     "resultCount_other": "{{count}} payments",
+    "resultCountMore": "More than {{count}} payments",
     "apply": "Show",
     "all": "All",
     "deposits": "Deposits",
     "withdrawals": "Withdrawals",
-    "transfers": "Transfers",
-    "inbound": "Incoming",
-    "outbound": "Outgoing",
+    "sent": "Sent",
+    "received": "Received",
     "anyPeriod": "Any",
     "custom": "Custom",
     "days": "{{count}} d"
@@ -173,18 +166,13 @@
     "backToHistory": "Back to history",
     "errorTitle": "Details unavailable",
     "errorDescription": "We could not retrieve this payment.",
-    "noStateHistory": "No state history was returned for this payment.",
     "liveTracking": "Live tracking — this screen updates on its own.",
     "reference": "Ref.",
     "referenceA11y": "Reference {{reference}}, tap to copy",
     "referenceCopied": "Reference copied",
     "copyReference": "Copy reference",
     "type": "Type",
-    "method": "Method",
-    "direction": "Direction",
-    "rawState": "Raw state",
-    "inbound": "Incoming",
-    "outbound": "Outgoing"
+    "method": "Method"
   },
 
   "flow": {
@@ -282,31 +270,18 @@
     "unlock": "Unlock"
   },
 
-  "states": {
-    "INITIALIZED": { "label": "Initiated", "description": "Payment recorded" },
-    "AUTHORIZED": { "label": "Authorised", "description": "Funds reserved with the provider" },
-    "CAPTURED": { "label": "Captured", "description": "Funds taken" },
-    "COMPLETED": { "label": "Completed", "description": "Payment finalised" },
-    "SETTLEMENT_PENDING": { "label": "Settlement pending", "description": "Waiting for the provider" },
-    "SETTLED": { "label": "Settled", "description": "Settlement confirmed" },
-    "AUTHORIZATION_FAILED": { "label": "Authorisation declined", "description": "The provider declined the payment" },
-    "CAPTURE_FAILED": { "label": "Capture failed", "description": "The capture did not go through" },
-    "SETTLEMENT_FAILED": { "label": "Settlement failed", "description": "The settlement did not go through" },
-    "FAILED": { "label": "Failed", "description": "The payment could not be executed" },
-    "REVERSED": { "label": "Reversed", "description": "Payment reversed" }
-  },
-
   "outcomes": {
     "pending": "In progress",
     "success": "Completed",
     "failed": "Failed",
-    "reversed": "Reversed"
+    "reversed": "Refunded"
   },
 
-  "txTypes": {
-    "CASH_IN": "Deposit",
-    "CASH_OUT": "Withdrawal",
-    "P2P_TRANSFER": "Transfer"
+  "txKinds": {
+    "DEPOSIT": "Deposit",
+    "WITHDRAWAL": "Withdrawal",
+    "TRANSFER_SENT": "Transfer sent",
+    "TRANSFER_RECEIVED": "Transfer received"
   },
 
   "feedback": {

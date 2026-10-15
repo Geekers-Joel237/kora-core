@@ -2,14 +2,13 @@ import { render } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { StateTimeline, StatusChip, TransactionRow } from '@/components/display';
+import { StatusChip, TransactionRow } from '@/components/display';
 import { OtpInput, PinPad } from '@/components/input';
 import { Amount, AmountKeypad, BalanceHero, SHAKE_SEQUENCE } from '@/components/money';
-import { stateLabel } from '@/features/shared/labels';
 import { THIN_NBSP } from '@/lib/money';
 import { KvKey, kvSetString } from '@/lib/storage/kv';
 import { currencySymbolStyle, ThemeProvider, type as typeScale } from '@/theme';
-import { outcomeOf, TX_STATES, type Transaction } from '@/types/domain';
+import type { OutcomeGroup, Transaction } from '@/types/domain';
 
 beforeEach(() => kvSetString(KvKey.themePreference, 'dark'));
 
@@ -27,17 +26,14 @@ function wrap(children: ReactNode) {
 }
 
 const TX: Transaction = {
-  id: 'tx-1',
   reference: 'TRX-20260806-A3F91C2D',
-  type: 'P2P_TRANSFER',
-  direction: 'OUTBOUND',
-  state: 'COMPLETED',
+  kind: 'TRANSFER_SENT',
   outcome: 'success',
+  direction: 'OUTBOUND',
   amount: { minor: 25000, currency: 'XOF' },
-  paymentMethod: 'WALLET',
+  channel: null,
   counterpart: '+225070***011',
   createdAt: new Date('2026-08-06T11:42:13Z'),
-  stateHistory: null,
 };
 
 describe('Amount — design system §3.4', () => {
@@ -120,22 +116,17 @@ describe('secousse — §6.3', () => {
 });
 
 describe('StatusChip', () => {
-  it('rend les 11 états sans lever et les regroupe en familles', async () => {
-    for (const state of TX_STATES) {
-      const view = await wrap(<StatusChip state={state} />);
-      expect(view.root).toBeTruthy();
-      expect(['pending', 'success', 'failed', 'reversed']).toContain(outcomeOf(state));
+  it('nomme chacune des quatre familles vues par le client', async () => {
+    const labels: Record<OutcomeGroup, string> = {
+      pending: 'En cours',
+      success: 'Terminée',
+      failed: 'Échouée',
+      reversed: 'Remboursée',
+    };
+    for (const [outcome, label] of Object.entries(labels) as [OutcomeGroup, string][]) {
+      const view = await wrap(<StatusChip outcome={outcome} />);
+      expect(view.getByText(label)).toBeTruthy();
     }
-  });
-
-  it('affiche le libellé précis en mode détaillé', async () => {
-    const view = await wrap(<StatusChip state="AUTHORIZATION_FAILED" detailed />);
-    expect(view.getByText('Autorisation refusée')).toBeTruthy();
-  });
-
-  it('règle R2 — un état inconnu se rend en « En cours »', async () => {
-    const view = await wrap(<StatusChip state="MANUAL_REVIEW" />);
-    expect(view.getByText('En cours')).toBeTruthy();
   });
 });
 
@@ -149,77 +140,41 @@ describe('TransactionRow — §5', () => {
   });
 
   it('marque en revanche une opération en cours', async () => {
-    const view = await wrap(
-      <TransactionRow transaction={{ ...TX, state: 'CAPTURED', outcome: 'pending' }} />,
-    );
+    const view = await wrap(<TransactionRow transaction={{ ...TX, outcome: 'pending' }} />);
     expect(view.getByText('En cours')).toBeTruthy();
   });
 
-  it('affiche la contrepartie masquée par le serveur pour un P2P', async () => {
-    const view = await wrap(<TransactionRow transaction={TX} />);
-    expect(view.getByText('+225070***011')).toBeTruthy();
+  it('marque une opération remboursée', async () => {
+    const view = await wrap(<TransactionRow transaction={{ ...TX, outcome: 'reversed' }} />);
+    expect(view.getByText('Remboursée')).toBeTruthy();
   });
 
-  it('affiche l’opérateur quand il n’y a pas de contrepartie', async () => {
+  it('affiche la contrepartie masquée et la nature d’un transfert', async () => {
+    const view = await wrap(<TransactionRow transaction={TX} />);
+    expect(view.getByText('+225070***011')).toBeTruthy();
+    expect(view.getByText(/Transfert envoyé/)).toBeTruthy();
+  });
+
+  it('affiche l’opérateur d’un dépôt', async () => {
     const view = await wrap(
       <TransactionRow
-        transaction={{ ...TX, type: 'CASH_IN', counterpart: null, paymentMethod: 'ORANGE_MONEY' }}
+        transaction={{
+          ...TX,
+          kind: 'DEPOSIT',
+          direction: 'INBOUND',
+          counterpart: null,
+          channel: 'ORANGE_MONEY',
+        }}
       />,
     );
     expect(view.getByText('Orange Money')).toBeTruthy();
   });
-});
 
-describe('StateTimeline — le composant signature', () => {
-  const history = [
-    { from: null, to: 'INITIALIZED', occurredAt: new Date('2026-08-06T11:42:13.000Z') },
-    { from: 'INITIALIZED', to: 'AUTHORIZED', occurredAt: new Date('2026-08-06T11:42:13.412Z') },
-    { from: 'AUTHORIZED', to: 'CAPTURED', occurredAt: new Date('2026-08-06T11:42:13.638Z') },
-    { from: 'CAPTURED', to: 'COMPLETED', occurredAt: new Date('2026-08-06T11:42:13.701Z') },
-  ];
-
-  it('rend une frise complète avec les libellés lisibles', async () => {
-    const view = await wrap(<StateTimeline history={history} currentState="COMPLETED" />);
-    expect(view.getByText('Initiée')).toBeTruthy();
-    expect(view.getByText('Autorisée')).toBeTruthy();
-    expect(view.getByText('Capturée')).toBeTruthy();
-    expect(view.getByText('Terminée')).toBeTruthy();
-  });
-
-  it('n’expose jamais un code d’état brut à l’utilisateur', async () => {
-    const view = await wrap(<StateTimeline history={history} currentState="COMPLETED" />);
-    for (const state of ['INITIALIZED', 'AUTHORIZED', 'CAPTURED', 'COMPLETED']) {
-      expect(view.queryByText(state)).toBeNull();
-    }
-  });
-
-  it('rend une frise incomplète, encore en cours', async () => {
-    const partial = history.slice(0, 2);
-    const view = await wrap(<StateTimeline history={partial} currentState="AUTHORIZED" />);
-    expect(view.getByText('Autorisée')).toBeTruthy();
-    expect(view.queryByText('Terminée')).toBeNull();
-  });
-
-  it('rend les 11 états du contrat sans lever', async () => {
-    for (const state of TX_STATES) {
-      const view = await wrap(
-        <StateTimeline
-          history={[{ from: null, to: state, occurredAt: new Date('2026-08-06T11:42:13Z') }]}
-          currentState={state}
-        />,
-      );
-      expect(view.getByText(stateLabel(state).label)).toBeTruthy();
-    }
-  });
-
-  it('règle R2 — un état inconnu affiche son code brut plutôt qu’une erreur', async () => {
+  it('règle R2 — une nature inconnue affiche son code brut plutôt qu’une erreur', async () => {
     const view = await wrap(
-      <StateTimeline
-        history={[{ from: null, to: 'MANUAL_REVIEW', occurredAt: new Date() }]}
-        currentState="MANUAL_REVIEW"
-      />,
+      <TransactionRow transaction={{ ...TX, kind: 'MERCHANT_PAYMENT', counterpart: null }} />,
     );
-    expect(view.getByText('MANUAL_REVIEW')).toBeTruthy();
+    expect(view.getAllByText(/MERCHANT_PAYMENT/).length).toBeGreaterThan(0);
   });
 });
 

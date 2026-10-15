@@ -14,14 +14,6 @@ import static com.geekersjoel237.koracore.shared.integration.persistence.EnumCol
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/**
- * Pins the two enumerated columns of the auth schema to the sets the domain defines.
- *
- * <p>Same rule as its payment counterpart, and the same equality: a constant added to
- * {@link Role} or {@link UserStatus} without the migration that widens the constraint
- * fails here. {@code users.status} in particular decides whether an account can
- * transact — a value the domain cannot read is an account nobody can classify.
- */
 class EnumColumnConstraintsDbTest extends AbstractRepositoryTest {
 
     @PersistenceContext

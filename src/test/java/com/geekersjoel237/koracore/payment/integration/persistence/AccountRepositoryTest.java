@@ -119,7 +119,7 @@ class AccountRepositoryTest extends AbstractRepositoryTest {
         duplicate.setId(Id.generate().value());
         duplicate.setAccountNumber("ACC-DUPLICATE-" + Id.generate().value().substring(0, 4));
         duplicate.setResourceType(ResourceType.CUSTOMER_ACCOUNT);
-        duplicate.setResourceId(customerId.value());   // same resource_id → constraint violation
+        duplicate.setResourceId(customerId.value());
         duplicate.setBalanceAmount(BigDecimal.ZERO);
         duplicate.setBalanceCurrency("XAF");
         duplicate.setBlocked(false);

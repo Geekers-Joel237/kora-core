@@ -168,7 +168,7 @@ Security is embedded from day one.
 - Immutable financial records; strict state transition validation
 - Replay protection on the command bus, over a TTL window
 - PINs hashed with bcrypt; JWT with refresh tokens; `ROLE_CUSTOMER` / `ROLE_ADMIN`
-- **No sensitive data in logs** — `Pin`, `Msisdn`, `PhoneNumber` and `OtpCode` each
+- **No sensitive data in logs** — `Pin`, `PhoneNumber` and `OtpCode` each
   redact themselves in `toString()`, so a record that happens to hold one is covered
   without anyone remembering to be careful. A test dispatches a command carrying a PIN
   through the bus, captures the log output, and asserts the type is named and neither

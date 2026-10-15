@@ -5,15 +5,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 
-/**
- * A clock a test can push forward.
- *
- * <p>Anything with a lifetime needs one. The alternative is two objects holding two
- * fixed clocks and disagreeing about the present, which is how the old OTP store double
- * ended up checking expiry against {@code Clock.systemUTC()} while production checked
- * it against the injected one — a double that answered differently from the thing it
- * stood in for.
- */
 public final class MutableClock extends Clock {
 
     private final ZoneId zone;

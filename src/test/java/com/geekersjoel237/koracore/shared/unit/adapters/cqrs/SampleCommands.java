@@ -7,16 +7,7 @@ import com.geekersjoel237.koracore.shared.domain.vo.Pin;
 
 import java.math.BigDecimal;
 
-/**
- * Commands that exist only to be dispatched.
- *
- * <p>The bus knows nothing about payments, and these tests used {@code CashInCommand}
- * only because it was a command lying around — which made the kernel's own tests depend
- * on a module, and made a failure here read as if something about cash-in had broken.
- *
- * <p>{@link Sample} carries a secret and a customer id on purpose: the log-redaction
- * test needs something worth leaking.
- */
+// Sample carries a secret on purpose: the log-redaction test needs something worth leaking.
 final class SampleCommands {
 
     static final String SECRET = "483920";

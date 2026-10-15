@@ -10,8 +10,6 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class AmountTest {
 
-    // ── Construction valide ───────────────────────────────────────────────────
-
     @Test
     void should_create_amount_when_value_and_currency_are_valid() {
         assertDoesNotThrow(() -> Amount.of(BigDecimal.valueOf(100), "XAF"));
@@ -22,16 +20,12 @@ class AmountTest {
         assertDoesNotThrow(() -> Amount.of(BigDecimal.ZERO, "XAF"));
     }
 
-    // ── Précision BigDecimal — cas critique fintech ───────────────────────────
-
     @Test
     void should_handle_decimal_precision_without_floating_point_error() {
         Amount result = Amount.of(new BigDecimal("0.1"), "XAF")
                 .add(Amount.of(new BigDecimal("0.2"), "XAF"));
         assertEquals(new BigDecimal("0.3"), result.value());
     }
-
-    // ── Validation construction ───────────────────────────────────────────────
 
     @Test
     void should_throw_when_value_is_null() {
@@ -57,8 +51,6 @@ class AmountTest {
                 () -> Amount.of(BigDecimal.valueOf(100), ""));
     }
 
-    // ── add ───────────────────────────────────────────────────────────────────
-
     @Test
     void should_return_correct_sum_when_adding_two_amounts() {
         Amount result = Amount.of(BigDecimal.valueOf(100), "XAF")
@@ -79,8 +71,6 @@ class AmountTest {
                 () -> Amount.of(BigDecimal.valueOf(100), "XAF")
                         .add(Amount.of(BigDecimal.valueOf(50), "EUR")));
     }
-
-    // ── subtract ──────────────────────────────────────────────────────────────
 
     @Test
     void should_return_correct_difference_when_subtracting() {
@@ -117,8 +107,6 @@ class AmountTest {
                         .subtract(Amount.of(BigDecimal.valueOf(50), "EUR")));
     }
 
-    // ── isGreaterThan ─────────────────────────────────────────────────────────
-
     @Test
     void should_return_true_when_first_amount_is_greater() {
         assertTrue(Amount.of(BigDecimal.valueOf(100), "XAF")
@@ -144,8 +132,6 @@ class AmountTest {
                         .isGreaterThan(Amount.of(BigDecimal.valueOf(50), "EUR")));
     }
 
-    // ── isGreaterThanOrEqual ──────────────────────────────────────────────────
-
     @Test
     void should_return_true_when_amounts_are_equal() {
         assertTrue(Amount.of(BigDecimal.valueOf(100), "XAF")
@@ -163,8 +149,6 @@ class AmountTest {
         assertFalse(Amount.of(BigDecimal.valueOf(50), "XAF")
                 .isGreaterThanOrEqual(Amount.of(BigDecimal.valueOf(100), "XAF")));
     }
-
-    // ── Égalité (record) ──────────────────────────────────────────────────────
 
     @Test
     void should_be_equal_when_same_value_and_currency() {
@@ -190,8 +174,6 @@ class AmountTest {
         );
     }
 
-    // ── isStrictPositive ──────────────────────────────────────────────────────
-
     @Test
     void should_return_true_when_value_is_positive() {
         assertTrue(Amount.of(BigDecimal.valueOf(100), "XAF").isStrictPositive());
@@ -206,8 +188,6 @@ class AmountTest {
     void should_return_false_when_value_is_zero_with_decimals() {
         assertFalse(Amount.of(new BigDecimal("0.00"), "XAF").isStrictPositive());
     }
-
-    // ── equals(Amount) — scale-insensitive ───────────────────────────────────
 
     @Test
     void should_return_true_when_same_value_and_currency_via_amount_equals() {
@@ -236,6 +216,6 @@ class AmountTest {
 
     @Test
     void should_return_false_when_other_is_null() {
-        assertFalse(Amount.of(new BigDecimal("100"), "XAF").equals((Amount) null));
+        assertFalse(Amount.of(new BigDecimal("100"), "XAF").equals(null));
     }
 }

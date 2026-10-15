@@ -60,4 +60,14 @@ management:
         enabled: true
         uri: http://${INFLUXDB_HOST}:${INFLUXDB_PORT}
         db: kora_metrics
+        # The dashboard divides step counts by 10 to get a rate: change both together.
         step: 10s
+  # The Influx registry writes a timer as sum/count/mean/upper only, so a p95 has
+  # to be computed here. Each one lands in <name>_percentile, tagged phi, in ms.
+  # Client-side percentiles do not aggregate across tags: the dashboard plots
+  # the worst endpoint, not a global p95.
+  metrics:
+    distribution:
+      percentiles:
+        http.server.requests: 0.5, 0.95, 0.99
+        hikaricp.connections.acquire: 0.95, 0.99

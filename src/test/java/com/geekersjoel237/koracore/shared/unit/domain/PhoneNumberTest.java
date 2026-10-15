@@ -1,6 +1,6 @@
-package com.geekersjoel237.koracore.auth.unit.domain;
+package com.geekersjoel237.koracore.shared.unit.domain;
 
-import com.geekersjoel237.koracore.auth.domain.vo.PhoneNumber;
+import com.geekersjoel237.koracore.shared.domain.vo.PhoneNumber;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -9,22 +9,16 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class PhoneNumberTest {
 
-    // ── Construction valide ───────────────────────────────────────────────────
-
     @Test
     void should_create_phone_number_when_valid_prefix_and_number() {
         assertDoesNotThrow(() -> PhoneNumber.of("+225", "0700000000"));
     }
-
-    // ── fullNumber ────────────────────────────────────────────────────────────
 
     @Test
     void should_return_full_number_when_concatenating_prefix_and_number() {
         PhoneNumber pn = PhoneNumber.of("+225", "0700000000");
         assertEquals("+2250700000000", pn.fullNumber());
     }
-
-    // ── Accesseurs ────────────────────────────────────────────────────────────
 
     @Test
     void should_return_correct_prefix() {
@@ -35,8 +29,6 @@ class PhoneNumberTest {
     void should_return_correct_number() {
         assertEquals("0700000000", PhoneNumber.of("+225", "0700000000").number());
     }
-
-    // ── Validation prefix ─────────────────────────────────────────────────────
 
     @Test
     void should_throw_when_prefix_is_null() {
@@ -74,8 +66,6 @@ class PhoneNumberTest {
                 () -> PhoneNumber.of("+", "0700000000"));
     }
 
-    // ── Validation number ─────────────────────────────────────────────────────
-
     @Test
     void should_throw_when_number_is_null() {
         assertThrows(IllegalArgumentException.class,
@@ -106,8 +96,6 @@ class PhoneNumberTest {
                 () -> PhoneNumber.of("+225", "0700000000000000"));
     }
 
-    // ── Égalité (record) ──────────────────────────────────────────────────────
-
     @Test
     void should_be_equal_when_same_prefix_and_number() {
         assertEquals(
@@ -124,23 +112,12 @@ class PhoneNumberTest {
         );
     }
 
-    // ── Immuabilité ───────────────────────────────────────────────────────────
-
     @Test
     void should_always_return_same_full_number() {
         PhoneNumber pn = PhoneNumber.of("+225", "0700000000");
         assertEquals(pn.fullNumber(), pn.fullNumber());
     }
 
-    // ── redaction ─────────────────────────────────────────────────────────────
-
-    /**
-     * A phone number is PII. In a mobile-money wallet it is also the account
-     * identifier, so it appears in commands, in lookups and in the message of every
-     * "recipient not found" error — three paths that all end in a log file. The type
-     * carries the redaction so a record that happens to hold one is covered without
-     * anyone remembering to be careful.
-     */
     @Test
     void should_never_reveal_itself_when_printed() {
         PhoneNumber phone = PhoneNumber.of("+237", "600000123");
@@ -155,5 +132,15 @@ class PhoneNumberTest {
     void should_mask_the_middle_and_keep_the_ends() {
         assertThat(PhoneNumber.of("+237", "600000123").masked())
                 .isEqualTo("+237600***123");
+    }
+
+    @Test
+    void should_never_reveal_itself_through_the_record_that_holds_it() {
+        record Envelope(String customerId, PhoneNumber recipient) {
+        }
+
+        assertThat(new Envelope("cust-1", PhoneNumber.of("+237", "600000123")).toString())
+                .describedAs("a command's generated toString() prints its components")
+                .doesNotContain("600000123");
     }
 }

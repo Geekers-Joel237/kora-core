@@ -9,22 +9,13 @@ import { parseInstantOrEpoch } from '@/lib/datetime';
 import { toMoney } from '@/lib/money';
 import type {
   ApiBalanceResponse,
-  ApiStateEntry,
   ApiTokensResponse,
   ApiTransactionHistoryResponse,
   ApiTransactionItem,
   ApiTransactionResponse,
 } from '@/types/api';
-import type {
-  Account,
-  Direction,
-  Page,
-  StateTransition,
-  Tokens,
-  Transaction,
-  TransactionReceipt,
-} from '@/types/domain';
-import { outcomeOf } from '@/types/domain';
+import type { Account, Page, Tokens, Transaction, TransactionReceipt } from '@/types/domain';
+import { outcomeOf, outcomeOfStatus } from '@/types/domain';
 
 export function toTokens(dto: ApiTokensResponse): Tokens {
   return {
@@ -53,44 +44,31 @@ export function toReceipt(dto: ApiTransactionResponse): TransactionReceipt {
   };
 }
 
-/** Règle R2 — une direction inconnue se replie sur `OUTBOUND`, jamais un plantage. */
-function toDirection(raw: string): Direction {
-  return raw === 'INBOUND' ? 'INBOUND' : 'OUTBOUND';
-}
-
-function toStateTransition(dto: ApiStateEntry): StateTransition {
-  return {
-    from: dto.oldState,
-    to: dto.newState,
-    occurredAt: parseInstantOrEpoch(dto.occurredAt),
-  };
-}
-
+/**
+ * Le montant arrive signé ; le domaine le garde positif et porte le sens à part.
+ * Le signe fait foi même pour un `kind` encore inconnu — règle R2.
+ */
 export function toTransaction(dto: ApiTransactionItem): Transaction {
   return {
-    id: dto.transactionId,
-    reference: dto.transactionNumber,
-    type: dto.type,
-    direction: toDirection(dto.direction),
-    state: dto.state,
-    outcome: outcomeOf(dto.state),
-    amount: toMoney(dto.amount, dto.currency),
-    paymentMethod: dto.paymentMethod,
+    reference: dto.reference,
+    kind: dto.kind,
+    outcome: outcomeOfStatus(dto.status),
+    direction: dto.amount < 0 ? 'OUTBOUND' : 'INBOUND',
+    amount: toMoney(Math.abs(dto.amount), dto.currency),
+    channel: dto.channel,
     counterpart: dto.counterpart,
-    createdAt: parseInstantOrEpoch(dto.createdAt),
-    stateHistory: dto.stateHistory ? dto.stateHistory.map(toStateTransition) : null,
+    createdAt: parseInstantOrEpoch(dto.date),
   };
 }
 
+/** `cursor` est celui qui a produit la page : il sert à la rejouer — contrat §6.7. */
 export function toTransactionPage(
   dto: ApiTransactionHistoryResponse,
+  cursor: string | null,
 ): Page<Transaction> {
   return {
-    items: dto.transactions.map(toTransaction),
-    page: dto.page,
-    size: dto.size,
-    totalElements: dto.totalElements,
-    totalPages: dto.totalPages,
-    hasNext: dto.hasNext,
+    items: dto.items.map(toTransaction),
+    cursor,
+    nextCursor: dto.nextCursor,
   };
 }

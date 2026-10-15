@@ -23,15 +23,13 @@ class TransferE2ETest extends AbstractE2ETest {
         SetupData sender   = setupCustomerWithAccount("sender@example.com",   "Sender",   "+225", "07000003001", "1234");
         setupCustomerWithAccount("receiver@example.com", "Receiver", "+225", "07000003002", "5678");
 
-        // Fund sender first
         postWithToken("/payments/cash-in",
                 new CashInRequest("1234", CASH_IN_AMOUNT, "XAF", "ORANGE_MONEY"),
                 sender.tokens().accessToken(), TransactionResponse.class);
 
-        String receiverPhone = "+22507000003002";
         ResponseEntity<TransactionResponse> response = postWithToken(
                 "/payments/transfer",
-                new TransferRequest("1234", TRANSFER_AMOUNT, "XAF", receiverPhone),
+                new TransferRequest("1234", TRANSFER_AMOUNT, "XAF", "+225", "07000003002"),
                 sender.tokens().accessToken(),
                 TransactionResponse.class);
 
@@ -50,7 +48,7 @@ class TransferE2ETest extends AbstractE2ETest {
                 sender.tokens().accessToken(), TransactionResponse.class);
 
         postWithToken("/payments/transfer",
-                new TransferRequest("1234", TRANSFER_AMOUNT, "XAF", "+22507000003004"),
+                new TransferRequest("1234", TRANSFER_AMOUNT, "XAF", "+225", "07000003004"),
                 sender.tokens().accessToken(), TransactionResponse.class);
 
         var senderAccount   = accountRepository.findByCustomerId(sender.customerId()).orElseThrow();
@@ -67,10 +65,9 @@ class TransferE2ETest extends AbstractE2ETest {
         SetupData sender   = setupCustomerWithAccount("snd3@example.com", "Sender3",   "+225", "07000003005", "1234");
         setupCustomerWithAccount("rcv3@example.com", "Receiver3", "+225", "07000003006", "5678");
 
-        // No cash-in → balance is 0
         ResponseEntity<String> response = postWithToken(
                 "/payments/transfer",
-                new TransferRequest("1234", TRANSFER_AMOUNT, "XAF", "+22507000003006"),
+                new TransferRequest("1234", TRANSFER_AMOUNT, "XAF", "+225", "07000003006"),
                 sender.tokens().accessToken(),
                 String.class);
 
@@ -87,7 +84,7 @@ class TransferE2ETest extends AbstractE2ETest {
 
         ResponseEntity<String> response = postWithToken(
                 "/payments/transfer",
-                new TransferRequest("1234", TRANSFER_AMOUNT, "XAF", "+22500000000001"),
+                new TransferRequest("1234", TRANSFER_AMOUNT, "XAF", "+225", "00000000001"),
                 sender.tokens().accessToken(),
                 String.class);
 
@@ -104,7 +101,7 @@ class TransferE2ETest extends AbstractE2ETest {
 
         ResponseEntity<String> response = postWithToken(
                 "/payments/transfer",
-                new TransferRequest("1234", TRANSFER_AMOUNT, "XAF", "+22507000003009"),
+                new TransferRequest("1234", TRANSFER_AMOUNT, "XAF", "+225", "07000003009"),
                 sender.tokens().accessToken(),
                 String.class);
 
@@ -122,10 +119,36 @@ class TransferE2ETest extends AbstractE2ETest {
 
         ResponseEntity<String> response = postWithToken(
                 "/payments/transfer",
-                new TransferRequest("0000", TRANSFER_AMOUNT, "XAF", "+22507000003011"),
+                new TransferRequest("0000", TRANSFER_AMOUNT, "XAF", "+225", "07000003011"),
                 sender.tokens().accessToken(),
                 String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    void should_return_400_when_recipient_prefix_is_missing() {
+        SetupData sender = setupCustomerWithAccount("snd7@example.com", "Sender7", "+225", "07000003012", "1234");
+
+        ResponseEntity<String> response = postWithToken(
+                "/payments/transfer",
+                new TransferRequest("1234", TRANSFER_AMOUNT, "XAF", null, "07000003013"),
+                sender.tokens().accessToken(),
+                String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    void should_return_400_when_recipient_prefix_is_malformed() {
+        SetupData sender = setupCustomerWithAccount("snd8@example.com", "Sender8", "+225", "07000003014", "1234");
+
+        ResponseEntity<String> response = postWithToken(
+                "/payments/transfer",
+                new TransferRequest("1234", TRANSFER_AMOUNT, "XAF", "225", "07000003015"),
+                sender.tokens().accessToken(),
+                String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
 }

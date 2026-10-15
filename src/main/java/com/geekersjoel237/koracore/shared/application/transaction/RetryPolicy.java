@@ -16,9 +16,6 @@ public final class RetryPolicy {
         this.baseBackoffMillis = baseBackoffMillis;
     }
 
-    /**
-     * Five attempts, 50 ms of backoff per attempt plus jitter.
-     */
     public static RetryPolicy defaults() {
         return new RetryPolicy(5, 50L);
     }

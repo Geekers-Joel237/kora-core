@@ -15,7 +15,7 @@ src/components/
 ├── money/            Amount · BalanceHero · AmountKeypad · CurrencyBadge
 ├── input/            PinPad · OtpInput · TextField · PhoneField · Segmented · Toggle
 ├── display/          Card · ListRow · TransactionRow · StatusChip · Avatar
-│                     · SectionHeader · StateTimeline · MethodPicker
+│                     · SectionHeader · MethodPicker
 ├── action/           Button · IconButton · ActionTile · ActionBar
 └── overlay/          Sheet · Dialog · Menu
 ```
@@ -204,17 +204,17 @@ Appui → transition partagée vers le détail (§5.3 de `03-motion-and-feel.md`
 
 ```ts
 type StatusChipProps = {
-  state: TxState;                  // l'un des 11 états du contrat
+  outcome: OutcomeGroup;           // famille client : pending · success · failed · reversed
   size?: 'sm' | 'md';
   showIcon?: boolean;
 };
 ```
 
-Résout couleur et icône via l'unique table du §2.4 du design system. Un état `pending` ajoute un point pulsant à gauche du libellé.
+Résout couleur, icône et libellé (En cours · Terminée · Échouée · Remboursée) via l'unique table du §2.4 du design system. Une famille `pending` ajoute un point pulsant à gauche du libellé. Jamais un état technique : le contrat ne les expose plus dans l'historique.
 
-### `StateTimeline`
+### ~~`StateTimeline`~~ — retiré le 2026-10-13
 
-**Le composant signature.** Rend `stateHistory` de `GET /payments/history?detail=true`.
+Le backend n'expose plus l'historique d'états au client (FR-43 retirée). La spécification ci-dessous est conservée pour mémoire ; le composant a été supprimé du code.
 
 ```
    ●  Initiée                                     11:42:13

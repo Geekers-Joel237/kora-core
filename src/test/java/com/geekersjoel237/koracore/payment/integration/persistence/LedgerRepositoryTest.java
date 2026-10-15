@@ -30,7 +30,6 @@ class LedgerRepositoryTest extends AbstractRepositoryTest {
 
     @Test
     void should_throw_illegal_state_when_no_ledger_exists() {
-        // Soft-delete all existing ledger rows within this transaction
         jpaRepository.deleteAll();
 
         // Spring's @Repository translates IllegalStateException → InvalidDataAccessApiUsageException

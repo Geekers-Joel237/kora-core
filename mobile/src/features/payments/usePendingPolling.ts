@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 
 import { getHistory } from '@/features/history/api';
-import { isTerminalState, type Transaction } from '@/types/domain';
+import type { OutcomeGroup, Transaction } from '@/types/domain';
 
 /**
  * Suivi d'une opération en cours — contrat §6.4.
@@ -15,18 +15,21 @@ import { isTerminalState, type Transaction } from '@/types/domain';
  * arrière-plan. Sonder au-delà grèverait la batterie et le budget data pour un
  * gain nul.
  *
+ * L'opération se retrouve par sa **référence** : l'historique n'expose pas
+ * `transactionId`, mais la référence du reçu est la même valeur.
+ *
  * `CONTOURNEMENT(étape-5)` — supprimé le jour où un canal d'événements existe.
  */
 const INTERVAL_MS = 5000;
 const MAX_ATTEMPTS = 12;
 const PAGE_SIZE = 10;
 
-export function usePendingPolling(transactionId: string | null, active: boolean) {
-  const [state, setState] = useState<string | null>(null);
+export function usePendingPolling(reference: string | null, active: boolean) {
+  const [outcome, setOutcome] = useState<OutcomeGroup | null>(null);
   const attempts = useRef(0);
 
   useEffect(() => {
-    if (!transactionId || !active) return;
+    if (!reference || !active) return;
 
     attempts.current = 0;
     let cancelled = false;
@@ -42,12 +45,12 @@ export function usePendingPolling(transactionId: string | null, active: boolean)
       attempts.current += 1;
 
       try {
-        const page = await getHistory({ size: PAGE_SIZE });
-        const found: Transaction | undefined = page.items.find((tx) => tx.id === transactionId);
+        const page = await getHistory({ limit: PAGE_SIZE });
+        const found: Transaction | undefined = page.items.find((tx) => tx.reference === reference);
 
         if (found && !cancelled) {
-          setState(found.state);
-          if (isTerminalState(found.state)) return;
+          setOutcome(found.outcome);
+          if (found.outcome !== 'pending') return;
         }
       } catch {
         // Un échec de sondage n'est pas une erreur d'écran : l'opération suit
@@ -69,7 +72,7 @@ export function usePendingPolling(transactionId: string | null, active: boolean)
       stop();
       subscription.remove();
     };
-  }, [transactionId, active]);
+  }, [reference, active]);
 
-  return state;
+  return outcome;
 }

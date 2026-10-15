@@ -4,20 +4,20 @@ import com.geekersjoel237.koracore.payment.application.query.balance.BalanceQuer
 import com.geekersjoel237.koracore.payment.application.query.balance.BalanceResult;
 import com.geekersjoel237.koracore.payment.domain.exception.AccountNotFoundException;
 import com.geekersjoel237.koracore.payment.ports.in.BalanceQueryHandler;
-import com.geekersjoel237.koracore.payment.ports.out.query.AccountQueryPort;
+import com.geekersjoel237.koracore.payment.ports.out.query.ReadAccountRepository;
 
 
 public final class BalanceService implements BalanceQueryHandler {
 
-    private final AccountQueryPort accounts;
+    private final ReadAccountRepository repository;
 
-    public BalanceService(AccountQueryPort accounts) {
-        this.accounts = accounts;
+    public BalanceService(ReadAccountRepository repository) {
+        this.repository = repository;
     }
 
     @Override
     public BalanceResult execute(BalanceQuery query) {
-        return accounts.findBalance(query.customerId())
+        return repository.findBalance(query.customerId())
                 .orElseThrow(() -> new AccountNotFoundException(
                         "Account not found for customer: " + query.customerId().value()));
     }

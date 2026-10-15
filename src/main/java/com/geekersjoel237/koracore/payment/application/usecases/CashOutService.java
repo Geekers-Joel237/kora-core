@@ -3,14 +3,14 @@ package com.geekersjoel237.koracore.payment.application.usecases;
 import com.geekersjoel237.koracore.auth.domain.exception.CustomerNotFoundException;
 import com.geekersjoel237.koracore.auth.domain.model.Customer;
 import com.geekersjoel237.koracore.auth.ports.out.repository.CustomerRepository;
-import com.geekersjoel237.koracore.auth.domain.vo.PhoneNumber;
+import com.geekersjoel237.koracore.shared.domain.vo.PhoneNumber;
 import com.geekersjoel237.koracore.payment.application.command.CashOutCommand;
 import com.geekersjoel237.koracore.payment.ports.in.CashOutCommandHandler;
 import com.geekersjoel237.koracore.payment.ports.out.security.PinVerifier;
 import com.geekersjoel237.koracore.payment.application.result.PaymentResult;
 import com.geekersjoel237.koracore.payment.domain.SystemConstants;
 import com.geekersjoel237.koracore.payment.domain.enums.ProviderOperationType;
-import com.geekersjoel237.koracore.payment.domain.enums.ResourceType;
+import com.geekersjoel237.koracore.payment.domain.model.BalanceCache;
 import com.geekersjoel237.koracore.payment.domain.enums.TransactionType;
 import com.geekersjoel237.koracore.payment.domain.exception.AccountNotFoundException;
 import com.geekersjoel237.koracore.payment.domain.exception.AccountSuspendedException;
@@ -21,7 +21,7 @@ import com.geekersjoel237.koracore.payment.domain.model.Transaction;
 import com.geekersjoel237.koracore.payment.ports.out.repository.AccountRepository;
 import com.geekersjoel237.koracore.payment.ports.out.repository.AuthorizationRecordRepository;
 import com.geekersjoel237.koracore.payment.ports.out.repository.LedgerRepository;
-import com.geekersjoel237.koracore.payment.ports.out.provider.ProviderPort;
+import com.geekersjoel237.koracore.payment.ports.out.provider.PaymentProviderPort;
 import com.geekersjoel237.koracore.payment.ports.out.repository.TransactionRepository;
 import com.geekersjoel237.koracore.payment.ports.out.repository.TrxHistoricStatesRepository;
 import com.geekersjoel237.koracore.payment.domain.vo.AuthorizationResult;
@@ -40,29 +40,29 @@ public final class CashOutService implements CashOutCommandHandler {
     private final TransactionBoundary boundary;
     private final RetryPolicy retry;
     private final PinVerifier pinVerifier;
-    private final AccountRepository accounts;
-    private final CustomerRepository customers;
-    private final TransactionRepository transactions;
-    private final TrxHistoricStatesRepository history;
-    private final ProviderPort provider;
-    private final LedgerRepository ledgers;
-    private final AuthorizationRecordRepository authorizations;
+    private final AccountRepository accountRepository;
+    private final CustomerRepository customerRepository;
+    private final TransactionRepository transactionRepository;
+    private final TrxHistoricStatesRepository trxHistoricStatesRepository;
+    private final PaymentProviderPort provider;
+    private final LedgerRepository ledgerRepository;
+    private final AuthorizationRecordRepository authorizationRecordRepository;
 
     public CashOutService(TransactionBoundary boundary, RetryPolicy retry, PinVerifier pinVerifier,
-                          AccountRepository accounts, CustomerRepository customers,
-                          TransactionRepository transactions, TrxHistoricStatesRepository history,
-                          ProviderPort provider, LedgerRepository ledgers,
-                          AuthorizationRecordRepository authorizations) {
+                          AccountRepository accountRepository, CustomerRepository customerRepository,
+                          TransactionRepository transactionRepository, TrxHistoricStatesRepository trxHistoricStatesRepository,
+                          PaymentProviderPort provider, LedgerRepository ledgerRepository,
+                          AuthorizationRecordRepository authorizationRecordRepository) {
         this.boundary = boundary;
         this.retry = retry;
         this.pinVerifier = pinVerifier;
-        this.accounts = accounts;
-        this.customers = customers;
-        this.transactions = transactions;
-        this.history = history;
+        this.accountRepository = accountRepository;
+        this.customerRepository = customerRepository;
+        this.transactionRepository = transactionRepository;
+        this.trxHistoricStatesRepository = trxHistoricStatesRepository;
         this.provider = provider;
-        this.ledgers = ledgers;
-        this.authorizations = authorizations;
+        this.ledgerRepository = ledgerRepository;
+        this.authorizationRecordRepository = authorizationRecordRepository;
     }
 
     @Override
@@ -91,10 +91,8 @@ public final class CashOutService implements CashOutCommandHandler {
                 boundary.execute(() -> settle(initiated.transactionId(), authorization, cmd)));
     }
 
-    // ── TX-1 ──────────────────────────────────────────────────────────────────
-
     private Initiated initiate(CashOutCommand cmd) {
-        Customer customer = customers.findById(cmd.customerId())
+        Customer customer = customerRepository.findById(cmd.customerId())
                 .orElseThrow(() -> new CustomerNotFoundException(
                         "Customer not found: " + cmd.customerId().value()));
         if (customer.isSuspended())
@@ -102,46 +100,43 @@ public final class CashOutService implements CashOutCommandHandler {
                     "Account suspended for customer: " + cmd.customerId().value());
 
         // No lock here: TX-2 reloads the wallet with one before writing to it.
-        // Ledger.initiate below refuses the movement if this balance is short.
-        Account wallet = accounts.findByCustomerId(cmd.customerId())
+        Account wallet = accountRepository.findByCustomerId(cmd.customerId())
                 .orElseThrow(() -> new AccountNotFoundException(
                         "Account not found for customer: " + cmd.customerId().value()));
         Account floatAccount = loadFloatAccount();
 
-        Transaction tx = ledgers.findFirst().initiate(wallet, floatAccount,
+        Transaction tx = ledgerRepository.findFirst().initiate(wallet, floatAccount,
                 TransactionType.CASH_OUT, cmd.paymentMethod(), cmd.amount());
-        transactions.save(tx);
-        history.save(tx.history().getFirst());
+        transactionRepository.save(tx);
+        trxHistoricStatesRepository.save(tx.history().getFirst());
 
         return new Initiated(tx.snapshot().transactionId(), customer.snapshot().phoneNumber());
     }
 
-    // ── TX-2 and its two failure siblings ────────────────────────────────────
-
     private PaymentResult settle(Id transactionId, AuthorizationResult authorization, CashOutCommand cmd) {
         Transaction tx = reload(transactionId);
-        Account wallet = accounts.findByCustomerIdForUpdate(cmd.customerId())
+        Account wallet = accountRepository.findByCustomerIdForUpdate(cmd.customerId())
                 .orElseThrow(() -> new AccountNotFoundException(
                         "Account not found for customer: " + cmd.customerId().value()));
         Account floatAccount = loadFloatAccount();
 
         AuthorizationRecord record = AuthorizationRecord.create(
                 transactionId, authorization.providerReference(), cmd.amount(), AUTHORIZATION_TTL);
-        authorizations.save(record);
+        authorizationRecordRepository.save(record);
 
         tx.authorize();
         tx.capture();
-        ledgers.findFirst().writeEntries(tx, wallet, floatAccount, cmd.amount());
+        ledgerRepository.findFirst().writeEntries(tx, wallet, floatAccount, cmd.amount());
         applyBalanceUpdate(wallet, floatAccount, cmd.amount());
         record.consume();
-        authorizations.save(record);
+        authorizationRecordRepository.save(record);
 
         tx.pendSettlement();
         tx.settle();
         tx.markCompleted();
 
         flushHistorySince(tx);
-        transactions.save(tx);
+        transactionRepository.save(tx);
         return PaymentResult.of(tx);
     }
 
@@ -149,7 +144,7 @@ public final class CashOutService implements CashOutCommandHandler {
         Transaction tx = reload(transactionId);
         tx.failAuthorization();
         flushHistorySince(tx);
-        transactions.save(tx);
+        transactionRepository.save(tx);
         return PaymentResult.of(tx);
     }
 
@@ -158,21 +153,19 @@ public final class CashOutService implements CashOutCommandHandler {
 
         AuthorizationRecord record = AuthorizationRecord.create(
                 transactionId, authorization.providerReference(), cmd.amount(), AUTHORIZATION_TTL);
-        authorizations.save(record);
+        authorizationRecordRepository.save(record);
         tx.authorize();
         record.cancel();
-        authorizations.save(record);
+        authorizationRecordRepository.save(record);
         tx.failCapture();
 
         flushHistorySince(tx);
-        transactions.save(tx);
+        transactionRepository.save(tx);
         return PaymentResult.of(tx);
     }
 
-    // ── helpers ───────────────────────────────────────────────────────────────
-
     private Transaction reload(Id transactionId) {
-        return transactions.findById(transactionId)
+        return transactionRepository.findById(transactionId)
                 .orElseThrow(() -> new AccountNotFoundException(
                         "Transaction not found: " + transactionId.value()));
     }
@@ -180,32 +173,20 @@ public final class CashOutService implements CashOutCommandHandler {
     private Account loadFloatAccount() {
         // No lock: the float balance is never written (ADR-001), so locking it would
         // serialize every cash-in and cash-out for nothing.
-        return accounts.findFloatByProviderId(SystemConstants.PROVIDER_ID)
+        return accountRepository.findFloatByProviderId(SystemConstants.PROVIDER_ID)
                 .orElseThrow(() -> new AccountNotFoundException(
                         "Float account not found for provider: " + SystemConstants.PROVIDER_ID.value()));
     }
 
-    /**
-     * The denormalized read cache, written in the same transaction as the ledger
-     * entries (ADR-001, rule 9). The float is skipped: its stored balance stays at
-     * zero by design and is audited through {@code ledger_entries}.
-     */
     private void applyBalanceUpdate(Account from, Account to, Amount amount) {
-        if (from.snapshot().accountType().resourceType() == ResourceType.CUSTOMER_ACCOUNT) {
-            from.debit(amount);
-            accounts.save(from);
-        }
-        if (to.snapshot().accountType().resourceType() == ResourceType.CUSTOMER_ACCOUNT) {
-            to.credit(amount);
-            accounts.save(to);
-        }
+        BalanceCache.post(from, to, amount).forEach(accountRepository::save);
     }
 
     /**
      * Index 0 was persisted by TX-1; everything after it happened in memory since.
      */
     private void flushHistorySince(Transaction tx) {
-        tx.history().subList(1, tx.history().size()).forEach(history::save);
+        tx.history().subList(1, tx.history().size()).forEach(trxHistoricStatesRepository::save);
     }
 
     private record Initiated(Id transactionId, PhoneNumber phone) {

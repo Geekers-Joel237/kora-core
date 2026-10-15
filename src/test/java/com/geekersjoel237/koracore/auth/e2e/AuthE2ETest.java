@@ -75,7 +75,6 @@ class AuthE2ETest extends AbstractE2ETest {
 
     @Test
     void should_login_with_valid_pin_and_return_otp() {
-        // First register + verify OTP to activate the account
         register(FULL_NAME, EMAIL, PREFIX, PHONE, PIN);
         String otp = waitAndGetOtpCode(EMAIL);
         verifyOtp(EMAIL, otp);
@@ -110,8 +109,6 @@ class AuthE2ETest extends AbstractE2ETest {
         assertThat(newTokens.accessToken()).isNotBlank();
         assertThat(newTokens.refreshToken()).isNotBlank();
     }
-
-    // ── Validation tests ──────────────────────────────────────────────────────
 
     @Test
     void should_return_400_when_email_is_invalid() {

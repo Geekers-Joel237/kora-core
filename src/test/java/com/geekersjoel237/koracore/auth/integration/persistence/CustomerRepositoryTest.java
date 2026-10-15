@@ -6,7 +6,7 @@ import com.geekersjoel237.koracore.auth.domain.model.Customer;
 import com.geekersjoel237.koracore.auth.domain.model.User;
 import com.geekersjoel237.koracore.auth.ports.out.security.CustomerPinEncoder;
 import com.geekersjoel237.koracore.shared.domain.vo.Id;
-import com.geekersjoel237.koracore.auth.domain.vo.PhoneNumber;
+import com.geekersjoel237.koracore.shared.domain.vo.PhoneNumber;
 import com.geekersjoel237.koracore.auth.adapters.out.persistence.entities.CustomerEntity;
 import com.geekersjoel237.koracore.auth.adapters.out.persistence.entities.UserEntity;
 import com.geekersjoel237.koracore.auth.adapters.out.persistence.repository.SpringDataCustomerRepository;
@@ -32,8 +32,6 @@ class CustomerRepositoryTest extends AbstractRepositoryTest {
     @Autowired
     private CustomerPinEncoder pinEncoder;
 
-    // ── helpers ──────────────────────────────────────────────────────────────
-
     private Customer buildAndSave(String email, String prefix, String number) {
         Id id = Id.generate();
         User user = User.create(id, "Test User", email, Role.CUSTOMER);
@@ -42,8 +40,6 @@ class CustomerRepositoryTest extends AbstractRepositoryTest {
         repository.save(customer);
         return customer;
     }
-
-    // ── tests ─────────────────────────────────────────────────────────────────
 
     @Test
     void should_persist_and_return_intact_round_trip() {
@@ -95,7 +91,6 @@ class CustomerRepositoryTest extends AbstractRepositoryTest {
     void should_throw_constraint_violation_when_phone_number_is_duplicated() {
         buildAndSave("dave@example.com", "+225", "07000000004");
 
-        // Attempt to save another customer with the same phone (prefix+number)
         Id id2 = Id.generate();
         UserEntity user2 = UserEntity.builder()
                 .fullName("Dave Clone")
@@ -147,7 +142,6 @@ class CustomerRepositoryTest extends AbstractRepositoryTest {
         Customer customer = buildAndSave("frank@example.com", "+225", "07000000006");
         Id id = customer.snapshot().customerId();
 
-        // Load the raw entity to check the stored pin
         CustomerEntity entity = jpaRepository.findById(id.value()).orElseThrow();
 
         assertThat(entity.getHashedPin()).isNotEqualTo("1234");

@@ -35,14 +35,14 @@ Aucun de ces trois points n'est un défaut de code : ce sont des vérifications 
 - ✅ Aucun `TouchableOpacity` ni `Animated` de React Native dans la base de code — *lint*
 - ✅ Aucun indicateur circulaire centré nulle part — *aucun `ActivityIndicator` dans l'arbre ; les états de chargement sont des squelettes ou les trois points de `Button`*
 - ✅ Aucun squelette n'apparaît sur une réponse de moins de 200 ms — *`useDelayedLoading`, testé, désormais câblé sur l'accueil, l'activité et le détail (**il ne l'était pas avant le lot 10**)*
-- ☑︎ Tout squelette reproduit la forme exacte du contenu final — *`SkeletonTransactionList` reprend `layout.rowHeight` et le gabarit de `TransactionRow` ; `SkeletonTimeline` reprend le rail et les nœuds de `StateTimeline`*
+- ☑︎ Tout squelette reproduit la forme exacte du contenu final — *`SkeletonTransactionList` reprend `layout.rowHeight` et le gabarit de `TransactionRow`*
 - ⏳ Le geste de retour par balayage suit le doigt et tient compte de la vélocité
 - ✅ Le glissement d'une feuille modale oppose une résistance progressive au-delà du point haut — *`OVERDRAG_RESISTANCE` dans `Sheet`, couvert par `interaction.test.tsx`*
 - ⏳ La compression du solde au défilement est fluide, sans à-coup ni saut
 - ✅ Le compteur de solde part de la valeur précédente après un paiement, pas de zéro — *`AnimatedInteger` interpole depuis la valeur montée, testé*
 - ✅ La secousse du `PinPad` a une amplitude décroissante — *`SHAKE_SEQUENCE`, testé*
 - ✅ La chorégraphie de succès respecte les sept temps du §6.4 de `03-motion-and-feel.md` — *`SUCCESS_TIMELINE`, testé*
-- ☑︎ Le nœud courant de `StateTimeline` pulse tant que l'opération n'est pas terminale — *conditionné par `isTerminalState`, lui-même testé*
+- ☑︎ La puce d'une opération en cours pulse tant que son statut est `PENDING` — *`StatusChip`, famille `pending`* (la frise d'états a été retirée le 2026-10-13)
 
 ## 2. Haptique
 
@@ -187,8 +187,8 @@ Trois faits pour trancher :
 | 11 | Jeton de rafraîchissement expiré | Feuille de reconnexion, retour à l'étape quittée |
 | 12 | PIN erroné trois fois | Message unifié, aucune déconnexion |
 | 13 | Historique de 200 opérations | Défilement à 60 fps, pagination fluide |
-| 14 | Filtre type + sens + période | Résultats corrects, requête correcte |
-| 15 | Détail d'une opération en cours | Frise pulsante, complétion en direct |
+| 14 | Filtre nature + statut + période | Résultats corrects, requête correcte (`kind`, `status`, jours `YYYY-MM-DD`) |
+| 15 | Détail d'une opération en cours | Puce pulsante, statut mis à jour en direct jusqu'à la fin |
 | 16 | Mode avion sur l'accueil | Bandeau, cache affiché, actions désactivées |
 | 17 | Bascule de thème | Aucun contraste cassé |
 | 18 | Bascule de langue | Aucune chaîne non traduite |

@@ -15,10 +15,10 @@ export type HistoryRow =
       key: string;
       transaction: Transaction;
       /**
-       * Page d'origine — **transportée jusqu'à l'écran de détail**, qui rejoue
-       * exactement cette requête faute de `GET /payments/{id}`. Contrat §6.7.
+       * Curseur de la page d'origine — **transporté jusqu'à l'écran de détail**,
+       * qui rejoue exactement cette page faute de `GET /payments/{id}`. Contrat §6.7.
        */
-      page: number;
+      cursor: string | null;
     };
 
 export interface HistoryRows {
@@ -53,9 +53,9 @@ export function toHistoryRows(pages: Page<Transaction>[]): HistoryRows {
 
       rows.push({
         kind: 'row',
-        key: transaction.id,
+        key: transaction.reference,
         transaction,
-        page: page.page,
+        cursor: page.cursor,
       });
     }
   }
@@ -66,11 +66,11 @@ export function toHistoryRows(pages: Page<Transaction>[]): HistoryRows {
 /** Retrouve une opération déjà chargée — sert d'affichage immédiat au détail. */
 export function findInPages(
   pages: Page<Transaction>[],
-  id: string,
-): { transaction: Transaction; page: number } | null {
+  reference: string,
+): { transaction: Transaction; cursor: string | null } | null {
   for (const page of pages) {
-    const transaction = page.items.find((item) => item.id === id);
-    if (transaction) return { transaction, page: page.page };
+    const transaction = page.items.find((item) => item.reference === reference);
+    if (transaction) return { transaction, cursor: page.cursor };
   }
   return null;
 }

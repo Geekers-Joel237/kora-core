@@ -25,26 +25,10 @@ import static com.geekersjoel237.koracore.shared.integration.persistence.EnumCol
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/**
- * Pins every enumerated column of the payment schema to the set the domain defines.
- *
- * <p>Before {@code V202609071725__constrain_enum_columns.sql} these columns were free
- * {@code VARCHAR(255)}. Nothing wrote a bad value — the application only ever goes
- * through {@code @Enumerated(STRING)} — but nothing stopped one either, and a
- * transaction sitting in an unknown state is a row the ledger has already counted and
- * the state machine can no longer read.
- *
- * <p>Each assertion below is an <em>equality</em>, not a containment. A constant added
- * to a Java enum without the migration that widens the constraint fails here, and so
- * does a constraint that still lists a constant the domain has dropped. That is the
- * only way the two lists stay one list.
- */
 class EnumColumnConstraintsDbTest extends AbstractRepositoryTest {
 
     @PersistenceContext
     private EntityManager em;
-
-    // ── accounts ──────────────────────────────────────────────────────────────
 
     @Test
     void accounts_resource_type_accepts_exactly_the_resource_types() {
@@ -52,13 +36,7 @@ class EnumColumnConstraintsDbTest extends AbstractRepositoryTest {
                 .isEqualTo(namesOf(ResourceType.values()));
     }
 
-    // ── transactions ──────────────────────────────────────────────────────────
-
-    /**
-     * {@code TransactionState} is an interface with 11 singletons rather than an enum,
-     * so the expected set is read off its declared fields. A twelfth state added to the
-     * interface lands here before it lands in the database.
-     */
+    // TransactionState is an interface of singletons, not an enum: the expected set is read off its fields.
     @Test
     void transactions_state_accepts_exactly_the_lifecycle_states() {
         assertThat(allowedValues(em, "transactions", "ck_transactions_state"))
@@ -82,15 +60,11 @@ class EnumColumnConstraintsDbTest extends AbstractRepositoryTest {
                 .isEqualTo(namesOf(PaymentMethod.values()));
     }
 
-    // ── ledger entries ────────────────────────────────────────────────────────
-
     @Test
     void ledger_entries_type_accepts_exactly_debit_and_credit() {
         assertThat(allowedValues(em, "ledger_entries", "ck_ledger_entries_type"))
                 .isEqualTo(namesOf(LedgerEntryType.values()));
     }
-
-    // ── state history ─────────────────────────────────────────────────────────
 
     @Test
     void trx_state_historics_old_state_accepts_exactly_the_lifecycle_states() {
@@ -110,21 +84,12 @@ class EnumColumnConstraintsDbTest extends AbstractRepositoryTest {
                 .isEqualTo(namesOf(TriggerSource.values()));
     }
 
-    // ── authorization records ─────────────────────────────────────────────────
-
     @Test
     void authorization_records_status_accepts_exactly_the_authorization_statuses() {
         assertThat(allowedValues(em, "authorization_records", "ck_authorization_records_status"))
                 .isEqualTo(namesOf(AuthorizationStatus.values()));
     }
 
-    // ── the constraints are live, not merely present ──────────────────────────
-
-    /**
-     * Reading the catalog proves the constraint was written. This proves the database
-     * acts on it, on the column where a wrong value is worst: an unknown state is a
-     * transaction the lifecycle can neither advance nor reverse.
-     */
     @Test
     void the_database_refuses_a_state_the_domain_does_not_define() {
         assertThatThrownBy(() -> insertTransactionInState("TELEPORTED"))
@@ -144,8 +109,6 @@ class EnumColumnConstraintsDbTest extends AbstractRepositoryTest {
                 .hasStackTraceContaining("violates check constraint")
                 .hasStackTraceContaining("ck_trx_state_historics_old_state");
     }
-
-    // ── helpers ───────────────────────────────────────────────────────────────
 
     /**
      * Native SQL on purpose: going through the repository would only prove that
@@ -180,7 +143,6 @@ class EnumColumnConstraintsDbTest extends AbstractRepositoryTest {
                 .executeUpdate();
     }
 
-    /** The names of the singletons declared on {@link TransactionState}. */
     private static Set<String> lifecycleStates() {
         return Arrays.stream(TransactionState.class.getDeclaredFields())
                 .filter(field -> Modifier.isStatic(field.getModifiers()))

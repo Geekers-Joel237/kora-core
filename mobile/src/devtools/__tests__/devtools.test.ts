@@ -5,12 +5,6 @@ import {
   type FieldExpectation,
 } from '@/devtools/drift/detector';
 import { toMarkdown, type JournalEntry } from '@/devtools/journal/store';
-import {
-  formatDuration,
-  interStateDurations,
-  totalDuration,
-} from '@/devtools/transactions/durations';
-import type { StateTransition } from '@/types/domain';
 
 // ───────────────────────────────────────── Fabrication d'un `/v3/api-docs` ──
 
@@ -125,11 +119,11 @@ describe('détecteur de dérive — docs/10-validation-mode.md §5', () => {
   it('signale une nouvelle valeur d’énumération — le cas le plus précieux', () => {
     const doc = buildDoc();
     const schema = schemaFor(doc, '/payments/history', 'get');
-    const items = (schema.properties as Json).transactions as Json;
+    const items = (schema.properties as Json).items as Json;
     const item = items.items as Json;
-    (item.properties as Json).state = {
+    (item.properties as Json).status = {
       type: 'string',
-      enum: ['COMPLETED', 'REVERSED', 'PARTIALLY_REFUNDED'],
+      enum: ['COMPLETED', 'REFUNDED', 'PARTIALLY_REFUNDED'],
     };
 
     const report = detectDrift(doc);
@@ -141,17 +135,16 @@ describe('détecteur de dérive — docs/10-validation-mode.md §5', () => {
     expect(finding?.message).not.toContain('COMPLETED');
   });
 
-  it('descend dans les objets imbriqués de `stateHistory`', () => {
+  it('descend dans les objets d’un tableau — les lignes de l’historique', () => {
     const doc = buildDoc();
     const schema = schemaFor(doc, '/payments/history', 'get');
-    const item = ((schema.properties as Json).transactions as Json).items as Json;
-    const history = (item.properties as Json).stateHistory as Json;
-    delete ((history.items as Json).properties as Json).newState;
+    const item = ((schema.properties as Json).items as Json).items as Json;
+    delete (item.properties as Json).reference;
 
     const report = detectDrift(doc);
     const finding = report.findings.find((entry) => entry.category === 'required-field-missing');
 
-    expect(finding?.message).toContain('stateHistory[].newState');
+    expect(finding?.message).toContain('items[].reference');
   });
 
   it('signale un endpoint inconnu en information', () => {
@@ -192,56 +185,6 @@ describe('détecteur de dérive — docs/10-validation-mode.md §5', () => {
       expect(report.findings[0]?.category).toBe('document-unreadable');
       expect(report.blocking).toBe(1);
     }
-  });
-});
-
-// ──────────────────────────────────────────────────── Durées inter-états ────
-
-function transition(to: string, offsetMs: number, from: string | null = null): StateTransition {
-  return { from, to, occurredAt: new Date(1_800_000_000_000 + offsetMs) };
-}
-
-describe('durées entre états — docs/10-validation-mode.md §4', () => {
-  it('calcule le delta entre chaque transition', () => {
-    const durations = interStateDurations([
-      transition('INITIALIZED', 0),
-      transition('AUTHORIZED', 200, 'INITIALIZED'),
-      transition('CAPTURED', 350, 'AUTHORIZED'),
-    ]);
-
-    expect(durations).toEqual([
-      { from: 'INITIALIZED', to: 'AUTHORIZED', ms: 200 },
-      { from: 'AUTHORIZED', to: 'CAPTURED', ms: 150 },
-    ]);
-  });
-
-  it('trie avant de soustraire — aucun delta négatif', () => {
-    const durations = interStateDurations([
-      transition('CAPTURED', 350),
-      transition('INITIALIZED', 0),
-      transition('AUTHORIZED', 200),
-    ]);
-
-    expect(durations.every((duration) => duration.ms >= 0)).toBe(true);
-    expect(durations[0]?.to).toBe('AUTHORIZED');
-  });
-
-  it('ne produit rien sur une frise d’un seul état', () => {
-    expect(interStateDurations([transition('INITIALIZED', 0)])).toEqual([]);
-    expect(interStateDurations([])).toEqual([]);
-    expect(totalDuration([transition('INITIALIZED', 0)])).toBe(0);
-  });
-
-  it('mesure la durée totale du parcours', () => {
-    expect(
-      totalDuration([transition('INITIALIZED', 0), transition('COMPLETED', 4200)]),
-    ).toBe(4200);
-  });
-
-  it('formate sans conversion mentale', () => {
-    expect(formatDuration(842)).toBe('842 ms');
-    expect(formatDuration(2400)).toBe('2,4 s');
-    expect(formatDuration(65_000)).toBe('1 min 05 s');
   });
 });
 

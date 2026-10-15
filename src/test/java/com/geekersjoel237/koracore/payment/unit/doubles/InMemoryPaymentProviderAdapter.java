@@ -3,19 +3,19 @@ package com.geekersjoel237.koracore.payment.unit.doubles;
 import com.geekersjoel237.koracore.payment.domain.enums.PaymentMethod;
 import com.geekersjoel237.koracore.payment.domain.enums.ProviderOperationType;
 import com.geekersjoel237.koracore.payment.domain.exception.PaymentProviderException;
-import com.geekersjoel237.koracore.payment.ports.out.provider.ProviderPort;
+import com.geekersjoel237.koracore.payment.ports.out.provider.PaymentProviderPort;
 import com.geekersjoel237.koracore.shared.domain.vo.Amount;
 import com.geekersjoel237.koracore.payment.domain.vo.AuthorizationResult;
 import com.geekersjoel237.koracore.payment.domain.vo.CaptureResult;
 import com.geekersjoel237.koracore.shared.domain.vo.Id;
-import com.geekersjoel237.koracore.auth.domain.vo.PhoneNumber;
+import com.geekersjoel237.koracore.shared.domain.vo.PhoneNumber;
 import com.geekersjoel237.koracore.payment.domain.vo.ReverseResult;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
-public class InMemoryProviderAdapter implements ProviderPort {
+public class InMemoryPaymentProviderAdapter implements PaymentProviderPort {
 
     private Behavior behavior;
     private ProviderOperationType lastOperationType = null;
@@ -23,7 +23,7 @@ public class InMemoryProviderAdapter implements ProviderPort {
     private int authorizeCalls = 0;
     private int captureCalls = 0;
 
-    public InMemoryProviderAdapter(Behavior behavior) {
+    public InMemoryPaymentProviderAdapter(Behavior behavior) {
         this.behavior = behavior;
     }
 
@@ -78,9 +78,7 @@ public class InMemoryProviderAdapter implements ProviderPort {
 
     public enum Behavior {
         SUCCESS,
-        /** Fails on authorize() — the default failure mode. Alias: {@link #FAIL}. */
         FAIL_ON_AUTHORIZE,
-        /** Fails on capture() — authorize() still succeeds. */
         FAIL_ON_CAPTURE,
         /** Backward-compatible alias for {@link #FAIL_ON_AUTHORIZE}. */
         FAIL

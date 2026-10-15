@@ -113,6 +113,8 @@ management:
 # Token and OTP lifetimes are product policy, not environment tuning: the same
 # numbers hold on a laptop and under load. A profile may still override them.
 kora:
+  # One country, one currency: history days are read on the customer's calendar.
+  time-zone: Africa/Douala
   security:
     jwt:
       secret: ${JWT_SECRET}

@@ -1,14 +1,11 @@
 package com.geekersjoel237.koracore.payment.domain.model.state;
 
-/**
- * Created on 09/09/2026
- *
- * @author Geekers_Joel237
- **/
 public class UnknownState implements TransactionState {
     @Override
     public TransactionState transitionTo(TransactionState next) {
-        return next;
+        if (next instanceof AuthorizedState || next instanceof CapturedState)
+            return next;
+        throw new IllegalStateException("Unknown state transition");
     }
 
     @Override

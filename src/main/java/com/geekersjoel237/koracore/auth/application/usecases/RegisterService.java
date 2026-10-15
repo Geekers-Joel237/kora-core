@@ -11,7 +11,7 @@ import com.geekersjoel237.koracore.auth.domain.model.User;
 import com.geekersjoel237.koracore.auth.ports.out.security.CustomerPinEncoder;
 import com.geekersjoel237.koracore.auth.ports.out.repository.CustomerRepository;
 import com.geekersjoel237.koracore.auth.ports.out.repository.UserRepository;
-import com.geekersjoel237.koracore.auth.domain.vo.PhoneNumber;
+import com.geekersjoel237.koracore.shared.domain.vo.PhoneNumber;
 import com.geekersjoel237.koracore.payment.domain.model.Account;
 import com.geekersjoel237.koracore.payment.ports.out.repository.AccountRepository;
 import com.geekersjoel237.koracore.shared.ports.out.transaction.TransactionBoundary;

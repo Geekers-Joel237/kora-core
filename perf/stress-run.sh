@@ -2,9 +2,9 @@
 # stress-run.sh — Lance le stress test k6 (identification du point de rupture).
 # Usage : ./perf/stress-run.sh [BASE_URL]
 #
-# Profil : paliers progressifs 5 → 10 → 20 → 30 → 50 req/sec (3 min chacun)
-# Arrêt conditionnel : p(95) > 500ms OU error rate > 5%
-# Durée max : ~22 min (si aucune rupture)
+# Profil : paliers 25 → 50 → 80 → 100 → 130 → 160 → 200 req/sec (2 min chacun)
+# Arrêt conditionnel : p(95) > 5 000ms OU error rate > 5%
+# Durée max : ~21 min (si aucune rupture) + setup ~1 min
 #
 # IMPORTANT : ce test va intentionnellement stresser le système.
 #             Ne pas lancer en production.
@@ -54,14 +54,16 @@ banner() {
 print_profile() {
   echo -e "${YELLOW}  Profil de charge${NC}"
   echo "  ┌─────────────────────────────────────────────────"
-  echo "  │  Palier 1  :   5 req/sec  ×  3 min"
-  echo "  │  Palier 2  :  10 req/sec  ×  3 min"
-  echo "  │  Palier 3  :  20 req/sec  ×  3 min"
-  echo "  │  Palier 4  :  30 req/sec  ×  3 min"
-  echo "  │  Palier 5  :  50 req/sec  ×  3 min"
+  echo "  │  Palier 1  :  25 req/sec  ×  2 min"
+  echo "  │  Palier 2  :  50 req/sec  ×  2 min"
+  echo "  │  Palier 3  :  80 req/sec  ×  2 min  (bas Step 3)"
+  echo "  │  Palier 4  : 100 req/sec  ×  2 min  (haut Step 3)"
+  echo "  │  Palier 5  : 130 req/sec  ×  2 min"
+  echo "  │  Palier 6  : 160 req/sec  ×  2 min"
+  echo "  │  Palier 7  : 200 req/sec  ×  2 min"
   echo "  │"
-  echo "  │  Arrêt si  :  p(95) > 500ms  OU  error rate > 5%"
-  echo "  │  Durée max :  ~22 min"
+  echo "  │  Arrêt si  :  p(95) > 5 000ms  OU  error rate > 5%"
+  echo "  │  Durée max :  ~21 min + setup ~1 min"
   echo "  └─────────────────────────────────────────────────"
   echo ""
   echo -e "${RED}  ⚠ Ce test va intentionnellement saturer le système.${NC}"
@@ -175,7 +177,7 @@ main() {
   echo ""
   if run_stress; then
     echo ""
-    success "Stress test terminé sans rupture détectée à 50 req/sec"
+    success "Stress test terminé sans rupture détectée à 200 req/sec — lire dropped_iterations et le p95 par palier"
     echo ""
     echo -e "${GREEN}  → Analyse dans Grafana : ${GRAFANA_DASHBOARD}${NC}"
     echo ""

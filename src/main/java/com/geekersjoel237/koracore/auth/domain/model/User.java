@@ -26,15 +26,19 @@ public class User {
     }
 
     public static User create(Id id, String fullName, String email, Role role) {
+        validateUser(id, fullName, email, role);
+        return new User(id, fullName, email, role, UserStatus.VERIFIED);
+    }
+
+    private static void validateUser(Id id, String fullName, String email, Role role) {
         if (id == null)
-            throw new IllegalArgumentException("User id cannot be null");
+            throw new IllegalArgumentException("User id cannot be blank");
         if (fullName == null || fullName.isBlank())
             throw new IllegalArgumentException("User fullName cannot be blank");
         if (email == null || !EMAIL_PATTERN.matcher(email).matches())
             throw new IllegalArgumentException("User email is invalid: " + email);
         if (role == null)
             throw new IllegalArgumentException("User role cannot be null");
-        return new User(id, fullName, email, role, UserStatus.VERIFIED);
     }
 
     public static User createFromSnapshot(Snapshot snapshot) {

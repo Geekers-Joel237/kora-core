@@ -6,7 +6,7 @@ import com.geekersjoel237.koracore.shared.domain.vo.Id;
 import java.util.Optional;
 
 
-public interface AccountQueryPort {
+public interface ReadAccountRepository {
 
     Optional<BalanceResult> findBalance(Id customerId);
 

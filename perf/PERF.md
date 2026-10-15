@@ -77,38 +77,45 @@ k6 dashboard ID: **2587** (auto-provisioned)
 
 ### Test Scenarios
 
+Calibrated for **Step 3** (ROADMAP: 80–100 req/s, P95 < 300 ms) — ADR-005, Step 3 amendment.
+
 | Script | Users | Rate / VUs | Scenario duration | Setup time | Purpose |
 |--------|-------|------------|-------------------|------------|---------|
-| `smoke.js` | 2 | 1 VU | 2 min | ~10s | Sanity check — "does it work?" |
-| `load.js` | 60 | 0→25 req/s | 11 min | ~3 min | Step 1 SLO validation |
-| `stress.js` | 200 | 5→50 req/s | 22 min max | ~10 min | Find the breaking point |
-| `soak.js` | 40 | 5 req/s constant | 30 min | ~2 min | Stability and memory leaks |
+| `smoke.js` | 2 | 1 VU | 2 min | ~5s | Sanity check — "does it work?" |
+| `load.js` | 200 | 0→100 req/s | 13 min | ~30s | Step 3 SLO validation |
+| `stress.js` | 400 | 25→200 req/s | 21 min max | ~1 min | Find the breaking point |
+| `soak.js` | 120 | 50 req/s constant | 30 min | ~20s | Stability and memory leaks |
 
-> **Setup time** includes sequential user registration + OTP + token + seed cash-in per user
-> (~2.7s each). k6 starts the scenario only after setup completes. The `setupTimeout` in each
-> script is sized accordingly.
+> **Setup time**: users are onboarded in batches of 20 (`http.batch`): register, OTP,
+> verify, seed cash-in, each step in parallel. A batch costs ~3s, the seed cash-in
+> dominates. Tokens expire 10–14 min after setup, spread at random, and are renewed through
+> `POST /auth/refresh` — no BCrypt, no OTP mail in the middle of the measurements.
+>
+> **Users = maxVUs**: each VU owns its user; the transfer recipient is the neighbouring
+> VU's user. Fewer users than VUs would make two VUs fight over the same account lock.
 
-### Business Mix (all four tests)
+### Business Mix (all four tests) — `scenarios/mix.js`
 
 ```
-Cash-in   40%  — provider I/O mandatory (~1 400–1 960ms)
-Transfer  35%  — no provider, purely applicative (~20–50ms)
+Cash-in   35%  — provider I/O mandatory (~1 400–1 960ms)
+Transfer  30%  — no provider; BCrypt PIN check + one TX with two row locks (~150ms)
 Cash-out  15%  — provider I/O mandatory (~1 400–1 960ms)
-Balance   10%  — simple read, no provider (~10–30ms)
+Balance   10%  — simple read, no provider (~5–10ms)
+History   10%  — keyset page of 20; one call in four follows nextCursor
 ```
 
-55% of all operations go through provider I/O. This creates a latency floor of ~2.1s for
+50% of all operations go through provider I/O. This creates a latency floor of ~2.1s for
 the global p95 that cannot be improved by application optimizations — it reflects real
-network conditions in sub-Saharan Africa.
+network conditions in sub-Saharan Africa. A mean iteration lasts ~1s, so the VUs needed
+roughly equal the target rate (Little's law).
 
 ### Run Commands
 
 ```bash
-# Smoke test
 ./perf/smoke-run.sh
-
-# Load test
 ./perf/load-run.sh
+./perf/stress-run.sh
+./perf/soak-run.sh
 ```
 
 Or directly via Docker:
@@ -122,9 +129,10 @@ docker run --rm --network host \
 
 ### Thresholds
 
-Thresholds are defined **per operation type**, not globally. The rationale: balance and
-transfer have no provider I/O and must meet strict applicative SLOs; cash operations are
-bounded by provider latency which is an external constraint.
+Thresholds are defined **per operation type**, not globally. The rationale: balance,
+history and transfer have no provider I/O and must meet applicative SLOs; cash operations
+are bounded by provider latency which is an external constraint. Requests tagged
+`operation:auth` (refresh, fallback login) and `operation:setup` stay out of them.
 
 #### Smoke (`smoke.js`)
 
@@ -133,17 +141,19 @@ bounded by provider latency which is an external constraint.
 | `http_req_duration` p95 | < 2 500ms | Above provider ceiling (~2 100ms). Catches pool exhaustion or timeouts. |
 | `http_req_failed` rate | < 5% | Sanity threshold — not a performance SLO. |
 
-#### Load (`load.js`) — Step 1 SLO gate
+#### Load (`load.js`) — Step 3 SLO gate
 
 | Metric | Threshold | Rationale |
 |--------|-----------|-----------|
 | `http_req_duration{operation:balance}` p95 | < 100ms | Pure DB read. |
-| `http_req_duration{operation:transfer}` p95 | < 200ms | Single TX, no provider. |
+| `http_req_duration{operation:history}` p95 | < 150ms | Keyset read, no lock. |
+| `http_req_duration{operation:transfer}` p95 | < 300ms | ROADMAP Step 3 P95. BCrypt + single TX, no provider. |
 | `http_req_duration{operation:cash}` p95 | < 2 500ms | Provider ceiling + overhead. |
 | `http_req_failed` rate | < 1% | Business correctness gate. |
 | `checks` rate | > 99% | All responses must be COMPLETED. |
+| `dropped_iterations` count | < 1 | Throughput is part of the SLO: a dropped iteration is a request never served. |
 
-A FAIL on any load threshold **blocks progression to Step 2**.
+A FAIL on any load threshold means Step 3's volume target is not met.
 
 #### Stress (`stress.js`) — observation only
 
@@ -152,15 +162,15 @@ A FAIL on any load threshold **blocks progression to Step 2**.
 | `http_req_duration` p95 | < 5 000ms | Triggers when the system adds > 3s above the provider floor, signaling true contention. |
 | `http_req_failed` rate | < 5% | Clear degradation signal. |
 
-The stress test has no pass/fail verdict — it runs until it finds the breaking point.
+The per-operation thresholds in `stress.js` are `p(95)>=0`: always true, they only make k6
+print each operation's latency in the end-of-run summary. The stress test has no pass/fail
+verdict — read the p95 per stage and `dropped_iterations` in Grafana.
 
 #### Soak (`soak.js`)
 
-| Metric | Threshold | Rationale |
-|--------|-----------|-----------|
-| `http_req_duration` p95 | < 2 500ms | Same ceiling as smoke — catches catastrophic drift. |
-| `soak_latency_trend` p95 | < 2 500ms | Custom metric. Drift is monitored via Grafana trend, not this aggregate. |
-| `http_req_failed` rate | < 1% | |
+Same per-operation thresholds as the load test, plus `http_req_failed < 1%`, `checks > 99%`
+and `dropped_iterations < 1`. An aggregate over 30 min cannot see a drift that starts at
+minute 20: drift is read in Grafana, p95 per operation over time.
 
 ---
 

@@ -32,8 +32,6 @@ class TransactionTest {
         return LedgerEntry.create(Id.generate(), LedgerEntryType.DEBIT, AMT, new Id("acc-001"));
     }
 
-    // ── Construction ──────────────────────────────────────────────────────────
-
     @Test
     void should_create_transaction_with_initialized_state() {
         assertEquals(TransactionState.INITIALIZED, createTestTransaction().snapshot().state());
@@ -61,8 +59,6 @@ class TransactionTest {
         assertEquals(new Id("to-001"), tx.snapshot().toAccountId());
     }
 
-    // ── SelfTransfer invariant ────────────────────────────────────────────────
-
     @Test
     void should_throw_self_transfer_exception_when_from_and_to_are_identical() {
         Id sameId = Id.generate();
@@ -77,8 +73,6 @@ class TransactionTest {
         assertThrows(UnsupportedOperationException.class,
                 () -> tx.entries().add(testOperation()));
     }
-
-    // ── recordDoubleEntry ─────────────────────────────────────────────────────
 
     @Test
     void should_add_two_operations_on_record_double_entry() {
@@ -107,8 +101,6 @@ class TransactionTest {
         assertDoesNotThrow(() ->
                 tx.recordDoubleEntry(AMT, new Id("from"), new Id("to")));
     }
-
-    // ── transitionTo ──────────────────────────────────────────────────────────
 
     @Test
     void should_transition_to_authorized_from_initialized() {
@@ -151,7 +143,6 @@ class TransactionTest {
     @Test
     void should_throw_when_transition_is_invalid() {
         Transaction tx = createTestTransaction();
-        // INITIALIZED → COMPLETED is invalid (must go through the full lifecycle)
         assertThrows(InvalidStateTransitionException.class,
                 tx::markCompleted);
     }
@@ -164,12 +155,9 @@ class TransactionTest {
         tx.pendSettlement();
         tx.settle();
         tx.markCompleted();
-        // COMPLETED is terminal — any further transition is invalid
         assertThrows(InvalidStateTransitionException.class,
                 tx::markFailed);
     }
-
-    // ── New terminal failure states ───────────────────────────────────────────
 
     @Test
     void should_transition_to_authorization_failed_from_authorized() {
@@ -259,8 +247,6 @@ class TransactionTest {
         assertEquals("AUTHORIZED", history.getLast().snapshot().oldState());
         assertEquals("AUTHORIZATION_FAILED", history.getLast().snapshot().newState());
     }
-
-    // ── Validation construction ───────────────────────────────────────────────
 
     @Test
     void should_throw_when_transaction_id_is_null() {

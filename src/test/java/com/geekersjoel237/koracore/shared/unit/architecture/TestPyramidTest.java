@@ -13,18 +13,6 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * Keeps the test tree honest about which level each test is on.
- *
- * <p>The directory a test sits in is a claim: <em>unit</em> means it runs in
- * milliseconds with no context, <em>integration</em> means it talks to a real Postgres,
- * <em>e2e</em> means it goes over HTTP. The claim is worth nothing if nothing checks
- * it — a {@code @SpringBootTest} quietly added to a class under {@code unit/} makes the
- * fast suite slow and nobody notices until the build takes four minutes.
- *
- * <p>These rules read the tree itself, so they answer for every test that exists rather
- * than for the ones someone remembered to look at.
- */
 class TestPyramidTest {
 
     private static final Path TESTS =
@@ -33,10 +21,6 @@ class TestPyramidTest {
     private static final Set<String> MODULES = Set.of("auth", "payment", "shared");
     private static final Set<String> LEVELS = Set.of("unit", "integration", "e2e");
 
-    /**
-     * The whole point of the layout: a reader looking for "the fast tests for payment"
-     * has one place to look, and a test cannot hide outside the pyramid.
-     */
     @Test
     void every_test_declares_a_level() {
         List<String> misplaced = javaFilesUnder(TESTS)
@@ -63,11 +47,6 @@ class TestPyramidTest {
                 .isEmpty();
     }
 
-    /**
-     * A unit test that boots a Spring context is an integration test wearing the wrong
-     * label. It is also the slowest possible way to assert what a plain constructor
-     * call would have proved.
-     */
     @Test
     void nothing_on_the_unit_level_starts_a_context() {
         List<String> offenders = filesOnLevel("unit")
@@ -81,10 +60,6 @@ class TestPyramidTest {
                 .isEmpty();
     }
 
-    /**
-     * Integration is where a repository meets a real schema. The moment a test speaks
-     * HTTP it is exercising the whole application, which is the level above.
-     */
     @Test
     void nothing_on_the_integration_level_starts_a_web_server() {
         List<String> offenders = filesOnLevel("integration")
@@ -107,8 +82,6 @@ class TestPyramidTest {
                         .describedAs(module + "/" + level + " holds at least one file")
                         .isPresent();
     }
-
-    // ── reading the tree ──────────────────────────────────────────────────────
 
     private static boolean onSomeLevel(Path file) {
         String path = relative(file);

@@ -35,10 +35,6 @@ import java.util.function.Supplier;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/**
- * The chain, and the three things it must get right: the order, the refusals, and
- * what it writes to the log.
- */
 class CommandBusChainTest {
 
     private static final Id CORRELATION = new Id("corr-abc");
@@ -46,14 +42,11 @@ class CommandBusChainTest {
     private static final Validator VALIDATOR =
             Validation.buildDefaultValidatorFactory().getValidator();
 
-    /** What the registry answers when the chain lets the command through. */
     private static final String ANSWER = "handled";
 
     private static CommandRegistry registryAnswering() {
         return new CommandRegistry().register(SampleCommands.Sample.class, command -> ANSWER);
     }
-
-    // ── order ─────────────────────────────────────────────────────────────────
 
     @Test
     void wraps_the_use_case_with_the_first_middleware_outermost() {
@@ -92,8 +85,6 @@ class CommandBusChainTest {
                 .isInstanceOf(IllegalStateException.class);
         assertThat(trace).isEmpty();
     }
-
-    // ── correlation ───────────────────────────────────────────────────────────
 
     @Test
     void publishes_the_correlation_id_for_the_duration_of_the_dispatch_and_no_longer() {
@@ -147,8 +138,6 @@ class CommandBusChainTest {
         }
     }
 
-    // ── validation ────────────────────────────────────────────────────────────
-
     @Test
     void refuses_a_command_without_a_correlation_id() {
         CommandBus bus = new RegisteredCommandBus(registryAnswering(),
@@ -159,8 +148,6 @@ class CommandBusChainTest {
                 .hasMessageContaining("Sample")
                 .hasMessageContaining("correlation id");
     }
-
-    // ── replay ────────────────────────────────────────────────────────────────
 
     @Test
     void refuses_a_correlation_id_already_seen_inside_the_window() {
@@ -201,8 +188,6 @@ class CommandBusChainTest {
                 .describedAs("the window is a window, not a permanent ban on an id")
                 .isEqualTo(ANSWER);
     }
-
-    // ── doubles ───────────────────────────────────────────────────────────────
 
     private static Middleware recording(List<String> trace, String name) {
         return new Middleware() {

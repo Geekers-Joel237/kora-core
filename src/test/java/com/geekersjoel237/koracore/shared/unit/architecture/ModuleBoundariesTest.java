@@ -19,33 +19,12 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * The two rules that make {@code auth}, {@code payment} and {@code shared} modules
- * rather than folders.
- *
- * <ol>
- *   <li>The kernel depends on nothing. Not "almost nothing" — nothing.</li>
- *   <li>Whatever the two business modules still owe each other is written down here,
- *       and cannot change without someone saying why.</li>
- * </ol>
- */
 class ModuleBoundariesTest {
 
     private static final Path ROOT =
             Path.of("src", "main", "java", "com", "geekersjoel237", "koracore");
 
-    /**
-     * Tests count. A kernel test that reached into a module for an exception to throw
-     * was how {@code shared} last named {@code payment} — invisible to a rule that
-     * only read production sources, and just as much a dependency to anyone reading
-     * the kernel to learn what it needs.
-     *
-     * <p>Two of the three levels, not three. {@code shared/e2e} holds the harness that
-     * drives the whole application over HTTP: it registers a customer and opens their
-     * wallet, so it names both modules by construction. That is what end-to-end means,
-     * and a rule that forbade it would only be satisfied by pretending the harness
-     * belongs to one module or by duplicating it into both.
-     */
+    // shared/e2e is exempt: the harness drives the whole application over HTTP and names both modules by construction.
     private static final List<Path> KERNEL_TEST_ROOTS = List.of(
             Path.of("src", "test", "java", "com", "geekersjoel237", "koracore", "shared", "unit"),
             Path.of("src", "test", "java", "com", "geekersjoel237", "koracore", "shared", "integration"));
@@ -57,45 +36,18 @@ class ModuleBoundariesTest {
             "^import (?:static )?(" + Pattern.quote(BASE) + "[\\w.]+);", Pattern.MULTILINE);
 
     /**
-     * What the two business modules still take from each other after phase A, and what
-     * it would take to stop.
-     *
-     * <ul>
-     *   <li><b>auth &rarr; payment</b> — {@code RegisterService} opens a wallet, and
-     *       {@code LoginService} plus {@code CustomerPinVerifier} sit on either side of
-     *       the PIN port. A published {@code OpenWalletUseCase} closes the first; the
-     *       PIN port is working as intended and only its wiring shows here. The count
-     *       rose when {@code AuthService} was split — the same coupling, now visible in
-     *       the four classes that actually carry it.</li>
-     *   <li><b>payment &rarr; auth</b> — a transfer resolves its recipient through
-     *       {@code Customer}, and the provider needs the payer's phone. Looking a
-     *       wallet up by msisdn directly closes most of it.</li>
-     * </ul>
-     *
-     * <p>The assertion is an equality, not a subset: a new coupling fails the build,
-     * and closing one <em>also</em> fails it, which is what forces this list to shrink
-     * as phase B lands rather than being quietly forgotten.
-     *
-     * <p>Until it is empty, {@code auth} and {@code payment} are packages and not
-     * modules: two of the entries below carry an aggregate across, and a package whose
-     * aggregate the neighbour imports has a directory rather than a boundary. Roadmap
-     * Step 2 is open, and this list is the measure of how far from done it is.
+     * Asserted as an equality: a new coupling fails the build, and so does closing one.
+     * auth -> payment closes with a published OpenWalletUseCase; payment -> auth with a
+     * wallet lookup by phone number.
      */
     private static final Map<String, Set<String>> RECORDED = new TreeMap<>(Map.of(
             "auth -> payment", Set.of(
                     "AuthUseCaseConfiguration", "CustomerPinVerifier",
                     "LoginService", "RegisterService"),
             "payment -> auth", Set.of(
-                    "CashInService", "CashOutService", "MobileMoneyProviderAdapter",
-                    "ProviderPort", "TransactionHistoryService",
+                    "CashInService", "CashOutService",
                     "TransferService", "UseCaseConfiguration")));
 
-    /**
-     * A kernel is depended upon; it does not depend. One exception handler knowing
-     * every module's failures, and one test endpoint bootstrapping another module's
-     * aggregate, were enough to make {@code shared} the most coupled package in the
-     * repository while looking like the least.
-     */
     @Test
     void the_kernel_names_no_module() {
         Stream<Path> kernelSources = Stream.concat(
@@ -122,8 +74,6 @@ class ModuleBoundariesTest {
                 .describedAs("a coupling appeared or disappeared; update this list and say why")
                 .isEqualTo(RECORDED);
     }
-
-    // ── measurement ───────────────────────────────────────────────────────────
 
     private static Map<String, Set<String>> actualCouplings() {
         Map<String, Set<String>> found = new TreeMap<>();

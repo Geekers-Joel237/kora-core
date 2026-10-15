@@ -1,27 +1,29 @@
 package com.geekersjoel237.koracore.payment.application.query.history;
 
-import com.geekersjoel237.koracore.payment.domain.enums.Direction;
+import com.geekersjoel237.koracore.payment.domain.enums.CustomerStatus;
 import com.geekersjoel237.koracore.payment.domain.enums.PaymentMethod;
-import com.geekersjoel237.koracore.payment.domain.enums.TransactionType;
 import com.geekersjoel237.koracore.shared.domain.vo.Amount;
+import com.geekersjoel237.koracore.shared.domain.vo.Id;
 
+import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.List;
-
 
 public record TransactionSummary(
-        String transactionId,
-        String transactionNumber,
-        TransactionType type,
-        Direction direction,
-        String state,
+        Id transactionId,
+        String reference,
+        TransactionKind kind,
+        CustomerStatus status,
         Amount amount,
-        PaymentMethod paymentMethod,
-        String counterpart,          // null for CASH_IN / CASH_OUT; masked phone for P2P_TRANSFER
-        Instant createdAt,
-        List<StateEntry> stateHistory
+        PaymentMethod channel,
+        String counterpart,
+        Instant date
 ) {
 
-    public record StateEntry(String oldState, String newState, Instant occurredAt) {
+    public BigDecimal signedAmount() {
+        return kind.leavesTheWallet() ? amount.value().negate() : amount.value();
+    }
+
+    public HistoryCursor cursor() {
+        return new HistoryCursor(date, transactionId);
     }
 }

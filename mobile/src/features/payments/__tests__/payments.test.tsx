@@ -4,7 +4,8 @@ import type { ReactNode } from 'react';
 
 import { registerTokenProvider } from '@/lib/http';
 import { createQueryClient } from '@/lib/queryClient';
-import { usePaymentFlow } from '../flowStore';
+import { KvKey, kvSetJson } from '@/lib/storage/kv';
+import { recentRecipients, rememberRecipient, usePaymentFlow } from '../flowStore';
 import { outcomeForError, outcomeForState, paymentErrorMessage } from '../messages';
 import { useSubmitPayment } from '../useSubmitPayment';
 
@@ -33,7 +34,7 @@ function armFlow() {
   const store = usePaymentFlow.getState();
   store.begin('send', 'XOF');
   store.setAmount(25000);
-  store.setRecipient('+2250708091011');
+  store.setRecipient({ prefix: '+225', number: '0708091011' });
   store.setVerified(true);
   store.armIdempotency();
 }
@@ -100,11 +101,62 @@ describe('verrou anti-double-débit — LA vérification du lot', () => {
   });
 });
 
+describe('corps du transfert — contrat §2', () => {
+  it('envoie le destinataire en deux champs, préfixe à part', async () => {
+    fetchMock.mockImplementation(async () => ok(RECEIPT));
+
+    armFlow();
+    const { result } = await renderHook(() => useSubmitPayment(), { wrapper });
+    await act(async () => {
+      await result.current.submit('1234');
+    });
+
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain('/payments/transfer');
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as Record<string, unknown>;
+    expect(body.toPhonePrefix).toBe('+225');
+    expect(body.toPhoneNumber).toBe('0708091011');
+  });
+
+  it('n’envoie rien sans destinataire', async () => {
+    fetchMock.mockImplementation(async () => ok(RECEIPT));
+
+    const store = usePaymentFlow.getState();
+    store.begin('send', 'XOF');
+    store.setAmount(25000);
+    store.armIdempotency();
+    const { result } = await renderHook(() => useSubmitPayment(), { wrapper });
+    await act(async () => {
+      await result.current.submit('1234');
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('destinataires récents', () => {
+  it('se souvient du destinataire en deux parties, le plus récent en tête, sans doublon', () => {
+    kvSetJson(KvKey.recentRecipients, []);
+    rememberRecipient({ prefix: '+225', number: '0708091011' });
+    rememberRecipient({ prefix: '+237', number: '600000123' });
+    rememberRecipient({ prefix: '+225', number: '0708091011' });
+
+    expect(recentRecipients()).toEqual([
+      { prefix: '+225', number: '0708091011' },
+      { prefix: '+237', number: '600000123' },
+    ]);
+  });
+
+  // Un numéro complet ne se redécoupe pas sans ambiguïté : il est ignoré, jamais deviné.
+  it('ignore les anciennes entrées en une seule chaîne', () => {
+    kvSetJson(KvKey.recentRecipients, ['+2250708091011', { prefix: '+237', number: '600000123' }]);
+
+    expect(recentRecipients()).toEqual([{ prefix: '+237', number: '600000123' }]);
+  });
+});
+
 describe('classement des issues — docs §4.6', () => {
-  it('présente un état intermédiaire comme EN COURS, jamais comme un succès', async () => {
-    // L'écart entre CAPTURED et COMPLETED est exactement le raccourci qui
-    // produit une réclamation client.
-    fetchMock.mockImplementation(async () => ok({ ...RECEIPT, state: 'CAPTURED' }));
+  it('présente un état antérieur à la capture comme EN COURS, jamais comme un succès', async () => {
+    fetchMock.mockImplementation(async () => ok({ ...RECEIPT, state: 'AUTHORIZED' }));
 
     armFlow();
     const { result } = await renderHook(() => useSubmitPayment(), { wrapper });
@@ -113,6 +165,18 @@ describe('classement des issues — docs §4.6', () => {
     });
 
     expect(usePaymentFlow.getState().outcome).toBe('pending');
+  });
+
+  it('classe CAPTURED en succès : l’argent du client a bougé — contrat §3.1', async () => {
+    fetchMock.mockImplementation(async () => ok({ ...RECEIPT, state: 'CAPTURED' }));
+
+    armFlow();
+    const { result } = await renderHook(() => useSubmitPayment(), { wrapper });
+    await act(async () => {
+      await result.current.submit('1234');
+    });
+
+    expect(usePaymentFlow.getState().outcome).toBe('success');
   });
 
   it('classe COMPLETED en succès', async () => {
@@ -236,7 +300,7 @@ describe('machine de parcours', () => {
 
     const state = usePaymentFlow.getState();
     expect(state.amountMinor).toBe(0);
-    expect(state.recipientPhone).toBe('');
+    expect(state.recipient).toBeNull();
     expect(state.verifiedRecipient).toBe(false);
     expect(state.idempotencyKey).toBeNull();
     expect(state.outcome).toBeNull();
@@ -246,7 +310,7 @@ describe('machine de parcours', () => {
     armFlow();
     expect(usePaymentFlow.getState().verifiedRecipient).toBe(true);
 
-    usePaymentFlow.getState().setRecipient('+2250700000000');
+    usePaymentFlow.getState().setRecipient({ prefix: '+225', number: '0700000000' });
     // Sans cela, changer de destinataire garderait une vérification portant
     // sur un autre numéro — exactement ce que la case est censée empêcher.
     expect(usePaymentFlow.getState().verifiedRecipient).toBe(false);

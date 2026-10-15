@@ -26,7 +26,7 @@ Rappel de la règle 5 du `README.md` : **tout écran implémente ses quatre éta
     ├── deposit/                [amount] → [method] → [review] → [pin] → [result]
     ├── withdraw/               [amount] → [method] → [review] → [pin] → [result]
     ├── send/                   [recipient] → [amount] → [review] → [pin] → [result]
-    └── transaction/[id]        détail + frise des états
+    └── transaction/[id]        détail : montant, contrepartie, statut, référence
 ```
 
 Les parcours monétaires sont présentés en **pile modale plein écran**, hors des onglets. Ils masquent la barre d'onglets : une opération en cours est un tunnel, on n'en sort pas latéralement.
@@ -367,18 +367,15 @@ Panneau de filtres (`Sheet`) :
 
 | Filtre | Contrôle | Valeurs |
 |---|---|---|
-| Type | Segmenté | Tous · Dépôts · Retraits · Transferts |
-| Sens | Segmenté | Tous · Entrants · Sortants |
-| État | **Choix unique** dans une liste | Tous, puis les 11 états concrets, libellés en clair |
+| Nature | Segmenté | Tous · Dépôts · Retraits · Envoyés · Reçus |
+| Statut | Choix unique dans une liste | En cours · Terminée · Échouée · Remboursée |
 | Période | Puces + plage personnalisée | 7 j · 30 j · 90 j · Personnalisé |
 
-Le panneau applique les filtres **en direct**, sans bouton de validation. Il affiche le nombre de résultats en pied de feuille et propose `Réinitialiser`.
+Le panneau applique les filtres **en direct**, sans bouton de validation. Le serveur ne compte pas le total : le pied de feuille annonce la taille de la première page, et « Plus de N » quand elle a une suite. Il propose `Réinitialiser`.
 
-> **Le filtre d'état est à choix unique, et c'est délibéré.** `TransactionFilter.state` n'accepte qu'une valeur (contrat §6.8). Un filtre par famille — « En cours » recouvrant quatre états — obligerait à filtrer localement la page chargée, ce qui produirait un total et une pagination faux. Un choix = un état = un filtre serveur exact.
->
-> Les familles restent le mode d'**affichage** dans la liste et sur les puces. Elles ne deviendront un filtre que si le backend accepte un état multiple. `CONTOURNEMENT(indéterminé)`.
+> **Le statut se filtre par famille, comme il s'affiche.** Le serveur recouvre lui-même tous les états techniques d'un statut client (contrat §3.1) : un choix = un statut = un filtre serveur exact.
 
-Sérialisation vers l'API : `type`, `direction`, `state` directement, dates converties en ISO-8601 UTC. `size` est plafonné à 100 côté serveur — l'app n'envoie jamais plus.
+Sérialisation vers l'API : `kind`, `status` directement, dates en **jours** `YYYY-MM-DD` du calendrier local (bornes incluses), `cursor` tel que reçu. `limit` est plafonné à 100 côté serveur — l'app n'envoie jamais plus.
 
 | État | Rendu |
 |---|---|
@@ -392,53 +389,45 @@ Sérialisation vers l'API : `type`, `direction`, `state` directement, dates conv
 
 ## 6. Détail d'une opération — `transaction/[id]`
 
-L'écran qui matérialise le différenciateur produit.
+Ce que le client doit savoir d'une opération, et rien d'autre : combien, avec qui, quand, et où elle en est.
 
 ```
 ┌─────────────────────────────────────┐
-│  ←                            ⋯     │
+│  ←                                  │
 │                                     │
 │              ╭────╮                 │
-│              │ ↓  │                 │   ← pastille 64 dp, cible de la transition partagée
+│              │ ↓  │                 │   ← pastille 64 dp
 │              ╰────╯                 │
 │                                     │
 │            + 50 000 F               │   ← displayMd
-│            Orange Money             │
+│            Orange Money             │   ← contrepartie masquée, ou opérateur
 │         6 août 2026, 11:42          │
-│                                     │
-│  ┌───────────────────────────────┐  │
-│  │  ●  Initiée         11:42:13  │  │
-│  │  │                            │  │
-│  │  ●  Autorisée       11:42:13  │  │   ← StateTimeline
-│  │  │  Fonds réservés            │  │
-│  │  ●  Capturée        11:42:13  │  │
-│  │  │                            │  │
-│  │  ◉  Terminée        11:42:13  │  │
-│  └───────────────────────────────┘  │
+│          ◌ En cours                 │   ← StatusChip, absent si terminée
 │                                     │
 │  ┌───────────────────────────────┐  │
 │  │ Réf.  TRX-20260806-A3F91C2D ⧉ │  │
 │  │ Type                    Dépôt │  │
-│  │ Moyen            Orange Money │  │
-│  │ Sens                  Entrant │  │
+│  │ Moyen            Orange Money │  │   ← dépôt et retrait uniquement
 │  └───────────────────────────────┘  │
 │                                     │
-│  [        Partager le reçu        ] │   ← P2
+│  [      Copier la référence      ]  │
 └─────────────────────────────────────┘
 ```
 
 | Aspect | Spécification |
 |---|---|
-| Données | **Rejeu de la page d'origine** : `GET /payments/history?detail=true&page={page}&size=20&{filtres}`, puis sélection par identifiant. Voir contrat §6.7 |
-| Paramètres de navigation | `id`, `page` d'origine, filtres actifs sérialisés |
-| Repli | Opération absente de la page rejouée → élargir à `page−1` et `page+1`, puis `ErrorState` |
-| Cache | L'opération vient du cache de la liste : affichage immédiat, `stateHistory` chargée en arrière-plan |
-| Frise | `StateTimeline`, animation du §6.7 de `03-motion-and-feel.md` |
+| Données | **Cache de la liste** : une ligne d'historique porte tout ce que l'écran affiche. Aucune requête pour une opération terminée |
+| Rejeu | Opération en cours, ou cache purgé : rejeu de la page d'origine par son **curseur**, sélection par `reference`. Voir contrat §6.7 |
+| Paramètres de navigation | `id` (la référence), `cursor` d'origine (vide pour la première page), filtres actifs sérialisés |
+| Repli | Absente de la première page rejouée → suivre une fois `nextCursor`, puis `ErrorState`. Une page à curseur est stable : pas de repli |
+| Statut | `StatusChip` de la famille client, masqué quand l'opération est terminée |
 | Référence | Appui long → copie, `haptic.select`, `Toast` de confirmation |
-| Opération en cours | Sondage actif, la frise se complète en direct au fur et à mesure |
-| Entrée | Transition partagée depuis la ligne, éléments en cascade |
+| Opération en cours | Sondage 5 s × 12 ; le statut se met à jour seul |
+| Entrée | Éléments en cascade |
 
-> **Limite du contrat.** Aucun endpoint `GET /payments/{id}` n'existe, ni de filtre par identifiant. Le rejeu de la page d'origine borne le coût à une page quelle que soit l'ancienneté de l'opération — mais reste un contournement. `CONTOURNEMENT(indéterminé)`, drapeau `API_CAPABILITIES.transactionById`.
+> **Limite du contrat.** Aucun endpoint `GET /payments/{id}` n'existe, ni de filtre par référence. `CONTOURNEMENT(indéterminé)`, drapeau `API_CAPABILITIES.transactionById`.
+>
+> **Frise d'états retirée le 2026-10-13** (FR-43) : le backend n'expose plus les états techniques au client.
 
 | État | Rendu |
 |---|---|

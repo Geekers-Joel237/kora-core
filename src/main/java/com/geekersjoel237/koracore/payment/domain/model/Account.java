@@ -69,22 +69,8 @@ public class Account {
     }
 
     /**
-     * Debits the given amount from this account.
-     *
-     * <p><strong>FLOAT_ACCOUNT behaviour (intentional design) :</strong>
-     * For float accounts, this method is a no-op on the stored balance — it returns
-     * the current balance unchanged and never throws {@code InsufficientFundsException}.
-     * The float account represents the system's treasury and is considered unbounded:
-     * it can always honour a debit regardless of its nominal balance.
-     *
-     * <p>As a consequence, {@code balance_amount} on the float account row in the
-     * database will always be 0, even after thousands of cash-in operations.
-     * <strong>Auditing the float account must go through the {@code LedgerEntry} rows
-     * in the ledger</strong>, not through the stored balance.
-     * See ADR-001 for the full rationale.
-     *
-     * <p>For {@code CUSTOMER_ACCOUNT}, the balance is updated and
-     * {@code InsufficientFundsException} is thrown if funds are insufficient.
+     * No-op for a FLOAT_ACCOUNT: the float is unbounded, so its stored balance stays 0
+     * and is audited through the ledger entries instead (ADR-001).
      */
     public Balance debit(Amount amount) {
         if (accountType.resourceType() == ResourceType.FLOAT_ACCOUNT) {

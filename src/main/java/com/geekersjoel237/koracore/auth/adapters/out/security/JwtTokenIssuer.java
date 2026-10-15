@@ -75,7 +75,6 @@ public class JwtTokenIssuer implements TokenIssuer {
 
             return new Id(claims.getSubject());
         } catch (JwtException | IllegalArgumentException e) {
-            // Translated here so no use case has to know what jjwt calls a bad token.
             throw new InvalidRefreshTokenException(e);
         }
     }

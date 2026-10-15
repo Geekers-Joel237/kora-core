@@ -566,7 +566,7 @@ a grep: adding a foreign type costs a line there and the sentence that justifies
 - Use **snapshots** to expose domain state read-only.
   Never return mutable domain objects from repositories.
 - Use **Value Objects** for every primitive that means something: `Amount`, `Balance`,
-  `Id`, `Msisdn`, `Pin`, `PhoneNumber`, `OtpCode`. Never a raw `BigDecimal`, `String`
+  `Id`, `PhoneNumber`, `Pin`, `OtpCode`. Never a raw `BigDecimal`, `String`
   or `Long` for financial or identifying data. Conversion happens once, in
   `Request.toCommand()` at the web edge.
 - Use **state classes** for transaction lifecycle transitions; each validates its own

@@ -15,15 +15,14 @@ import com.geekersjoel237.koracore.auth.domain.model.User;
 import com.geekersjoel237.koracore.auth.ports.out.security.CustomerPinEncoder;
 import com.geekersjoel237.koracore.shared.domain.vo.Amount;
 import com.geekersjoel237.koracore.shared.domain.vo.Id;
-import com.geekersjoel237.koracore.auth.domain.vo.PhoneNumber;
+import com.geekersjoel237.koracore.shared.domain.vo.PhoneNumber;
 import com.geekersjoel237.koracore.shared.domain.vo.Pin;
 import com.geekersjoel237.koracore.auth.adapters.out.security.BCryptCustomerPinEncoder;
-import com.geekersjoel237.koracore.payment.unit.application.UseCaseFixtures;
 import com.geekersjoel237.koracore.payment.unit.doubles.InMemoryAccountRepository;
 import com.geekersjoel237.koracore.payment.unit.doubles.InMemoryAuthorizationRecordRepository;
 import com.geekersjoel237.koracore.auth.unit.doubles.InMemoryCustomerRepository;
 import com.geekersjoel237.koracore.payment.unit.doubles.InMemoryLedgerRepository;
-import com.geekersjoel237.koracore.payment.unit.doubles.InMemoryProviderAdapter;
+import com.geekersjoel237.koracore.payment.unit.doubles.InMemoryPaymentProviderAdapter;
 import com.geekersjoel237.koracore.payment.unit.doubles.InMemoryTransactionRepository;
 import com.geekersjoel237.koracore.payment.unit.doubles.InMemoryTrxHistoricStatesRepository;
 import org.junit.jupiter.api.Test;
@@ -34,18 +33,8 @@ import java.util.function.Supplier;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * A cash-in opens two transactions with a provider round trip between them. The
- * second can lose a concurrency race and must be replayed — but replaying it must
- * not replay the money movement that already happened at the provider.
- *
- * <p>Wrapping the whole use case in the retry loop, which is what
- * {@code PaymentService.withOptimisticRetry} does, replays everything: a fresh
- * transaction id, a second {@code authorize}, a second {@code capture}. The customer
- * is charged twice and the first transaction is left orphaned in
- * {@code INITIALIZED}.
- *
- * <p>Nothing in the suite sees that today: every existing test runs with a boundary
- * that never fails, so the loop never turns. This one makes it turn.
+ * Only TX-2 is replayed on a lost race. Retrying the whole use case would authorize and
+ * capture at the provider twice.
  */
 class RetryScopeTest {
 
@@ -58,7 +47,7 @@ class RetryScopeTest {
     void a_lost_race_on_the_second_transaction_does_not_charge_the_customer_twice() {
         var accounts = new InMemoryAccountRepository();
         var customers = new InMemoryCustomerRepository();
-        var provider = new InMemoryProviderAdapter(InMemoryProviderAdapter.Behavior.SUCCESS);
+        var provider = new InMemoryPaymentProviderAdapter(InMemoryPaymentProviderAdapter.Behavior.SUCCESS);
 
         User user = User.create(CUSTOMER, "Retry Holder", "retry@example.com", Role.CUSTOMER);
         customers.save(Customer.create(user, PhoneNumber.of("+237", "600000009"), PIN, pinEncoder));
@@ -89,7 +78,6 @@ class RetryScopeTest {
                 .isEqualTo(1);
     }
 
-    /** Throws on one chosen transaction, then behaves. */
     private static final class FailingOnceBoundary implements TransactionBoundary {
 
         private final int failOnExecution;

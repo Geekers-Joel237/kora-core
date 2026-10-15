@@ -11,10 +11,11 @@ import { PhoneField, PHONE_NUMBER_PATTERN, PHONE_PREFIX_PATTERN, PinPad } from '
 import { Amount, AmountKeypad, SuccessCheck, SUCCESS_TIMELINE } from '@/components/money';
 import { Divider, Icon, Pressable, Spacer, Surface, Text } from '@/components/primitives';
 import { Dialog } from '@/components/overlay';
-import { paymentMethodLabel } from '@/features/shared/labels';
+import { outcomeLabel, paymentMethodLabel } from '@/features/shared/labels';
 import { formatMinorToString } from '@/lib/money';
 import { useBalance } from '@/features/wallet/hooks';
 import { radius, space, stroke, useReduceMotion, useTheme } from '@/theme';
+import type { PhoneNumber } from '@/types/domain';
 import {
   FLOW_STEPS,
   recentRecipients,
@@ -157,7 +158,7 @@ function RecipientStep({ onNext }: { onNext: () => void }) {
       setError(t('register.phoneInvalid'));
       return;
     }
-    flow.setRecipient(`${prefix}${number}`);
+    flow.setRecipient({ prefix, number });
     onNext();
   };
 
@@ -175,9 +176,11 @@ function RecipientStep({ onNext }: { onNext: () => void }) {
             setError(null);
           }}
           error={error}
-          recents={recents}
+          recents={recents.map(fullNumber)}
           onSelectRecent={(entry) => {
-            flow.setRecipient(entry);
+            const recent = recents.find((candidate) => fullNumber(candidate) === entry);
+            if (!recent) return;
+            flow.setRecipient(recent);
             onNext();
           }}
         />
@@ -288,7 +291,7 @@ function ReviewStep({ kind, onNext }: { kind: FlowKind; onNext: () => void }) {
               {/* Groupé par blocs de deux : c'est la seule vérification
                   possible, faute d'endpoint de résolution (contrat §6.2). */}
               <Text variant="titleMd" tabular>
-                {formatPhoneForReview(flow.recipientPhone)}
+                {flow.recipient ? formatPhoneForReview(flow.recipient) : ''}
               </Text>
             </>
           ) : (
@@ -414,8 +417,8 @@ function ResultStep({ kind, onClose }: { kind: FlowKind; onClose: () => void }) 
   const copy = resultCopy(outcome);
 
   // Sondage borné : contrat §6.4. Actif uniquement sur une issue « en cours ».
-  const polledState = usePendingPolling(
-    flow.receipt?.id ?? null,
+  const polledOutcome = usePendingPolling(
+    flow.receipt?.reference ?? null,
     outcome === 'pending',
   );
 
@@ -476,11 +479,11 @@ function ResultStep({ kind, onClose }: { kind: FlowKind; onClose: () => void }) 
           </>
         )}
 
-        {outcome === 'pending' && polledState && (
+        {outcome === 'pending' && polledOutcome && (
           <>
             <Spacer size={3} />
             <Text variant="bodySm" color="tertiary" align="center">
-              {t('flow.currentState', { state: polledState })}
+              {t('flow.currentState', { state: outcomeLabel(polledOutcome) })}
             </Text>
           </>
         )}
@@ -553,11 +556,13 @@ function ResultStep({ kind, onClose }: { kind: FlowKind; onClose: () => void }) 
   );
 }
 
-/** `+2250708091011` → `+225 07 08 09 10 11`. */
-function formatPhoneForReview(full: string): string {
-  const match = /^(\+\d{1,4})(\d+)$/.exec(full);
-  if (!match) return full;
-  return `${match[1]} ${match[2]!.replace(/(\d{2})(?=\d)/g, '$1 ')}`;
+/** `{ +225, 0708091011 }` → `+225 07 08 09 10 11`. */
+function formatPhoneForReview(phone: PhoneNumber): string {
+  return `${phone.prefix} ${phone.number.replace(/(\d{2})(?=\d)/g, '$1 ')}`;
+}
+
+function fullNumber(phone: PhoneNumber): string {
+  return `${phone.prefix}${phone.number}`;
 }
 
 const CHECKBOX = 24;

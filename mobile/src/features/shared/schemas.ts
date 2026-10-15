@@ -33,34 +33,20 @@ export const transactionReceiptSchema = z.looseObject({
   currency: z.string(),
 });
 
-export const stateEntrySchema = z.looseObject({
-  oldState: z.string().nullable(),
-  newState: z.string(),
-  occurredAt: z.string(),
-});
-
 export const transactionItemSchema = z.looseObject({
-  transactionId: z.string(),
-  transactionNumber: z.string(),
-  // `type`, `direction` et `state` restent des chaînes libres : les étapes 6 et 8
-  // du ROADMAP en introduiront de nouvelles valeurs. Contraindre par un enum ici
-  // ferait planter l'historique le jour de la livraison.
-  type: z.string(),
-  direction: z.string(),
-  state: z.string(),
+  reference: z.string(),
+  // `kind` et `status` restent des chaînes libres : un enum ici ferait planter
+  // l'historique le jour où le backend ajoute une valeur. Règle R2.
+  kind: z.string(),
+  status: z.string(),
   amount: z.number(),
   currency: z.string(),
-  paymentMethod: z.string(),
   counterpart: z.string().nullable(),
-  createdAt: z.string(),
-  stateHistory: z.array(stateEntrySchema).nullable().optional(),
+  channel: z.string().nullable(),
+  date: z.string(),
 });
 
 export const transactionHistorySchema = z.looseObject({
-  transactions: z.array(transactionItemSchema),
-  page: z.number(),
-  size: z.number(),
-  totalElements: z.number(),
-  totalPages: z.number(),
-  hasNext: z.boolean(),
+  items: z.array(transactionItemSchema),
+  nextCursor: z.string().nullable(),
 });

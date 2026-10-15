@@ -5,8 +5,6 @@ import com.geekersjoel237.koracore.payment.domain.enums.TransactionType;
 import com.geekersjoel237.koracore.shared.domain.vo.Amount;
 
 import java.time.Instant;
-import java.util.List;
-
 
 public record TransactionRow(
         String transactionId,
@@ -19,7 +17,6 @@ public record TransactionRow(
         String toAccountId,
         String counterpartPhonePrefix,
         String counterpartPhoneNumber,
-        Instant createdAt,
-        List<TransactionSummary.StateEntry> stateHistory
+        Instant occurredAt
 ) {
 }

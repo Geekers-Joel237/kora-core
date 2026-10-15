@@ -123,22 +123,15 @@
 
     {
       "id": 4,
-      "title": "HikariCP — Active / Pending Connections (Kora)",
+      "title": "DB Throughput — connection checkouts/sec (Kora)",
+      "description": "Une transaction (TX-1, TX-2, lecture) = un emprunt de connexion. Le count du timer hikaricp.connections.usage est un delta par pas d'export (10 s), d'où le /10. Si le pas change dans application-perf.yaml, changer le diviseur.",
       "type": "timeseries",
       "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB_KORA}" },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
-          "color": { "mode": "palette-classic" },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null },
-              { "color": "orange", "value": 15 },
-              { "color": "red",    "value": 19 }
-            ]
-          }
+          "unit": "ops",
+          "color": { "mode": "palette-classic" }
         }
       },
       "options": {
@@ -148,17 +141,10 @@
       "targets": [
         {
           "refId": "A",
-          "query": "SELECT mean(\"value\") AS \"active\" FROM \"hikaricp_connections_active\" WHERE $timeFilter GROUP BY time($__interval) fill(none)",
+          "query": "SELECT sum(\"count\") / 10 AS \"checkouts/sec\" FROM \"hikaricp_connections_usage\" WHERE $timeFilter GROUP BY time(10s) fill(0)",
           "rawQuery": true,
           "resultFormat": "time_series",
-          "alias": "active"
-        },
-        {
-          "refId": "B",
-          "query": "SELECT mean(\"value\") AS \"pending\" FROM \"hikaricp_connections_pending\" WHERE $timeFilter GROUP BY time($__interval) fill(none)",
-          "rawQuery": true,
-          "resultFormat": "time_series",
-          "alias": "pending (⚠ saturation)"
+          "alias": "checkouts/sec"
         }
       ]
     },
@@ -166,6 +152,7 @@
     {
       "id": 5,
       "title": "JVM Heap Usage — MB (Kora)",
+      "description": "Somme des pools heap (eden, survivor, old gen), un point par pool et par intervalle avant la somme.",
       "type": "timeseries",
       "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB_KORA}" },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
@@ -182,14 +169,14 @@
       "targets": [
         {
           "refId": "A",
-          "query": "SELECT mean(\"value\") / 1048576 AS \"heap used (MB)\" FROM \"jvm_memory_used_bytes\" WHERE \"area\" = 'heap' AND $timeFilter GROUP BY time($__interval) fill(none)",
+          "query": "SELECT sum(\"used\") AS \"heap used (MB)\" FROM (SELECT mean(\"value\") / 1048576 AS \"used\" FROM \"jvm_memory_used\" WHERE \"area\" = 'heap' AND $timeFilter GROUP BY time($__interval), \"id\") WHERE $timeFilter GROUP BY time($__interval) fill(none)",
           "rawQuery": true,
           "resultFormat": "time_series",
           "alias": "heap used (MB)"
         },
         {
           "refId": "B",
-          "query": "SELECT mean(\"value\") / 1048576 AS \"heap committed (MB)\" FROM \"jvm_memory_committed_bytes\" WHERE \"area\" = 'heap' AND $timeFilter GROUP BY time($__interval) fill(none)",
+          "query": "SELECT sum(\"committed\") AS \"heap committed (MB)\" FROM (SELECT mean(\"value\") / 1048576 AS \"committed\" FROM \"jvm_memory_committed\" WHERE \"area\" = 'heap' AND $timeFilter GROUP BY time($__interval), \"id\") WHERE $timeFilter GROUP BY time($__interval) fill(none)",
           "rawQuery": true,
           "resultFormat": "time_series",
           "alias": "heap committed (MB)"
@@ -199,20 +186,20 @@
 
     {
       "id": 6,
-      "title": "Applicative Latency p95 — Spring Boot (Kora)",
-      "description": "Latence côté serveur mesurée par Micrometer (hors réseau k6). Comparer avec le panneau k6 pour quantifier l'overhead réseau.",
+      "title": "Applicative Latency p50 / p95 / p99 — Spring Boot (Kora)",
+      "description": "Latence côté serveur mesurée par Micrometer (hors réseau k6), /actuator exclu. Percentiles calculés par l'application, un par endpoint : le panneau trace le pire endpoint (max), pas un percentile global. Comparer avec le panneau k6 pour quantifier l'overhead réseau.",
       "type": "timeseries",
       "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB_KORA}" },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
       "fieldConfig": {
         "defaults": {
-          "unit": "s",
+          "unit": "ms",
           "color": { "mode": "palette-classic" },
           "thresholds": {
             "mode": "absolute",
             "steps": [
               { "color": "green", "value": null },
-              { "color": "red",   "value": 0.15 }
+              { "color": "red",   "value": 150 }
             ]
           }
         }
@@ -224,10 +211,103 @@
       "targets": [
         {
           "refId": "A",
-          "query": "SELECT percentile(\"value\", 95) AS \"p95\" FROM \"http_server_requests_seconds\" WHERE $timeFilter GROUP BY time($__interval) fill(none)",
+          "query": "SELECT max(\"value\") AS \"p50\" FROM \"http_server_requests_percentile\" WHERE \"phi\" = '0.5' AND \"uri\" !~ /actuator/ AND $timeFilter GROUP BY time($__interval) fill(none)",
+          "rawQuery": true,
+          "resultFormat": "time_series",
+          "alias": "p50 applicatif"
+        },
+        {
+          "refId": "B",
+          "query": "SELECT max(\"value\") AS \"p95\" FROM \"http_server_requests_percentile\" WHERE \"phi\" = '0.95' AND \"uri\" !~ /actuator/ AND $timeFilter GROUP BY time($__interval) fill(none)",
           "rawQuery": true,
           "resultFormat": "time_series",
           "alias": "p95 applicatif"
+        },
+        {
+          "refId": "C",
+          "query": "SELECT max(\"value\") AS \"p99\" FROM \"http_server_requests_percentile\" WHERE \"phi\" = '0.99' AND \"uri\" !~ /actuator/ AND $timeFilter GROUP BY time($__interval) fill(none)",
+          "rawQuery": true,
+          "resultFormat": "time_series",
+          "alias": "p99 applicatif"
+        }
+      ]
+    },
+
+    {
+      "id": 7,
+      "title": "HikariCP — Pool Active / Pending + Acquire p95 (Kora)",
+      "description": "active et pending sont des gauges relevées toutes les 10 s : une connexion tenue ~10-20 ms est rarement vue, d'où max() et non mean(). Le débit se lit sur le panneau DB Throughput ; le temps d'acquisition p95 est le signal de saturation.",
+      "type": "timeseries",
+      "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB_KORA}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "acquire p95 (ms)" },
+            "properties": [
+              { "id": "unit", "value": "ms" },
+              { "id": "custom.axisPlacement", "value": "right" }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "tooltip": { "mode": "multi" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "SELECT max(\"value\") AS \"active\" FROM \"hikaricp_connections_active\" WHERE $timeFilter GROUP BY time(10s) fill(0)",
+          "rawQuery": true,
+          "resultFormat": "time_series",
+          "alias": "active"
+        },
+        {
+          "refId": "B",
+          "query": "SELECT max(\"value\") AS \"pending\" FROM \"hikaricp_connections_pending\" WHERE $timeFilter GROUP BY time(10s) fill(0)",
+          "rawQuery": true,
+          "resultFormat": "time_series",
+          "alias": "pending (⚠ saturation)"
+        },
+        {
+          "refId": "C",
+          "query": "SELECT max(\"value\") AS \"acquire p95 (ms)\" FROM \"hikaricp_connections_acquire_percentile\" WHERE \"phi\" = '0.95' AND $timeFilter GROUP BY time(10s) fill(none)",
+          "rawQuery": true,
+          "resultFormat": "time_series",
+          "alias": "acquire p95 (ms)"
+        }
+      ]
+    },
+
+    {
+      "id": 8,
+      "title": "Applicative Throughput — req/sec (Kora)",
+      "description": "Requêtes vues par Spring MVC, /actuator exclu. count est un delta par pas d'export (10 s), d'où le /10.",
+      "type": "timeseries",
+      "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB_KORA}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "color": { "mode": "palette-classic" }
+        }
+      },
+      "options": {
+        "tooltip": { "mode": "multi" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "SELECT sum(\"count\") / 10 AS \"req/sec\" FROM \"http_server_requests\" WHERE \"uri\" !~ /actuator/ AND $timeFilter GROUP BY time(10s) fill(0)",
+          "rawQuery": true,
+          "resultFormat": "time_series",
+          "alias": "req/sec"
         }
       ]
     }

@@ -1,10 +1,5 @@
 package com.geekersjoel237.koracore.payment.domain.enums;
 
-/**
- * Created on 23/08/2026
- *
- * @author Geekers_Joel237
- **/
 public enum PaymentMethod {
     CARD("CARD"),
     ORANGE_MONEY("OM"),
@@ -17,10 +12,6 @@ public enum PaymentMethod {
         this.value = value;
     }
 
-    /**
-     * Resolves a payment method from its business name ({@code ORANGE_MONEY})
-     * or its short provider code ({@code OM}). Case-insensitive.
-     */
     public static PaymentMethod fromValue(String value) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException("Error, cannot accept empty payment method !");

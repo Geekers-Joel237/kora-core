@@ -70,7 +70,9 @@ export interface ApiTransferRequest {
   rawPin: string;
   amount: number;
   currency: string;
-  /** Numéro complet, préfixe inclus, sans séparateur : `+2250708091011`. */
+  /** `\+\d{1,4}`, ex. `+225`. */
+  toPhonePrefix: string;
+  /** `\d{8,15}`, **sans** le préfixe : `0708091011`. */
   toPhoneNumber: string;
 }
 
@@ -92,51 +94,43 @@ export interface ApiTransactionResponse {
   currency: string;
 }
 
-export interface ApiStateEntry {
-  /** `null` sur la toute première transition. */
-  oldState: string | null;
-  newState: string;
-  occurredAt: string;
-}
-
+/** Ligne de `GET /payments/history` — vue client, aucun état technique. Contrat §2. */
 export interface ApiTransactionItem {
-  transactionId: string;
-  transactionNumber: string;
-  type: string;
-  direction: string;
-  state: string;
+  /** `TRX-yyyyMMdd-<8 hex>` — identité de l'opération côté client. */
+  reference: string;
+  /** `DEPOSIT` · `WITHDRAWAL` · `TRANSFER_SENT` · `TRANSFER_RECEIVED`, lu du côté de l'appelant. */
+  kind: string;
+  /** `PENDING` · `COMPLETED` · `FAILED` · `REFUNDED` — contrat §3.1. */
+  status: string;
+  /** Signé : négatif quand l'argent sort du wallet. */
   amount: number;
   currency: string;
-  paymentMethod: string;
-  /** Déjà masqué par le serveur. `null` pour CASH_IN et CASH_OUT. */
+  /** Déjà masqué par le serveur. Transferts uniquement, sinon `null`. */
   counterpart: string | null;
-  createdAt: string;
-  /** `null` quand `detail=false`. Absent si le serveur omet le champ. */
-  stateHistory?: ApiStateEntry[] | null;
+  /** Opérateur Mobile Money. Dépôt et retrait uniquement, sinon `null`. */
+  channel: string | null;
+  /** Instant ISO-8601 UTC. */
+  date: string;
 }
 
 export interface ApiTransactionHistoryResponse {
-  transactions: ApiTransactionItem[];
-  page: number;
-  size: number;
-  totalElements: number;
-  totalPages: number;
-  hasNext: boolean;
+  items: ApiTransactionItem[];
+  /** Opaque. `null` sur la dernière page. */
+  nextCursor: string | null;
 }
 
 /** Paramètres de `GET /payments/history` — contrat §2. */
 export interface ApiHistoryQuery {
-  type?: string;
-  state?: string;
-  direction?: string;
-  /** Instant ISO-8601 UTC. */
+  status?: string;
+  kind?: string;
+  /** Jour `YYYY-MM-DD`, inclus. */
   from?: string;
-  /** Instant ISO-8601 UTC. */
+  /** Jour `YYYY-MM-DD`, inclus. */
   to?: string;
-  page?: number;
-  /** Plafonné à 100 côté serveur : au-delà, `400`. */
-  size?: number;
-  detail?: boolean;
+  /** `nextCursor` de la page précédente, tel quel. */
+  cursor?: string;
+  /** 1 à 100 : au-delà, `400`. */
+  limit?: number;
 }
 
 // ────────────────────────────────────────────────────── Formats d'erreur ────

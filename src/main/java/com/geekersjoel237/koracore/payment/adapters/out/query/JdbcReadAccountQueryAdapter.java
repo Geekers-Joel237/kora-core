@@ -1,7 +1,7 @@
 package com.geekersjoel237.koracore.payment.adapters.out.query;
 
 import com.geekersjoel237.koracore.payment.application.query.balance.BalanceResult;
-import com.geekersjoel237.koracore.payment.ports.out.query.AccountQueryPort;
+import com.geekersjoel237.koracore.payment.ports.out.query.ReadAccountRepository;
 import com.geekersjoel237.koracore.shared.domain.vo.Amount;
 import com.geekersjoel237.koracore.shared.domain.vo.Id;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -13,7 +13,7 @@ import java.util.Optional;
 
 
 @Component
-public class JdbcAccountQueryAdapter implements AccountQueryPort {
+public class JdbcReadAccountQueryAdapter implements ReadAccountRepository {
 
     private static final String BALANCE = """
             SELECT id, account_number, balance_amount, balance_currency
@@ -33,7 +33,7 @@ public class JdbcAccountQueryAdapter implements AccountQueryPort {
 
     private final NamedParameterJdbcTemplate jdbc;
 
-    public JdbcAccountQueryAdapter(NamedParameterJdbcTemplate jdbc) {
+    public JdbcReadAccountQueryAdapter(NamedParameterJdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
 

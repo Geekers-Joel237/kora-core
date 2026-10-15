@@ -7,64 +7,30 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 
-public record TransactionHistoryResponse(
-        List<TransactionItem> transactions,
-        int page,
-        int size,
-        long totalElements,
-        int totalPages,
-        boolean hasNext
-) {
+// nextCursor is null on the last page.
+public record TransactionHistoryResponse(List<Item> items, String nextCursor) {
 
-    public static TransactionHistoryResponse from(PageResult<TransactionSummary> result, boolean detail) {
-        List<TransactionItem> items = result.content().stream()
-                .map(tx -> TransactionItem.from(tx, detail))
-                .toList();
-        return new TransactionHistoryResponse(
-                items,
-                result.page(),
-                result.size(),
-                result.totalElements(),
-                result.totalPages(),
-                result.hasNext()
-        );
+    public static TransactionHistoryResponse from(PageResult<TransactionSummary> page) {
+        String nextCursor = page.hasNext()
+                ? page.lastItem().map(last -> HistoryCursorToken.encode(last.cursor())).orElse(null)
+                : null;
+        return new TransactionHistoryResponse(page.content().stream().map(Item::from).toList(), nextCursor);
     }
 
-    public record TransactionItem(
-            String transactionId,
-            String transactionNumber,
-            String type,
-            String direction,
-            String state,
-            BigDecimal amount,
-            String currency,
-            String paymentMethod,
-            String counterpart,
-            Instant createdAt,
-            List<StateEntry> stateHistory
-    ) {
-        public static TransactionItem from(TransactionSummary tx, boolean detail) {
-            List<StateEntry> history = detail
-                    ? tx.stateHistory().stream()
-                            .map(e -> new StateEntry(e.oldState(), e.newState(), e.occurredAt()))
-                            .toList()
-                    : null;
+    // amount is signed: negative when money leaves the wallet.
+    public record Item(String reference, String kind, String status, BigDecimal amount, String currency,
+                       String counterpart, String channel, Instant date) {
 
-            return new TransactionItem(
-                    tx.transactionId(),
-                    tx.transactionNumber(),
-                    tx.type().name(),
-                    tx.direction().name(),
-                    tx.state(),
-                    tx.amount().value(),
-                    tx.amount().currency(),
-                    tx.paymentMethod().name(),
-                    tx.counterpart(),
-                    tx.createdAt(),
-                    history
-            );
+        static Item from(TransactionSummary summary) {
+            return new Item(
+                    summary.reference(),
+                    summary.kind().name(),
+                    summary.status().name(),
+                    summary.signedAmount(),
+                    summary.amount().currency(),
+                    summary.counterpart(),
+                    summary.channel() == null ? null : summary.channel().name(),
+                    summary.date());
         }
     }
-
-    public record StateEntry(String oldState, String newState, Instant occurredAt) {}
 }

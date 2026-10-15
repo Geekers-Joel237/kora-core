@@ -1,72 +1,71 @@
 /**
- * stress.js — Stress test : identification du point de rupture.
+ * stress.js — Stress test : identification du point de rupture au-delà du Step 3.
  *
- * Objectif : pousser progressivement la charge jusqu'à ce que le système
- * se dégrade significativement. Pas de thresholds stricts — on observe.
+ * Objectif : pousser la charge par paliers au-delà de la cible Step 3
+ * (80–100 req/s) jusqu'à ce que le système se dégrade. On observe.
  *
- * Profil par paliers (3 min chacun) :
- *   5 → 10 → 20 → 30 → 50 req/sec
+ * Profil par paliers (2 min chacun, 1 min de transition) :
+ *   25 → 50 → 80 → 100 → 130 → 160 → 200 req/s
  *
- * Arrêt conditionnel k6 : via abortOnFail sur les thresholds d'observation.
- *   p(95) > 500ms OU error rate > 5% → le test s'arrête.
- *   Ces thresholds sont en "abortOnFail" pour ne pas masquer la rupture.
+ * Plafonds attendus, à confirmer par le run :
+ *   - CPU : BCrypt (strength 10) sur chaque paiement, ~60–80ms CPU par appel ;
+ *     à 90% de paiements, ~0.9 × débit × 70ms cœurs occupés.
+ *   - Threads Tomcat (200) : le stub provider dort ~1.9s en tenant son thread ;
+ *     0.5 × débit × 1.9s threads occupés → saturation vers ~200 req/s.
+ *   - HikariCP (30) : loin derrière, chaque connexion est tenue < 100ms.
  *
- * Métriques clés à observer dans Grafana :
- *   - latence p95 / p99 par palier
- *   - error rate par palier
- *   - hikaricp_connections_pending (saturation DB pool)
- *   - jvm_memory_used_bytes (GC pressure)
+ * Arrêt conditionnel : p(95) > 5 000ms OU error rate > 5% (abortOnFail).
+ *
+ * Métriques clés à observer dans Grafana, par palier :
+ *   - latence p95 / p99 par opération (balance, history, transfer, cash)
+ *   - dropped_iterations (VUs épuisés = le système ne suit plus)
+ *   - process_cpu_usage, hikaricp_connections_pending, et tomcat_threads_busy
+ *     si server.tomcat.mbeanregistry.enabled=true
  *
  * Lancer : ./perf/stress-run.sh
  */
 
-import { sleep }            from 'k6';
-import { createTestUsers }  from './data/setup.js';
-import { scenarioCashIn }   from './scenarios/cashIn.js';
-import { scenarioCashOut }  from './scenarios/cashOut.js';
-import { scenarioTransfer } from './scenarios/transfer.js';
-import { scenarioBalance }  from './scenarios/balance.js';
+import { BATCH_SIZE, createTestUsers } from './data/setup.js';
+import { pickPair, runMix } from './scenarios/mix.js';
 
-// 200 = maxVUs — garantit 1 user par VU, élimine tout partage et contention OTP
-const USER_COUNT = 200;
-
-// ── Config k6 ─────────────────────────────────────────────────────────────────
+// 200 req/s × ~1.0s ≈ 200 VUs en régime sain ; 400 laissent voir la dégradation
+// avant que k6 ne commence à abandonner des itérations.
+const USER_COUNT = 400;
 
 export const options = {
-    // 200 users × ~2.7s (register + OTP + verify + seed cashIn) ≈ 9min.
-    setupTimeout: '15m',
+    setupTimeout:  '10m',
+    batchPerHost:  BATCH_SIZE,
     scenarios: {
         stress: {
             executor:        'ramping-arrival-rate',
             startRate:       0,
             timeUnit:        '1s',
-            preAllocatedVUs: 80,
-            maxVUs:          200,
+            preAllocatedVUs: 150,
+            maxVUs:          USER_COUNT,
             stages: [
-                { target: 5,  duration: '1m'  },  // warm-up léger
-                { target: 5,  duration: '3m'  },  // palier 1 : 5 req/s
-                { target: 10, duration: '1m'  },  // transition
-                { target: 10, duration: '3m'  },  // palier 2 : 10 req/s
-                { target: 20, duration: '1m'  },  // transition
-                { target: 20, duration: '3m'  },  // palier 3 : 20 req/s
-                { target: 30, duration: '1m'  },  // transition
-                { target: 30, duration: '3m'  },  // palier 4 : 30 req/s
-                { target: 50, duration: '1m'  },  // transition
-                { target: 50, duration: '3m'  },  // palier 5 : 50 req/s
-                { target: 0,  duration: '30s' },  // cool-down
+                { target: 25,  duration: '1m'  },  // warm-up
+                { target: 25,  duration: '2m'  },  // palier 1 : 25 req/s
+                { target: 50,  duration: '1m'  },
+                { target: 50,  duration: '2m'  },  // palier 2 : 50 req/s
+                { target: 80,  duration: '1m'  },
+                { target: 80,  duration: '2m'  },  // palier 3 : 80 req/s  (bas Step 3)
+                { target: 100, duration: '1m'  },
+                { target: 100, duration: '2m'  },  // palier 4 : 100 req/s (haut Step 3)
+                { target: 130, duration: '1m'  },
+                { target: 130, duration: '2m'  },  // palier 5 : 130 req/s
+                { target: 160, duration: '1m'  },
+                { target: 160, duration: '2m'  },  // palier 6 : 160 req/s
+                { target: 200, duration: '1m'  },
+                { target: 200, duration: '2m'  },  // palier 7 : 200 req/s
+                { target: 0,   duration: '30s' },  // cool-down
             ],
         },
     },
-    // Seuils d'observation (abortOnFail = arrêt conditionnel à la rupture)
+    // Seuils d'arrêt : au-dessus du plafond provider sain (~2 100ms), ils ne se
+    // déclenchent qu'en cas de vraie dégradation (queuing, pool, threads).
     //
-    // Provider ceiling normal : ~2 100ms. Le seuil abortOnFail à 5 000ms est au-dessus
-    // du comportement sain — il ne se déclenche qu'en cas de vraie dégradation :
-    //   sain      : p(95) ≈ 2s  (provider ceiling, pas de contention)
-    //   dégradé   : p(95) > 3–5s (queuing pool / lock contention)
-    //   rupture   : p(95) > 10s+ (pool exhaustion, timeouts)
-    //
-    // Un seuil à 500ms s'arrêterait au premier cashIn (1.5s) → le test ne peut
-    // jamais atteindre les paliers supérieurs.
+    // Les seuils « p(95)>=0 » sont toujours vrais : ils n'existent que pour que k6
+    // affiche les sous-métriques par opération dans le résumé de fin de run.
     thresholds: {
         http_req_duration: [
             { threshold: 'p(95)<5000', abortOnFail: true, delayAbortEval: '30s' },
@@ -74,34 +73,21 @@ export const options = {
         http_req_failed: [
             { threshold: 'rate<0.05', abortOnFail: true, delayAbortEval: '30s' },
         ],
+        'http_req_duration{operation:balance}':  ['p(95)>=0'],
+        'http_req_duration{operation:history}':  ['p(95)>=0'],
+        'http_req_duration{operation:transfer}': ['p(95)>=0'],
+        'http_req_duration{operation:cash}':     ['p(95)>=0'],
     },
 };
-
-// ── Setup ─────────────────────────────────────────────────────────────────────
 
 export function setup() {
     return createTestUsers(USER_COUNT, 'stress');
 }
 
-// ── Scénario ──────────────────────────────────────────────────────────────────
-
 export default function (data) {
     const users = data.users;
     if (!users || users.length === 0) return;
 
-    const idx   = __VU % users.length;
-    const userA = users[idx];
-    const userB = users[(idx + 1) % users.length];
-
-    const roll = Math.random();
-
-    if (roll < 0.40) {
-        scenarioCashIn(userA);
-    } else if (roll < 0.75) {
-        scenarioTransfer(userA, userB.fullPhone);
-    } else if (roll < 0.90) {
-        scenarioCashOut(userA);
-    } else {
-        scenarioBalance(userA);
-    }
+    const [userA, userB] = pickPair(users);
+    runMix(userA, userB);
 }

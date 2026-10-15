@@ -20,18 +20,7 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * Guards the configuration assignment rule (CONTRIBUTING.md section 3.4).
- * <p>
- * Two drifts are cheap to make and expensive to notice:
- * <ol>
- *   <li>giving a secret a fallback, so a clone without {@code .env} boots with a
- *       publicly readable signing key and says nothing;</li>
- *   <li>referencing an environment variable that {@code .env.example} never mentions,
- *       so the next person to clone the repository cannot start the application.</li>
- * </ol>
- * Plain JUnit — no Spring context, no database, no Docker.
- */
+// CONTRIBUTING.md section 3.4: no fallback for a secret, no env var missing from .env.example.
 class ConfigurationHygieneTest {
 
     private static final Path MAIN_RESOURCES = Path.of("src", "main", "resources");
@@ -62,9 +51,6 @@ class ConfigurationHygieneTest {
     private static final Pattern ENV_PLACEHOLDER =
             Pattern.compile("\\$\\{([A-Z][A-Z0-9_]*)(?::[^}]*)?}");
 
-    /**
-     * @return why this line leaks a fallback for a sensitive property, or empty if it is clean.
-     */
     static Optional<String> sensitiveFallback(String line) {
         String trimmed = line.strip();
         if (trimmed.isEmpty() || trimmed.startsWith("#") || trimmed.startsWith("!")) {

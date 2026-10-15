@@ -15,17 +15,20 @@ import com.geekersjoel237.koracore.payment.application.usecases.ExpireAuthorizat
 import com.geekersjoel237.koracore.payment.application.usecases.BalanceService;
 import com.geekersjoel237.koracore.payment.application.usecases.ReversePaymentService;
 import com.geekersjoel237.koracore.payment.application.usecases.TransferService;
-import com.geekersjoel237.koracore.payment.ports.out.query.AccountQueryPort;
-import com.geekersjoel237.koracore.payment.ports.out.query.TransactionQueryPort;
+import com.geekersjoel237.koracore.payment.ports.out.query.ReadAccountRepository;
+import com.geekersjoel237.koracore.payment.ports.out.query.ReadTransactionRepository;
 import com.geekersjoel237.koracore.payment.ports.out.repository.AccountRepository;
 import com.geekersjoel237.koracore.payment.ports.out.repository.AuthorizationRecordRepository;
 import com.geekersjoel237.koracore.auth.ports.out.repository.CustomerRepository;
 import com.geekersjoel237.koracore.payment.ports.out.repository.LedgerRepository;
-import com.geekersjoel237.koracore.payment.ports.out.provider.ProviderPort;
+import com.geekersjoel237.koracore.payment.ports.out.provider.PaymentProviderPort;
 import com.geekersjoel237.koracore.payment.ports.out.repository.TransactionRepository;
 import com.geekersjoel237.koracore.payment.ports.out.repository.TrxHistoricStatesRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import java.time.ZoneId;
 import com.geekersjoel237.koracore.payment.ports.in.TransactionHistoryQueryHandler;
 import com.geekersjoel237.koracore.payment.application.usecases.TransactionHistoryService;
 
@@ -40,20 +43,20 @@ public class UseCaseConfiguration {
 
     @Bean
     CashInCommandHandler cashInCommandHandler(TransactionBoundary boundary, RetryPolicy retry, PinVerifier pinVerifier,
-                                AccountRepository accounts, CustomerRepository customers,
-                                TransactionRepository transactions, TrxHistoricStatesRepository history,
-                                ProviderPort provider, LedgerRepository ledgers,
-                                AuthorizationRecordRepository authorizations) {
+                                              AccountRepository accounts, CustomerRepository customers,
+                                              TransactionRepository transactions, TrxHistoricStatesRepository history,
+                                              PaymentProviderPort provider, LedgerRepository ledgers,
+                                              AuthorizationRecordRepository authorizations) {
         return new CashInService(boundary, retry, pinVerifier, accounts, customers,
                 transactions, history, provider, ledgers, authorizations);
     }
 
     @Bean
     CashOutCommandHandler cashOutCommandHandler(TransactionBoundary boundary, RetryPolicy retry, PinVerifier pinVerifier,
-                                  AccountRepository accounts, CustomerRepository customers,
-                                  TransactionRepository transactions, TrxHistoricStatesRepository history,
-                                  ProviderPort provider, LedgerRepository ledgers,
-                                  AuthorizationRecordRepository authorizations) {
+                                                AccountRepository accounts, CustomerRepository customers,
+                                                TransactionRepository transactions, TrxHistoricStatesRepository history,
+                                                PaymentProviderPort provider, LedgerRepository ledgers,
+                                                AuthorizationRecordRepository authorizations) {
         return new CashOutService(boundary, retry, pinVerifier, accounts, customers,
                 transactions, history, provider, ledgers, authorizations);
     }
@@ -70,26 +73,23 @@ public class UseCaseConfiguration {
     @Bean
     ReversePaymentCommandHandler reversePaymentCommandHandler(TransactionBoundary boundary, RetryPolicy retry,
                                                AccountRepository accounts, TransactionRepository transactions,
-                                               TrxHistoricStatesRepository history, ProviderPort provider,
+                                               TrxHistoricStatesRepository history, PaymentProviderPort provider,
                                                LedgerRepository ledgers,
                                                AuthorizationRecordRepository authorizations) {
         return new ReversePaymentService(boundary, retry, accounts, transactions,
                 history, provider, ledgers, authorizations);
     }
 
-    /**
-     * The read side takes no repository and no boundary: its ports are its own, and
-     * their adapters speak SQL written for the question.
-     */
     @Bean
-    BalanceQueryHandler getBalanceQueryHandler(AccountQueryPort accounts) {
+    BalanceQueryHandler getBalanceQueryHandler(ReadAccountRepository accounts) {
         return new BalanceService(accounts);
     }
 
     @Bean
-    TransactionHistoryQueryHandler transactionHistoryQueryHandler(AccountQueryPort accounts,
-                                                                  TransactionQueryPort transactions) {
-        return new TransactionHistoryService(accounts, transactions);
+    TransactionHistoryQueryHandler transactionHistoryQueryHandler(ReadAccountRepository accounts,
+                                                                  ReadTransactionRepository transactions,
+                                                                  @Value("${kora.time-zone}") ZoneId customerZone) {
+        return new TransactionHistoryService(accounts, transactions, customerZone);
     }
 
     @Bean

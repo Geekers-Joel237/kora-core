@@ -1,5 +1,5 @@
 /**
- * Modèle de filtres de l'historique — `docs/05-screens.md` §5, contrat §6.8.
+ * Modèle de filtres de l'historique — `docs/05-screens.md` §5, contrat §2.
  *
  * Trois responsabilités, volontairement séparées de l'interface :
  *
@@ -9,17 +9,15 @@
  *
  * La distinction (1) / (2) est ce qui rend la clé de requête stable : la
  * sélection « 30 derniers jours » ne change pas d'un rendu à l'autre, alors que
- * la borne `from` qu'elle produit dépend de l'instant.
+ * la borne `from` qu'elle produit dépend du jour courant.
  */
 
-import { shiftDays, startOfLocalDay, endOfLocalDay, parseInstant } from '@/lib/datetime';
+import { parseApiDay, shiftDays, startOfLocalDay, toApiDay } from '@/lib/datetime';
 import {
-  DIRECTIONS,
-  TX_STATES,
-  TX_TYPES,
-  type Direction,
-  type TxState,
-  type TxType,
+  CUSTOMER_STATUSES,
+  TX_KINDS,
+  type CustomerStatus,
+  type TxKind,
 } from '@/types/domain';
 import type { HistoryFilters } from './api';
 
@@ -31,23 +29,18 @@ export type PeriodPreset = (typeof PERIOD_PRESETS)[number];
 export const PERIOD_DAYS: Record<PeriodPreset, number> = { '7d': 7, '30d': 30, '90d': 90 };
 
 export interface ActiveFilters {
-  type: TxType | null;
-  direction: Direction | null;
-  /**
-   * **Un seul état concret**, jamais une famille — contrat §6.8. Un filtre par
-   * famille exigerait un filtrage local qui fausserait total et pagination.
-   */
-  state: TxState | null;
+  kind: TxKind | null;
+  /** Statut client : filtré côté serveur sur toute la famille — contrat §3.1. */
+  status: CustomerStatus | null;
   period: PeriodPreset | null;
-  /** Plage personnalisée. Exclusive de `period`. */
+  /** Plage personnalisée, en jours locaux. Exclusive de `period`. */
   from: Date | null;
   to: Date | null;
 }
 
 export const NO_FILTERS: ActiveFilters = {
-  type: null,
-  direction: null,
-  state: null,
+  kind: null,
+  status: null,
   period: null,
   from: null,
   to: null,
@@ -56,9 +49,8 @@ export const NO_FILTERS: ActiveFilters = {
 /** Nombre de filtres actifs — alimente la pastille de l'icône. */
 export function activeFilterCount(filters: ActiveFilters): number {
   let count = 0;
-  if (filters.type) count += 1;
-  if (filters.direction) count += 1;
-  if (filters.state) count += 1;
+  if (filters.kind) count += 1;
+  if (filters.status) count += 1;
   // Période et plage comptent pour un seul filtre : elles s'excluent.
   if (filters.period || filters.from || filters.to) count += 1;
   return count;
@@ -84,8 +76,8 @@ export function withRange(
 /**
  * Traduction vers les paramètres de `GET /payments/history`.
  *
- * Les bornes sont ramenées au jour local : la fenêtre « 7 jours » désigne sept
- * journées entières, pas « il y a exactement 168 heures ».
+ * Le serveur raisonne en jours entiers, bornes incluses : la fenêtre « 7 jours »
+ * part donc d'il y a six jours, et aujourd'hui compte pour le septième.
  */
 export function toHistoryQuery(
   filters: ActiveFilters,
@@ -93,16 +85,14 @@ export function toHistoryQuery(
 ): HistoryFilters {
   const query: HistoryFilters = {};
 
-  if (filters.type) query.type = filters.type;
-  if (filters.state) query.state = filters.state;
-  if (filters.direction) query.direction = filters.direction;
+  if (filters.kind) query.kind = filters.kind;
+  if (filters.status) query.status = filters.status;
 
   if (filters.period) {
-    // `- (n - 1)` : « 7 j » inclut aujourd'hui, sinon la fenêtre en couvre huit.
     query.from = startOfLocalDay(shiftDays(now, -(PERIOD_DAYS[filters.period] - 1)));
   } else {
     if (filters.from) query.from = startOfLocalDay(filters.from);
-    if (filters.to) query.to = endOfLocalDay(filters.to);
+    if (filters.to) query.to = startOfLocalDay(filters.to);
   }
 
   return query;
@@ -118,12 +108,11 @@ export function toHistoryQuery(
  */
 export function serializeFilters(filters: ActiveFilters): string {
   const parts: string[] = [];
-  if (filters.type) parts.push(`t=${filters.type}`);
-  if (filters.direction) parts.push(`d=${filters.direction}`);
-  if (filters.state) parts.push(`s=${filters.state}`);
+  if (filters.kind) parts.push(`k=${filters.kind}`);
+  if (filters.status) parts.push(`s=${filters.status}`);
   if (filters.period) parts.push(`p=${filters.period}`);
-  if (filters.from) parts.push(`f=${startOfLocalDay(filters.from).toISOString()}`);
-  if (filters.to) parts.push(`u=${endOfLocalDay(filters.to).toISOString()}`);
+  if (filters.from) parts.push(`f=${toApiDay(filters.from)}`);
+  if (filters.to) parts.push(`u=${toApiDay(filters.to)}`);
   return parts.join('&');
 }
 
@@ -135,7 +124,7 @@ function isOneOf<T extends string>(values: readonly T[], raw: string): raw is T 
  * Lecture tolérante — règle R2.
  *
  * Une valeur inconnue est **ignorée**, jamais propagée : le serveur répondrait
- * `400` sur un `state` invalide, et l'écran de détail deviendrait inaccessible
+ * `400` sur un `status` invalide, et l'écran de détail deviendrait inaccessible
  * après une simple mise à jour du backend.
  */
 export function parseFilters(raw: string | undefined | null): ActiveFilters {
@@ -150,23 +139,20 @@ export function parseFilters(raw: string | undefined | null): ActiveFilters {
     const value = part.slice(separator + 1);
 
     switch (key) {
-      case 't':
-        if (isOneOf(TX_TYPES, value)) filters.type = value;
-        break;
-      case 'd':
-        if (isOneOf(DIRECTIONS, value)) filters.direction = value;
+      case 'k':
+        if (isOneOf(TX_KINDS, value)) filters.kind = value;
         break;
       case 's':
-        if (isOneOf(TX_STATES, value)) filters.state = value;
+        if (isOneOf(CUSTOMER_STATUSES, value)) filters.status = value;
         break;
       case 'p':
         if (isOneOf(PERIOD_PRESETS, value)) filters.period = value;
         break;
       case 'f':
-        filters.from = parseInstant(value);
+        filters.from = parseApiDay(value);
         break;
       case 'u':
-        filters.to = parseInstant(value);
+        filters.to = parseApiDay(value);
         break;
       default:
         break;

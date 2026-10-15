@@ -12,34 +12,19 @@
 
 import { t } from '@/i18n';
 import { brandColors } from '@/theme/brands';
-import { isKnownTxState, type OutcomeGroup } from '@/types/domain';
-
-export interface StateLabel {
-  label: string;
-  description: string;
-}
-
-/**
- * Règle R2 — un état inconnu affiche son code brut plutôt qu'un message
- * générique. L'utilisateur préfère une chaîne imparfaite à « Erreur ».
- */
-export function stateLabel(state: string): StateLabel {
-  if (!isKnownTxState(state)) return { label: state, description: '' };
-  return {
-    label: t(`states.${state}.label`),
-    description: t(`states.${state}.description`),
-  };
-}
+import { isKnownTxKind, type OutcomeGroup } from '@/types/domain';
 
 /** Libellé court des familles, pour les puces d'état. */
 export function outcomeLabel(outcome: OutcomeGroup): string {
   return t(`outcomes.${outcome}`);
 }
 
-const KNOWN_TYPES = ['CASH_IN', 'CASH_OUT', 'P2P_TRANSFER'];
-
-export function transactionTypeLabel(type: string): string {
-  return KNOWN_TYPES.includes(type) ? t(`txTypes.${type}`) : type;
+/**
+ * Règle R2 — une nature inconnue affiche son code brut plutôt qu'un message
+ * générique. L'utilisateur préfère une chaîne imparfaite à « Erreur ».
+ */
+export function kindLabel(kind: string): string {
+  return isKnownTxKind(kind) ? t(`txKinds.${kind}`) : kind;
 }
 
 /**

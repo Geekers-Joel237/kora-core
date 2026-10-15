@@ -1,6 +1,6 @@
 package com.geekersjoel237.koracore.auth.adapters.out.otp;
 
-import com.geekersjoel237.koracore.auth.application.mail.OtpMailTemplate;
+import com.geekersjoel237.koracore.auth.ports.out.otp.OtpMailTemplate;
 import com.geekersjoel237.koracore.auth.domain.enums.OtpPurpose;
 import com.geekersjoel237.koracore.auth.domain.exception.InvalidOtpException;
 import com.geekersjoel237.koracore.auth.domain.exception.MailDeliveryException;
@@ -19,39 +19,36 @@ public class MailedOtpChallenge implements OtpChallenge {
 
     private static final int MAX_DELIVERY_ATTEMPTS = 3;
 
-    private final ExpiringStore<OtpCode> codes;
+    private final ExpiringStore<OtpCode> otpStore;
     private final MailPort mailPort;
     private final Duration validity;
 
 
-    public MailedOtpChallenge(ExpiringStore<OtpCode> codes, MailPort mailPort, Duration validity) {
-        this.codes = codes;
+    public MailedOtpChallenge(ExpiringStore<OtpCode> otpStore, MailPort mailPort, Duration validity) {
+        this.otpStore = otpStore;
         this.mailPort = mailPort;
         this.validity = validity;
     }
 
     @Override
-    public void issue(String email, OtpPurpose purpose) {
+    public void issue(String email, OtpPurpose purpose) throws MailDeliveryException {
         OtpCode code = OtpCode.generate();
-        codes.put(keyFor(email), code, validity);
+        otpStore.put(keyFor(email), code, validity);
         deliver(OtpMailTemplate.compose(email, code.value(), purpose, validity));
     }
 
     @Override
-    public void consume(String email, OtpCode submitted) {
+    public void consume(String email, OtpCode submitted) throws InvalidOtpException, OtpExpiredException {
         String key = keyFor(email);
 
-        // Gone means expired, consumed, or never issued — the store no longer tells
-        // them apart, and neither should the answer a caller gets.
-        OtpCode issued = codes.get(key)
+        OtpCode issued = otpStore.get(key)
                 .orElseThrow(() -> new OtpExpiredException(
                         "OTP expired or already consumed for: " + email));
 
         if (!issued.equals(submitted))
             throw new InvalidOtpException("OTP code does not match");
 
-        // Deleted on success only: a wrong guess must not burn the caller's code.
-        codes.remove(key);
+        otpStore.remove(key);
     }
 
     private static String keyFor(String email) {
@@ -72,7 +69,7 @@ public class MailedOtpChallenge implements OtpChallenge {
         }
         throw new MailDeliveryException(
                 "OTP delivery failed after " + MAX_DELIVERY_ATTEMPTS
-                        + " attempts. Please try again in a few moments.", lastFailure);
+                + " attempts. Please try again in a few moments.", lastFailure);
     }
 
     private void backOff(int attempt) {

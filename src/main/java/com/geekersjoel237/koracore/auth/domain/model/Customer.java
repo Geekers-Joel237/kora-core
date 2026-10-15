@@ -2,7 +2,7 @@ package com.geekersjoel237.koracore.auth.domain.model;
 
 import com.geekersjoel237.koracore.auth.ports.out.security.CustomerPinEncoder;
 import com.geekersjoel237.koracore.shared.domain.vo.Id;
-import com.geekersjoel237.koracore.auth.domain.vo.PhoneNumber;
+import com.geekersjoel237.koracore.shared.domain.vo.PhoneNumber;
 import com.geekersjoel237.koracore.shared.domain.vo.Pin;
 
 public class Customer {
@@ -53,4 +53,4 @@ public class Customer {
             PhoneNumber phoneNumber,
             String hashedPin
     ) {}
-}
+}

@@ -15,15 +15,11 @@ class UserTest {
     private static final String EMAIL     = "john@example.com";
     private static final Role ROLE        = Role.CUSTOMER;
 
-    // ── Construction valide ───────────────────────────────────────────────────
-
     @Test
     void should_create_user_with_verified_status_by_default() {
         User user = User.create(VALID_ID, FULL_NAME, EMAIL, ROLE);
         assertEquals(UserStatus.VERIFIED, user.snapshot().status());
     }
-
-    // ── Validation construction ───────────────────────────────────────────────
 
     @Test
     void should_throw_when_id_is_null() {
@@ -48,8 +44,6 @@ class UserTest {
         assertThrows(IllegalArgumentException.class,
                 () -> User.create(VALID_ID, FULL_NAME, EMAIL, null));
     }
-
-    // ── Comportement métier ───────────────────────────────────────────────────
 
     @Test
     void should_return_true_when_user_is_active() {
@@ -78,8 +72,6 @@ class UserTest {
         user.verify();
         assertTrue(user.isActive());
     }
-
-    // ── Snapshot — reconstruction ─────────────────────────────────────────────
 
     @Test
     void should_reconstruct_user_from_snapshot_without_validation() {

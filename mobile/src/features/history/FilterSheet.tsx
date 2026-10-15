@@ -1,14 +1,18 @@
-import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/action';
 import { DateRangePicker, OptionRow, Segmented } from '@/components/input';
 import { Sheet } from '@/components/overlay';
-import { Divider, Pressable, Spacer, Text } from '@/components/primitives';
-import { stateLabel } from '@/features/shared/labels';
+import { Divider, Spacer, Text } from '@/components/primitives';
+import { outcomeLabel } from '@/features/shared/labels';
 import { space, stroke, useTheme } from '@/theme';
-import { TX_STATES, type Direction, type TxState, type TxType } from '@/types/domain';
+import {
+  CUSTOMER_STATUSES,
+  outcomeOfStatus,
+  type CustomerStatus,
+  type TxKind,
+} from '@/types/domain';
 import {
   activeFilterCount,
   NO_FILTERS,
@@ -25,26 +29,23 @@ export interface FilterSheetProps {
   onClose: () => void;
   filters: ActiveFilters;
   onChange: (filters: ActiveFilters) => void;
-  /** Total renvoyé par le serveur pour la sélection courante. */
+  /** Taille de la première page pour la sélection courante. */
   resultCount: number | null;
+  /** La première page a une suite : le serveur ne donne pas de total. */
+  moreResults: boolean;
   loading: boolean;
 }
-
-/** Nombre d'états visibles avant dépliage. */
-const COLLAPSED_STATES = 4;
 
 /**
  * Panneau de filtres — `docs/05-screens.md` §5.
  *
  * **Application en direct, sans bouton de validation.** Le pied de feuille
- * affiche le nombre de résultats de la sélection courante : c'est ce retour
- * immédiat qui remplace le bouton, et il n'a de sens que si chaque changement
- * relance effectivement la requête.
+ * annonce le résultat de la sélection courante : c'est ce retour immédiat qui
+ * remplace le bouton, et il n'a de sens que si chaque changement relance
+ * effectivement la requête.
  *
- * Le filtre d'état est un **choix unique parmi les onze états concrets** —
- * contrat §6.8. Les familles restent le mode d'affichage, jamais un filtre :
- * `TransactionFilter.state` n'accepte qu'une valeur, et filtrer localement une
- * famille fausserait le total comme la pagination.
+ * Le statut se filtre par **famille**, comme il s'affiche : le serveur recouvre
+ * lui-même tous les états techniques d'une famille. Contrat §3.1.
  */
 export function FilterSheet({
   visible,
@@ -52,23 +53,18 @@ export function FilterSheet({
   filters,
   onChange,
   resultCount,
+  moreResults,
   loading,
 }: FilterSheetProps) {
   const { t } = useTranslation();
   const theme = useTheme();
-  const [statesExpanded, setStatesExpanded] = useState(false);
 
-  const typeOptions = [
+  const kindOptions = [
     { value: null, label: t('filters.all') },
-    { value: 'CASH_IN' as TxType, label: t('filters.deposits') },
-    { value: 'CASH_OUT' as TxType, label: t('filters.withdrawals') },
-    { value: 'P2P_TRANSFER' as TxType, label: t('filters.transfers') },
-  ];
-
-  const directionOptions = [
-    { value: null, label: t('filters.all') },
-    { value: 'INBOUND' as Direction, label: t('filters.inbound') },
-    { value: 'OUTBOUND' as Direction, label: t('filters.outbound') },
+    { value: 'DEPOSIT' as TxKind, label: t('filters.deposits') },
+    { value: 'WITHDRAWAL' as TxKind, label: t('filters.withdrawals') },
+    { value: 'TRANSFER_SENT' as TxKind, label: t('filters.sent') },
+    { value: 'TRANSFER_RECEIVED' as TxKind, label: t('filters.received') },
   ];
 
   const periodOptions: { value: PeriodPreset | 'custom' | null; label: string }[] = [
@@ -91,14 +87,11 @@ export function FilterSheet({
     onChange(withPeriod(filters, value));
   };
 
-  const setState = (state: TxState | null) => {
-    onChange({ ...filters, state: filters.state === state ? null : state });
+  const setStatus = (status: CustomerStatus) => {
+    onChange({ ...filters, status: filters.status === status ? null : status });
   };
 
   const count = activeFilterCount(filters);
-  const visibleStates: readonly TxState[] = statesExpanded
-    ? TX_STATES
-    : TX_STATES.slice(0, COLLAPSED_STATES);
 
   return (
     <Sheet visible={visible} onClose={onClose} title={t('filters.title')} snapRatio={0.86}>
@@ -109,21 +102,11 @@ export function FilterSheet({
       >
         <Section title={t('filters.type')}>
           <Segmented
-            options={typeOptions}
-            value={filters.type}
-            onChange={(value) => onChange({ ...filters, type: value })}
+            options={kindOptions}
+            value={filters.kind}
+            onChange={(value) => onChange({ ...filters, kind: value })}
             accessibilityLabel={t('filters.typeA11y')}
-            testID="filter-type"
-          />
-        </Section>
-
-        <Section title={t('filters.direction')}>
-          <Segmented
-            options={directionOptions}
-            value={filters.direction}
-            onChange={(value) => onChange({ ...filters, direction: value })}
-            accessibilityLabel={t('filters.directionA11y')}
-            testID="filter-direction"
+            testID="filter-kind"
           />
         </Section>
 
@@ -147,39 +130,18 @@ export function FilterSheet({
           )}
         </Section>
 
-        <Section title={t('filters.state')}>
-          <Text variant="bodySm" color="tertiary">
-            {t('filters.stateHint')}
-          </Text>
-          <Spacer size={2} />
-          {visibleStates.map((state) => (
-            <View key={state}>
+        <Section title={t('filters.status')}>
+          {CUSTOMER_STATUSES.map((status) => (
+            <View key={status}>
               <OptionRow
-                label={stateLabel(state).label}
-                description={stateLabel(state).description}
-                selected={filters.state === state}
-                onPress={() => setState(state)}
-                testID={`filter-state-${state}`}
+                label={outcomeLabel(outcomeOfStatus(status))}
+                selected={filters.status === status}
+                onPress={() => setStatus(status)}
+                testID={`filter-status-${status}`}
               />
               <Divider />
             </View>
           ))}
-          <Spacer size={2} />
-          <Pressable
-            onPress={() => setStatesExpanded((value) => !value)}
-            haptic="tap"
-            scale="card"
-            accessibilityLabel={
-              statesExpanded ? t('filters.collapseStatesA11y') : t('filters.expandStatesA11y')
-            }
-            testID="filter-state-toggle"
-          >
-            <Text variant="labelMd" color="accent">
-              {statesExpanded
-                ? t('filters.collapseStates')
-                : t('filters.showAllStates', { count: TX_STATES.length })}
-            </Text>
-          </Pressable>
         </Section>
       </ScrollView>
 
@@ -189,7 +151,9 @@ export function FilterSheet({
             ? t('filters.searching')
             : resultCount === null
               ? '—'
-              : t('filters.resultCount', { count: resultCount })}
+              : moreResults
+                ? t('filters.resultCountMore', { count: resultCount })
+                : t('filters.resultCount', { count: resultCount })}
         </Text>
         <View style={styles.footerActions}>
           {count > 0 && (

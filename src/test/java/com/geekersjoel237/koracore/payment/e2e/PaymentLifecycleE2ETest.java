@@ -33,8 +33,6 @@ class PaymentLifecycleE2ETest extends AbstractE2ETest {
     @Autowired
     private SecurityProperties securityProperties;
 
-    // ── happy path ────────────────────────────────────────────────────────────
-
     @Test
     void should_return_completed_on_successful_cash_in() {
         SetupData ctx = setupCustomerWithAccount(EMAIL, FULL_NAME, PREFIX, PHONE, PIN);
@@ -53,11 +51,8 @@ class PaymentLifecycleE2ETest extends AbstractE2ETest {
         assertThat(tx.amount()).isEqualByComparingTo(AMOUNT);
     }
 
-    // ── error paths ───────────────────────────────────────────────────────────
-
     @Test
     void should_return_422_when_insufficient_funds() {
-        // no cash-in → balance is 0
         SetupData ctx = setupCustomerWithAccount(EMAIL, FULL_NAME, PREFIX, PHONE, PIN);
 
         ResponseEntity<String> resp = postWithToken(

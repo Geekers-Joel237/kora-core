@@ -14,14 +14,6 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/**
- * A command whose use case was never registered must stop the application from
- * starting, not the customer's payment.
- *
- * <p>Nothing else catches it. Adding a command and forgetting its line in
- * {@code BusConfiguration} compiles, deploys, and answers requests — until the one
- * endpoint that dispatches it returns a 500 in production.
- */
 class CommandRegistryTest {
 
     /**
@@ -59,8 +51,6 @@ class CommandRegistryTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("registered twice");
     }
-
-    // ── the startup guard ─────────────────────────────────────────────────────
 
     @Test
     void startup_fails_when_a_declared_command_has_no_use_case() {

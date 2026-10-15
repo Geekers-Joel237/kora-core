@@ -12,8 +12,6 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class BalanceTest {
 
-    // ── Construction valide ───────────────────────────────────────────────────
-
     @Test
     void should_create_balance_when_amount_is_valid() {
         assertDoesNotThrow(() -> Balance.of(Amount.of(BigDecimal.valueOf(100), "XAF")));
@@ -27,22 +25,16 @@ class BalanceTest {
         );
     }
 
-    // ── Validation construction ───────────────────────────────────────────────
-
     @Test
     void should_throw_when_amount_is_null() {
         assertThrows(IllegalArgumentException.class, () -> Balance.of(null));
     }
-
-    // ── solde ─────────────────────────────────────────────────────────────────
 
     @Test
     void should_return_correct_amount_when_solde_called() {
         Amount amount = Amount.of(BigDecimal.valueOf(100), "XAF");
         assertEquals(amount, Balance.of(amount).solde());
     }
-
-    // ── credit ────────────────────────────────────────────────────────────────
 
     @Test
     void should_increase_balance_when_credited() {
@@ -71,8 +63,6 @@ class BalanceTest {
                 () -> Balance.of(Amount.of(BigDecimal.valueOf(100), "XAF"))
                         .credit(Amount.of(BigDecimal.valueOf(50), "EUR")));
     }
-
-    // ── debit ─────────────────────────────────────────────────────────────────
 
     @Test
     void should_decrease_balance_when_debited() {

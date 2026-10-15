@@ -13,10 +13,10 @@ import { router, useLocalSearchParams } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 
 import { Button, IconButton } from '@/components/action';
-import { StateTimeline, StatusChip } from '@/components/display';
+import { StatusChip } from '@/components/display';
 import {
   ErrorState,
-  SkeletonTimeline,
+  SkeletonTransactionList,
   useDelayedLoading,
   useToast,
 } from '@/components/feedback';
@@ -24,15 +24,16 @@ import { Amount } from '@/components/money';
 import { Divider, Icon, Pressable, Spacer, Surface, Text, type IconName } from '@/components/primitives';
 import { parseFilters } from '@/features/history/filters';
 import { useCachedTransaction, useTransactionDetail } from '@/features/history/hooks';
-import { paymentMethodLabel, transactionTypeLabel } from '@/features/shared/labels';
+import { kindLabel, paymentMethodLabel } from '@/features/shared/labels';
 import { formatDetailTimestamp } from '@/lib/datetime';
 import { layout, radius, space, spring, timing, useReduceMotion, useTheme } from '@/theme';
-import { isTerminalState, type Transaction } from '@/types/domain';
+import type { Transaction } from '@/types/domain';
 
-const TYPE_ICONS: Record<string, IconName> = {
-  CASH_IN: 'arrow-down-circle',
-  CASH_OUT: 'arrow-up-circle',
-  P2P_TRANSFER: 'send',
+const KIND_ICONS: Record<string, IconName> = {
+  DEPOSIT: 'arrow-down-circle',
+  WITHDRAWAL: 'arrow-up-circle',
+  TRANSFER_SENT: 'send',
+  TRANSFER_RECEIVED: 'arrow-down-circle',
 };
 
 const STAGGER_MS = 60;
@@ -41,13 +42,10 @@ const REVEAL_DISTANCE = 12;
 /**
  * Détail d'une opération — `docs/05-screens.md` §6.
  *
- * **L'écran qui matérialise le différenciateur produit** : le backend horodate
- * chaque transition d'état, et Kora est l'application qui les montre.
- *
- * Deux sources se superposent : le cache de la liste, qui donne montant,
- * contrepartie et date **immédiatement**, et le rejeu de la page d'origine avec
- * `detail=true`, qui apporte l'historique d'états. L'écran ne reste donc jamais
- * vide, même quand la requête met une seconde.
+ * Une ligne d'historique porte déjà tout ce que cet écran affiche : il s'ouvre
+ * **depuis le cache de la liste**, sans requête. Le réseau n'est sollicité que
+ * pour suivre une opération encore en cours, ou si le cache a été purgé — par
+ * rejeu de la page d'origine, contrat §6.7.
  */
 export default function TransactionDetailScreen() {
   const { t } = useTranslation();
@@ -56,15 +54,20 @@ export default function TransactionDetailScreen() {
   const toast = useToast();
   const reduceMotion = useReduceMotion();
 
-  const params = useLocalSearchParams<{ id: string; page?: string; filters?: string }>();
-  const id = params.id;
-  const page = Number.parseInt(params.page ?? '0', 10);
+  const params = useLocalSearchParams<{ id: string; cursor?: string; filters?: string }>();
+  const reference = params.id;
+  const cursor = params.cursor ? params.cursor : null;
   const filters = parseFilters(params.filters);
 
-  const cached = useCachedTransaction(id);
-  const detail = useTransactionDetail(id, Number.isNaN(page) ? 0 : page, filters);
+  const cached = useCachedTransaction(reference);
+  const detail = useTransactionDetail(
+    reference,
+    cursor,
+    filters,
+    cached === null || cached.outcome === 'pending',
+  );
 
-  // Le détail fait autorité dès qu'il arrive : son état est plus récent que
+  // Le rejeu fait autorité dès qu'il arrive : son statut est plus récent que
   // celui du cache de liste, qui peut dater de plusieurs minutes.
   const transaction: Transaction | null = detail.data ?? cached;
 
@@ -75,8 +78,7 @@ export default function TransactionDetailScreen() {
   }, [transaction, toast, t]);
 
   const notFound = detail.isSuccess && detail.data === null && cached === null;
-  // §6.5 — le cache de la liste rend l'essentiel immédiatement ; le squelette
-  // n'a de sens que si la requête dépasse 200 ms.
+  // §6.5 — le squelette n'a de sens que si la requête dépasse 200 ms.
   const showSkeleton = useDelayedLoading(transaction === null);
 
   return (
@@ -109,7 +111,7 @@ export default function TransactionDetailScreen() {
           {showSkeleton && (
             <>
               <Spacer size={8} />
-              <SkeletonTimeline />
+              <SkeletonTransactionList count={3} />
             </>
           )}
         </View>
@@ -136,7 +138,7 @@ export default function TransactionDetailScreen() {
                 ]}
               >
                 <Icon
-                  name={TYPE_ICONS[transaction.type] ?? 'more-horizontal'}
+                  name={KIND_ICONS[transaction.kind] ?? 'more-horizontal'}
                   size="lg"
                   color={
                     transaction.outcome === 'success'
@@ -158,7 +160,10 @@ export default function TransactionDetailScreen() {
               />
               <Spacer size={2} />
               <Text variant="bodyMd" color="secondary" align="center">
-                {transaction.counterpart ?? paymentMethodLabel(transaction.paymentMethod)}
+                {transaction.counterpart ??
+                  (transaction.channel
+                    ? paymentMethodLabel(transaction.channel)
+                    : kindLabel(transaction.kind))}
               </Text>
               <Spacer size={1} />
               <Text variant="bodySm" color="tertiary" align="center">
@@ -168,7 +173,16 @@ export default function TransactionDetailScreen() {
               {transaction.outcome !== 'success' && (
                 <>
                   <Spacer size={4} />
-                  <StatusChip state={transaction.state} size="md" showIcon detailed />
+                  <StatusChip outcome={transaction.outcome} size="md" showIcon />
+                </>
+              )}
+
+              {transaction.outcome === 'pending' && (
+                <>
+                  <Spacer size={2} />
+                  <Text variant="bodySm" color="tertiary" align="center">
+                    {t('detail.liveTracking')}
+                  </Text>
                 </>
               )}
             </View>
@@ -177,34 +191,6 @@ export default function TransactionDetailScreen() {
           <Spacer size={8} />
 
           <Reveal index={1} reduceMotion={reduceMotion}>
-            <Surface elevation={1} padding={5}>
-              {transaction.stateHistory && transaction.stateHistory.length > 0 ? (
-                <StateTimeline
-                  history={transaction.stateHistory}
-                  currentState={transaction.state}
-                />
-              ) : detail.isFetching ? (
-                <SkeletonTimeline />
-              ) : (
-                <Text variant="bodySm" color="tertiary">
-                  {t('detail.noStateHistory')}
-                </Text>
-              )}
-
-              {!isTerminalState(transaction.state) && (
-                <>
-                  <Spacer size={2} />
-                  <Text variant="bodySm" color="tertiary">
-                    {t('detail.liveTracking')}
-                  </Text>
-                </>
-              )}
-            </Surface>
-          </Reveal>
-
-          <Spacer size={5} />
-
-          <Reveal index={2} reduceMotion={reduceMotion}>
             <Surface elevation={1} padding={0}>
               <Pressable
                 onLongPress={() => void copyReference()}
@@ -225,27 +211,22 @@ export default function TransactionDetailScreen() {
                 />
               </Pressable>
               <Divider inset={4} />
-              <DetailRow label={t('detail.type')} value={transactionTypeLabel(transaction.type)} />
-              <Divider inset={4} />
-              <DetailRow
-                label={t('detail.method')}
-                value={paymentMethodLabel(transaction.paymentMethod)}
-              />
-              <Divider inset={4} />
-              <DetailRow
-                label={t('detail.direction')}
-                value={
-                  transaction.direction === 'INBOUND' ? t('detail.inbound') : t('detail.outbound')
-                }
-              />
-              <Divider inset={4} />
-              <DetailRow label={t('detail.rawState')} value={transaction.state} mono />
+              <DetailRow label={t('detail.type')} value={kindLabel(transaction.kind)} />
+              {transaction.channel && (
+                <>
+                  <Divider inset={4} />
+                  <DetailRow
+                    label={t('detail.method')}
+                    value={paymentMethodLabel(transaction.channel)}
+                  />
+                </>
+              )}
             </Surface>
           </Reveal>
 
           <Spacer size={6} />
 
-          <Reveal index={3} reduceMotion={reduceMotion}>
+          <Reveal index={2} reduceMotion={reduceMotion}>
             <Button
               label={t('detail.copyReference')}
               variant="secondary"

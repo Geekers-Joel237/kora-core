@@ -1,6 +1,6 @@
 package com.geekersjoel237.koracore.auth.unit.application;
 
-import com.geekersjoel237.koracore.auth.application.mail.OtpMailTemplate;
+import com.geekersjoel237.koracore.auth.ports.out.otp.OtpMailTemplate;
 import com.geekersjoel237.koracore.auth.domain.enums.OtpPurpose;
 import com.geekersjoel237.koracore.shared.ports.out.mail.Mail;
 import org.junit.jupiter.api.Test;
@@ -9,22 +9,10 @@ import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * What the one-time-code mail says.
- *
- * <p>Worth its own test because nothing downstream can check it: the adapter sends
- * whatever body it is handed, and the recipient is a person. The first assertion here
- * is the one that was missing — the message must actually carry the code.
- */
 class OtpMailTemplateTest {
 
     private static final Duration FIVE_MINUTES = Duration.ofMinutes(5);
 
-    /**
-     * The adapter used to take the code as an argument and never put it in the text,
-     * so every OTP mail went out saying a code was inside when none was. Nothing
-     * failed: the test double reported the argument, not the message.
-     */
     @Test
     void should_put_the_code_in_the_body() {
         Mail mail = OtpMailTemplate.compose(
@@ -51,10 +39,6 @@ class OtpMailTemplateTest {
                 .isEqualTo("Kora — login verification");
     }
 
-    /**
-     * The body used to name five minutes as a literal, next to a TTL configured
-     * elsewhere. Change the TTL and the mail quietly lied.
-     */
     @Test
     void should_state_the_validity_it_was_given() {
         assertThat(OtpMailTemplate.compose("a@kora.test", "111111",

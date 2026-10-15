@@ -45,6 +45,7 @@ logging:
     "org.hibernate.orm.jdbc.bind": TRACE
 
 kora:
+  time-zone: Africa/Douala
   security:
     # Fixed, literal, and worthless outside the test classpath. Long enough to
     # satisfy the @Size(min = 32) constraint on SecurityProperties.Jwt.

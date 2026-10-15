@@ -42,8 +42,7 @@ public class JpaTransactionRepository implements TransactionRepository {
             Transaction.Snapshot snap = transaction.snapshot();
             entity.setState(snap.state().name());
 
-            // Add any new entries added after INSERT (e.g., writeEntries in capturePayment).
-            // Never clear or replace the collection — orphanRemoval would delete existing ops.
+            // Append only: clearing or replacing the collection lets orphanRemoval delete existing entries.
             Set<String> existingIds = entity.getEntries().stream()
                     .map(LedgerEntryEntity::getId)
                     .collect(Collectors.toSet());

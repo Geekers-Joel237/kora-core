@@ -18,35 +18,35 @@ public final class ExpireAuthorizationsService implements ExpireAuthorizationsCo
     private static final Id SYSTEM_ACTOR = new Id("system-ttl-job");
 
     private final TransactionBoundary boundary;
-    private final TransactionRepository transactions;
-    private final TrxHistoricStatesRepository history;
-    private final AuthorizationRecordRepository authorizations;
+    private final TransactionRepository transactionRepository;
+    private final TrxHistoricStatesRepository trxHistoricStatesRepository;
+    private final AuthorizationRecordRepository authorizationRecordRepository;
 
     public ExpireAuthorizationsService(TransactionBoundary boundary,
-                                       TransactionRepository transactions,
-                                       TrxHistoricStatesRepository history,
-                                       AuthorizationRecordRepository authorizations) {
+                                       TransactionRepository transactionRepository,
+                                       TrxHistoricStatesRepository trxHistoricStatesRepository,
+                                       AuthorizationRecordRepository authorizationRecordRepository) {
         this.boundary = boundary;
-        this.transactions = transactions;
-        this.history = history;
-        this.authorizations = authorizations;
+        this.transactionRepository = transactionRepository;
+        this.trxHistoricStatesRepository = trxHistoricStatesRepository;
+        this.authorizationRecordRepository = authorizationRecordRepository;
     }
 
     @Override
     public Void execute(ExpireAuthorizationsCommand cmd) {
         return boundary.execute(() -> {
-            for (AuthorizationRecord record : authorizations.findExpiredActive(cmd.now())) {
+            for (AuthorizationRecord record : authorizationRecordRepository.findExpiredActive(cmd.now())) {
                 record.expire();
-                authorizations.save(record);
+                authorizationRecordRepository.save(record);
 
-                transactions.findById(record.snapshot().transactionId()).ifPresent(tx -> {
+                transactionRepository.findById(record.snapshot().transactionId()).ifPresent(tx -> {
                     tx.failAuthorization();
-                    history.save(TrxStateHistoric.of(
+                    trxHistoricStatesRepository.save(TrxStateHistoric.of(
                             tx.snapshot().transactionId(),
                             TransactionState.AUTHORIZED, TransactionState.AUTHORIZATION_FAILED,
                             TriggerSource.SYSTEM_JOB, null, null,
                             SYSTEM_ACTOR, "Authorization TTL expired"));
-                    transactions.save(tx);
+                    transactionRepository.save(tx);
                 });
             }
             return null;
