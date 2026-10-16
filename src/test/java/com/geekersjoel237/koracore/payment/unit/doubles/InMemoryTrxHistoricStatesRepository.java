@@ -20,8 +20,7 @@ public class InMemoryTrxHistoricStatesRepository implements TrxHistoricStatesRep
              .add(historic);
     }
 
-    @Override
-    public List<TrxStateHistoric> findByTransactionId(Id transactionId) {
+    List<TrxStateHistoric> rowsOf(Id transactionId) {
         return store.getOrDefault(transactionId.value(), List.of())
                 .stream()
                 .sorted(Comparator.comparing(TrxStateHistoric::occurredAt))

@@ -57,9 +57,10 @@ class RetryScopeTest {
         // Fails the second transaction it is asked to open — TX-2 — exactly once.
         var boundary = new FailingOnceBoundary(2);
 
+        var historics = new InMemoryTrxHistoricStatesRepository();
         CashInCommandHandler cashIn = UseCaseFixtures.cashIn(
                 boundary, accounts, customers, provider,
-                new InMemoryTransactionRepository(), new InMemoryTrxHistoricStatesRepository(),
+                new InMemoryTransactionRepository(historics), historics,
                 new InMemoryLedgerRepository(Ledger.create(Id.generate())),
                 new InMemoryAuthorizationRecordRepository(), pinEncoder);
 

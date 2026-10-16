@@ -42,10 +42,11 @@ class PinVerificationBoundaryTest {
             throw new PinValidationException("Invalid PIN");
         };
 
+        var historics = new InMemoryTrxHistoricStatesRepository();
         CashInCommandHandler cashIn = new CashInService(
                 boundary, UseCaseFixtures.IMMEDIATE_RETRY, rejecting,
                 new InMemoryAccountRepository(), new InMemoryCustomerRepository(),
-                new InMemoryTransactionRepository(), new InMemoryTrxHistoricStatesRepository(),
+                new InMemoryTransactionRepository(historics), historics,
                 provider, new InMemoryLedgerRepository(Ledger.create(Id.generate())),
                 new InMemoryAuthorizationRecordRepository());
 

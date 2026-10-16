@@ -117,8 +117,8 @@ class PaymentUseCaseTest {
     void setUp() {
         accountRepo = new InMemoryAccountRepository();
         customerRepo = new InMemoryCustomerRepository();
-        transactionRepo = new InMemoryTransactionRepository();
         historicRepo = new InMemoryTrxHistoricStatesRepository();
+        transactionRepo = new InMemoryTransactionRepository(historicRepo);
         provider = new InMemoryPaymentProviderAdapter(SUCCESS);
         provider.reset();
         ledgerRepository = new InMemoryLedgerRepository(Ledger.create(Id.generate()));
@@ -200,7 +200,7 @@ class PaymentUseCaseTest {
         assertEquals(1, transactionRepo.count());
 
         List<TrxStateHistoric> history =
-                historicRepo.findByTransactionId(new Id(result.transactionId()));
+                persisted(result).history();
         assertEquals(6, history.size());
         assertNull(                                history.get(0).snapshot().oldState());
         assertEquals("INITIALIZED",               history.get(0).snapshot().newState());
@@ -232,7 +232,7 @@ class PaymentUseCaseTest {
         assertEquals(0, persisted(result).snapshot().entries().size());
 
         List<TrxStateHistoric> history =
-                historicRepo.findByTransactionId(new Id(result.transactionId()));
+                persisted(result).history();
         assertEquals(2, history.size());
         assertNull(history.get(0).snapshot().oldState());
         assertEquals("INITIALIZED",          history.get(0).snapshot().newState());
@@ -374,7 +374,7 @@ class PaymentUseCaseTest {
         assertEquals(COMPLETED.name(), result.state());
 
         List<TrxStateHistoric> history =
-                historicRepo.findByTransactionId(new Id(result.transactionId()));
+                persisted(result).history();
         assertEquals(6, history.size());
         assertNull(                         history.get(0).snapshot().oldState());
         assertEquals("INITIALIZED",         history.get(0).snapshot().newState());
