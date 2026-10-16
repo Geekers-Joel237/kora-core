@@ -3,7 +3,6 @@ package com.geekersjoel237.koracore.payment.e2e;
 import com.geekersjoel237.koracore.shared.e2e.AbstractE2ETest;
 import com.geekersjoel237.koracore.shared.domain.vo.Id;
 import com.geekersjoel237.koracore.auth.config.SecurityProperties;
-import com.geekersjoel237.koracore.auth.adapters.out.security.JwtTokenIssuer;
 import com.geekersjoel237.koracore.payment.adapters.in.rest.api.cashIn.CashInRequest;
 import com.geekersjoel237.koracore.payment.adapters.in.rest.api.cashOut.CashOutRequest;
 import com.geekersjoel237.koracore.payment.adapters.in.rest.api.shared.TransactionResponse;
@@ -100,7 +99,7 @@ class PaymentLifecycleE2ETest extends AbstractE2ETest {
         return Jwts.builder()
                 .subject(subject)
                 .claim("role", role)
-                .claim(JwtTokenIssuer.USE_CLAIM, "access")
+                .claim("typ", "access")
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + 900_000L))
                 .signWith(key)

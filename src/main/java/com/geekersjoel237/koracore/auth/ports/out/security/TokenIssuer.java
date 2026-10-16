@@ -10,10 +10,5 @@ public interface TokenIssuer {
 
     Tokens issue(User user);
 
-    /**
-     * The user a live refresh token was issued to. Anything else — an access token, a forged
-     * or expired one — is refused with {@code InvalidTokenException}. How a refresh token is
-     * told apart is the issuer's business.
-     */
     Id holderOf(RefreshToken refreshToken);
 }

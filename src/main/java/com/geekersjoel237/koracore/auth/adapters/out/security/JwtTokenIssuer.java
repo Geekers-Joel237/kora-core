@@ -27,7 +27,7 @@ import java.util.Optional;
 @Component
 public class JwtTokenIssuer implements TokenIssuer {
 
-    public static final String USE_CLAIM = "typ";
+    private static final String USE_CLAIM = "typ";
 
     private enum Use {
         ACCESS, REFRESH;

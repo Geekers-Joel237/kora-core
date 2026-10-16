@@ -250,7 +250,7 @@ class AuthServiceTest {
                 .subject(USER_ID.value())
                 .expiration(Date.from(Instant.now().plus(1, DAYS)));
         if (use != null)
-            builder.claim(JwtTokenIssuer.USE_CLAIM, use);
+            builder.claim("typ", use);
         if (role != null)
             builder.claim("role", role);
         return builder.signWith(Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8)))
