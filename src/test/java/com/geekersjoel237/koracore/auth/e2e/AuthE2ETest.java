@@ -149,6 +149,20 @@ class AuthE2ETest extends AbstractE2ETest {
         assertThat(refresh(tokens.refreshToken()).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
+    // L-10: a refresh token is exchanged once. Seeing it again means two parties hold it,
+    // so the whole session ends — the thief's tokens and the user's alike.
+    @Test
+    void should_end_the_session_when_a_spent_refresh_token_is_replayed() {
+        TokensResponse tokens = registerAndLogin(EMAIL, FULL_NAME, PREFIX, PHONE, PIN);
+        TokensResponse renewed = refresh(tokens.refreshToken()).getBody();
+        Assertions.assertNotNull(renewed);
+
+        ResponseEntity<TokensResponse> replay = refresh(tokens.refreshToken());
+
+        assertThat(replay.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(refresh(renewed.refreshToken()).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
     @Test
     void should_accept_logging_out_twice() {
         TokensResponse tokens = registerAndLogin(EMAIL, FULL_NAME, PREFIX, PHONE, PIN);

@@ -211,6 +211,57 @@ class JwtTokenIssuerTest extends AbstractRepositoryTest {
                 .isInstanceOf(InvalidTokenException.class);
     }
 
+    // ── exchange ─────────────────────────────────────────────────────────────
+
+    @Test
+    void should_exchange_a_refresh_token_for_a_new_pair() {
+        Tokens tokens = issuer.issue(user);
+
+        Tokens renewed = issuer.renew(tokens.refreshToken().token(), user);
+
+        assertThat(renewed.refreshToken().token()).isNotEqualTo(tokens.refreshToken().token());
+        assertThat(issuer.holderOf(renewed.refreshToken().token())).isEqualTo(userId);
+    }
+
+    // The family revocation that follows commits in its own transaction, which cannot see
+    // this test's uncommitted rows; AuthE2ETest observes it.
+    @Test
+    void should_refuse_to_exchange_a_refresh_token_twice() {
+        Tokens tokens = issuer.issue(user);
+        issuer.renew(tokens.refreshToken().token(), user);
+
+        assertThatThrownBy(() -> issuer.renew(tokens.refreshToken().token(), user))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    @Test
+    void should_end_the_renewed_tokens_too_when_logging_out_with_an_older_one() {
+        Tokens tokens = issuer.issue(user);
+        Tokens renewed = issuer.renew(tokens.refreshToken().token(), user);
+
+        issuer.revoke(tokens.refreshToken().token());
+
+        assertThatThrownBy(() -> issuer.holderOf(renewed.refreshToken().token()))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    @Test
+    void should_refuse_to_exchange_a_revoked_refresh_token() {
+        Tokens tokens = issuer.issue(user);
+        issuer.revoke(tokens.refreshToken().token());
+
+        assertThatThrownBy(() -> issuer.renew(tokens.refreshToken().token(), user))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    @Test
+    void should_refuse_to_exchange_an_access_token() {
+        Tokens tokens = issuer.issue(user);
+        RefreshToken misused = RefreshToken.of(tokens.accessToken().token().value());
+
+        assertThatThrownBy(() -> issuer.renew(misused, user)).isInstanceOf(InvalidTokenException.class);
+    }
+
     // ── access tokens ────────────────────────────────────────────────────────
 
     @Test

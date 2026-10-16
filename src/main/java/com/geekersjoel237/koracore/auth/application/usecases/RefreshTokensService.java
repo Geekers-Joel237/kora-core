@@ -33,7 +33,7 @@ public final class RefreshTokensService implements RefreshTokensCommandHandler {
                     .orElseThrow(() -> new CustomerNotFoundException(
                             "User not found: " + userId.value()));
             user.requireActive();
-            return tokenIssuer.issue(user);
+            return tokenIssuer.renew(cmd.refreshToken(), user);
         });
     }
 }

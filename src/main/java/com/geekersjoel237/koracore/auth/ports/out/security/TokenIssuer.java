@@ -12,5 +12,7 @@ public interface TokenIssuer {
 
     Id holderOf(RefreshToken refreshToken);
 
+    Tokens renew(RefreshToken refreshToken, User holder);
+
     void revoke(RefreshToken refreshToken);
 }

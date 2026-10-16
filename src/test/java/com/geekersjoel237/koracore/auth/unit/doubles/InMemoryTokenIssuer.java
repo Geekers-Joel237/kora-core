@@ -17,12 +17,17 @@ import java.util.Map;
 import java.util.Set;
 
 // Opaque values instead of JWTs. Honours the port's contract the way the real issuer does:
-// only a live refresh token it minted names a holder; revoking one it never minted — an
-// access token included — is refused, revoking one twice is not.
+// a refresh token names its holder until its session is revoked; it can be exchanged once,
+// and exchanging it again ends the session; revoking a token it never minted — an access
+// token included — is refused, revoking one twice is not.
 public class InMemoryTokenIssuer implements TokenIssuer {
 
-    private final Map<String, Id> refreshTokens = new HashMap<>();
-    private final Set<String> revoked = new HashSet<>();
+    private record Issued(Id holder, String family) {
+    }
+
+    private final Map<String, Issued> refreshTokens = new HashMap<>();
+    private final Set<String> used = new HashSet<>();
+    private final Set<String> revokedFamilies = new HashSet<>();
     private final Clock clock;
 
     public InMemoryTokenIssuer(Clock clock) {
@@ -31,27 +36,46 @@ public class InMemoryTokenIssuer implements TokenIssuer {
 
     @Override
     public Tokens issue(User user) {
-        Instant now = Instant.now(clock);
-        String refresh = "refresh-" + Id.generate().value();
-        refreshTokens.put(refresh, user.snapshot().id());
-        return new Tokens(
-                new Tokens.Issued<>(AccessToken.of("access-" + Id.generate().value()),
-                        now.plus(Duration.ofMinutes(15))),
-                new Tokens.Issued<>(RefreshToken.of(refresh), now.plus(Duration.ofDays(7))));
+        return mint(user, null);
     }
 
     @Override
     public Id holderOf(RefreshToken refreshToken) {
-        Id holder = refreshTokens.get(refreshToken.value());
-        if (holder == null || revoked.contains(refreshToken.value()))
+        return live(refreshToken).holder();
+    }
+
+    @Override
+    public Tokens renew(RefreshToken refreshToken, User holder) {
+        Issued issued = live(refreshToken);
+        if (!used.add(refreshToken.value())) {
+            revokedFamilies.add(issued.family());
             throw new InvalidTokenException();
-        return holder;
+        }
+        return mint(holder, issued.family());
     }
 
     @Override
     public void revoke(RefreshToken refreshToken) {
-        if (!refreshTokens.containsKey(refreshToken.value()))
+        Issued issued = refreshTokens.get(refreshToken.value());
+        if (issued == null)
             throw new InvalidTokenException();
-        revoked.add(refreshToken.value());
+        revokedFamilies.add(issued.family());
+    }
+
+    private Issued live(RefreshToken refreshToken) {
+        Issued issued = refreshTokens.get(refreshToken.value());
+        if (issued == null || revokedFamilies.contains(issued.family()))
+            throw new InvalidTokenException();
+        return issued;
+    }
+
+    private Tokens mint(User user, String family) {
+        Instant now = Instant.now(clock);
+        String refresh = "refresh-" + Id.generate().value();
+        refreshTokens.put(refresh, new Issued(user.snapshot().id(), family == null ? refresh : family));
+        return new Tokens(
+                new Tokens.Issued<>(AccessToken.of("access-" + Id.generate().value()),
+                        now.plus(Duration.ofMinutes(15))),
+                new Tokens.Issued<>(RefreshToken.of(refresh), now.plus(Duration.ofDays(7))));
     }
 }

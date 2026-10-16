@@ -2,13 +2,13 @@ package com.geekersjoel237.koracore.auth.adapters.out.security;
 
 import com.geekersjoel237.koracore.auth.config.SecurityProperties;
 import com.geekersjoel237.koracore.auth.domain.enums.Role;
-import com.geekersjoel237.koracore.auth.domain.vo.AccessToken;
-import com.geekersjoel237.koracore.auth.ports.out.security.TokenIssuer;
+import com.geekersjoel237.koracore.auth.domain.exception.InvalidTokenException;
 import com.geekersjoel237.koracore.auth.domain.model.User;
+import com.geekersjoel237.koracore.auth.domain.vo.AccessToken;
 import com.geekersjoel237.koracore.auth.domain.vo.RefreshToken;
 import com.geekersjoel237.koracore.auth.domain.vo.Tokens;
+import com.geekersjoel237.koracore.auth.ports.out.security.TokenIssuer;
 import com.geekersjoel237.koracore.shared.domain.vo.Id;
-import com.geekersjoel237.koracore.auth.domain.exception.InvalidTokenException;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
@@ -53,6 +53,30 @@ public class JwtTokenIssuer implements TokenIssuer {
 
     @Override
     public Tokens issue(User user) {
+        return mint(user, null);
+    }
+
+    // Exchanges a refresh token once. The second exchange of the same token means two parties
+    // hold it — the user and a thief, in some order — so the whole session is ended.
+    @Override
+    public Tokens renew(RefreshToken refreshToken, User holder) {
+        Id spent = read(refreshToken.value(), Use.REFRESH)
+                .filter(claims -> claims.getId() != null)
+                .map(claims -> new Id(claims.getId()))
+                .orElseThrow(InvalidTokenException::new);
+        Instant now = Instant.now(clock);
+
+        Optional<Id> family = refreshTokens.consume(spent, now);
+        if (family.isEmpty()) {
+            if (refreshTokens.wasUsed(spent))
+                refreshTokens.revokeFamilyOfReplayed(spent, now);
+            throw new InvalidTokenException();
+        }
+        return mint(holder, family.get());
+    }
+
+    // A null family opens a new one: the first token of a login names its own family.
+    private Tokens mint(User user, Id family) {
         Instant now = Instant.now(clock);
         Instant accessExpiry = now.plus(
                 Duration.ofMinutes(securityProperties.jwt().accessTokenExpirationMinutes()));
@@ -72,7 +96,8 @@ public class JwtTokenIssuer implements TokenIssuer {
 
         // Carries no email and no role: a refresh token proves who, nothing more.
         Id refreshId = Id.generate();
-        refreshTokens.record(refreshId, user.snapshot().id(), refreshId, refreshExpiry, now);
+        refreshTokens.record(refreshId, user.snapshot().id(), family == null ? refreshId : family,
+                refreshExpiry, now);
         String refresh = Jwts.builder()
                 .subject(user.snapshot().id().value())
                 .id(refreshId.value())
@@ -91,12 +116,12 @@ public class JwtTokenIssuer implements TokenIssuer {
     public Id holderOf(RefreshToken refreshToken) {
         return read(refreshToken.value(), Use.REFRESH)
                 .filter(claims -> claims.getId() != null
-                        && refreshTokens.isLive(new Id(claims.getId())))
+                                  && refreshTokens.isLive(new Id(claims.getId())))
                 .map(claims -> new Id(claims.getSubject()))
                 .orElseThrow(InvalidTokenException::new);
     }
 
-     @Override
+    @Override
     public void revoke(RefreshToken refreshToken) {
         Claims claims = read(refreshToken.value(), Use.REFRESH)
                 .filter(c -> c.getId() != null)
@@ -129,7 +154,7 @@ public class JwtTokenIssuer implements TokenIssuer {
                     .parseSignedClaims(compact)
                     .getPayload();
             boolean usable = expected.claim().equals(claims.get(USE_CLAIM, String.class))
-                    && claims.getSubject() != null && !claims.getSubject().isBlank();
+                             && claims.getSubject() != null && !claims.getSubject().isBlank();
             return usable ? Optional.of(claims) : Optional.empty();
         } catch (JwtException | IllegalArgumentException e) {
             return Optional.empty();

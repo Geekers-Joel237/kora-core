@@ -60,6 +60,17 @@ class RefreshTokensServiceTest {
     }
 
     @Test
+    void should_end_the_session_when_a_spent_refresh_token_is_replayed() {
+        Tokens tokens = loggedIn(aUser());
+        Tokens renewed = service.execute(refreshWith(tokens.refreshToken().token().value()));
+
+        assertThatThrownBy(() -> service.execute(refreshWith(tokens.refreshToken().token().value())))
+                .isInstanceOf(InvalidTokenException.class);
+        assertThatThrownBy(() -> service.execute(refreshWith(renewed.refreshToken().token().value())))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    @Test
     void should_refuse_an_access_token_presented_as_refresh_token() {
         Tokens tokens = loggedIn(aUser());
 
