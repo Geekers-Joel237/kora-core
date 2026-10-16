@@ -61,7 +61,9 @@ class AuthServiceTest {
     private static final Pin RAW_PIN = Pin.of("123456");
 
     private static final SecurityProperties TEST_SECURITY = new SecurityProperties(
-            new SecurityProperties.Jwt("test-secret-key-must-be-at-least-32-chars!!", 15, 7),
+            new SecurityProperties.Jwt(
+                    "test-access-key-must-be-at-least-32-chars!!",
+                    "test-refresh-key-must-be-at-least-32-chars!", 15, 7),
             new SecurityProperties.Otp(5)
     );
 
@@ -251,11 +253,26 @@ class AuthServiceTest {
     }
 
     @Test
-    void should_report_access_use_when_access_token_is_presented_for_refresh() {
+    void should_refuse_an_access_token_presented_for_refresh_on_its_signature() {
         Tokens tokens = tokenIssuer.issue(buildVerifiedUser());
         RefreshToken misused = RefreshToken.of(tokens.accessToken().token().value());
 
-        assertThat(tokenIssuer.verify(misused).use()).isEqualTo(TokenUse.ACCESS);
+        assertThatThrownBy(() -> tokenIssuer.verify(misused))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    @Test
+    void should_refuse_a_refresh_claim_signed_with_the_access_key() {
+        String forged = Jwts.builder()
+                .subject(USER_ID.value())
+                .claim(JwtTokenIssuer.USE_CLAIM, "refresh")
+                .expiration(Date.from(Instant.now().plus(1, DAYS)))
+                .signWith(Keys.hmacShaKeyFor(
+                        TEST_SECURITY.jwt().accessSecret().getBytes(StandardCharsets.UTF_8)))
+                .compact();
+
+        assertThatThrownBy(() -> tokenIssuer.verify(RefreshToken.of(forged)))
+                .isInstanceOf(InvalidTokenException.class);
     }
 
     @Test
@@ -264,7 +281,7 @@ class AuthServiceTest {
                 .subject(USER_ID.value())
                 .expiration(Date.from(Instant.now().plus(1, DAYS)))
                 .signWith(Keys.hmacShaKeyFor(
-                        TEST_SECURITY.jwt().secret().getBytes(StandardCharsets.UTF_8)))
+                        TEST_SECURITY.jwt().refreshSecret().getBytes(StandardCharsets.UTF_8)))
                 .compact();
 
         assertThatThrownBy(() -> tokenIssuer.verify(RefreshToken.of(legacy)))
@@ -295,11 +312,12 @@ class AuthServiceTest {
     }
 
     @Test
-    void should_report_refresh_use_when_refresh_token_is_presented_as_bearer() {
+    void should_refuse_a_refresh_token_presented_as_bearer_on_its_signature() {
         Tokens tokens = tokenIssuer.issue(buildVerifiedUser());
         AccessToken misused = AccessToken.of(tokens.refreshToken().token().value());
 
-        assertThat(tokenIssuer.verify(misused)).isEqualTo(VerifiedToken.refresh(USER_ID));
+        assertThatThrownBy(() -> tokenIssuer.verify(misused))
+                .isInstanceOf(InvalidTokenException.class);
     }
 
     @Test
@@ -310,7 +328,7 @@ class AuthServiceTest {
                 .claim(JwtTokenIssuer.USE_CLAIM, "access")
                 .expiration(Date.from(Instant.now().plus(1, DAYS)))
                 .signWith(Keys.hmacShaKeyFor(
-                        TEST_SECURITY.jwt().secret().getBytes(StandardCharsets.UTF_8)))
+                        TEST_SECURITY.jwt().accessSecret().getBytes(StandardCharsets.UTF_8)))
                 .compact();
 
         assertThatThrownBy(() -> tokenIssuer.verify(AccessToken.of(forged)))

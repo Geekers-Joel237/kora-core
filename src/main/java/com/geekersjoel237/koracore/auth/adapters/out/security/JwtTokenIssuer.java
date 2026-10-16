@@ -55,7 +55,7 @@ public class JwtTokenIssuer implements TokenIssuer {
                 .claim(USE_CLAIM, claimOf(TokenUse.ACCESS))
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(accessExpiry))
-                .signWith(signingKey())
+                .signWith(signingKey(TokenUse.ACCESS))
                 .compact();
 
         // Carries no email and no role: a refresh token proves who, nothing more.
@@ -65,7 +65,7 @@ public class JwtTokenIssuer implements TokenIssuer {
                 .claim(USE_CLAIM, claimOf(TokenUse.REFRESH))
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(refreshExpiry))
-                .signWith(signingKey())
+                .signWith(signingKey(TokenUse.REFRESH))
                 .compact();
 
         return new Tokens(
@@ -75,19 +75,21 @@ public class JwtTokenIssuer implements TokenIssuer {
 
     @Override
     public VerifiedToken verify(RefreshToken refreshToken) {
-        return verify(refreshToken.value());
+        return verify(refreshToken.value(), TokenUse.REFRESH);
     }
 
     @Override
     public VerifiedToken verify(AccessToken accessToken) {
-        return verify(accessToken.value());
+        return verify(accessToken.value(), TokenUse.ACCESS);
     }
 
-    // Reports what the token says it is, whichever door it came through. The caller decides.
-    private VerifiedToken verify(String compact) {
+    // Checked against the key of the door it came through, so a token minted for the other
+    // use fails here on its signature. The claims are still reported, not judged: the use
+    // check stays with the caller.
+    private VerifiedToken verify(String compact, TokenUse door) {
         try {
             Claims claims = Jwts.parser()
-                    .verifyWith(signingKey())
+                    .verifyWith(signingKey(door))
                     .build()
                     .parseSignedClaims(compact)
                     .getPayload();
@@ -113,8 +115,11 @@ public class JwtTokenIssuer implements TokenIssuer {
         throw new InvalidTokenException();
     }
 
-    private SecretKey signingKey() {
-        return Keys.hmacShaKeyFor(
-                securityProperties.jwt().secret().getBytes(StandardCharsets.UTF_8));
+    private SecretKey signingKey(TokenUse use) {
+        String secret = switch (use) {
+            case ACCESS -> securityProperties.jwt().accessSecret();
+            case REFRESH -> securityProperties.jwt().refreshSecret();
+        };
+        return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 }

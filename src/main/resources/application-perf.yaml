@@ -2,7 +2,7 @@
 #
 #   SPRING_PROFILES_ACTIVE=perf ./gradlew bootRun
 #
-# This profile declares no secret of its own. The JWT key, the datasource and
+# This profile declares no secret of its own. The JWT keys, the datasource and
 # the mail host all come from the base contract, so a missing variable fails
 # here exactly as it does in dev — which is the point: perf must not be the
 # environment where a fallback quietly keeps things running.

@@ -31,7 +31,7 @@ spring:
   # Known limit: with no .env and no exported variable, an unresolved
   # ${POSTGRES_APP_PASSWORD} is bound as literal text and surfaces as
   # "password authentication failed" rather than "variable missing". Only the
-  # JWT key is protected from that, by the @Size constraint on
+  # JWT keys are protected from that, by the @Size constraints on
   # SecurityProperties. Closing it for the datasource needs an
   # EnvironmentPostProcessor that rejects any resolved value still containing
   # "${" — not done.
@@ -117,7 +117,8 @@ kora:
   time-zone: Africa/Douala
   security:
     jwt:
-      secret: ${JWT_SECRET}
+      access-secret: ${JWT_ACCESS_SECRET}
+      refresh-secret: ${JWT_REFRESH_SECRET}
       access-token-expiration-minutes: 15
       refresh-token-expiration-days: 7
     otp:

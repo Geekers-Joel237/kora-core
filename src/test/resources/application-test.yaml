@@ -48,9 +48,11 @@ kora:
   time-zone: Africa/Douala
   security:
     # Fixed, literal, and worthless outside the test classpath. Long enough to
-    # satisfy the @Size(min = 32) constraint on SecurityProperties.Jwt.
+    # satisfy the @Size(min = 32) constraints on SecurityProperties.Jwt, and
+    # distinct from each other, as the same record requires.
     jwt:
-      secret: kora-core-test-signing-key-not-used-anywhere-else
+      access-secret: kora-core-test-access-key-not-used-anywhere-else
+      refresh-secret: kora-core-test-refresh-key-not-used-anywhere-else
       access-token-expiration-minutes: 15
       refresh-token-expiration-days: 7
     otp:

@@ -79,7 +79,9 @@ class PaymentUseCaseTest {
     private static final Amount AMOUNT_ZERO = Amount.of(BigDecimal.ZERO, "XAF");
 
     private static final SecurityProperties TEST_SECURITY = new SecurityProperties(
-            new SecurityProperties.Jwt("test-secret-key-must-be-at-least-32-chars!!", 15, 7),
+            new SecurityProperties.Jwt(
+                    "test-access-key-must-be-at-least-32-chars!!",
+                    "test-refresh-key-must-be-at-least-32-chars!", 15, 7),
             new SecurityProperties.Otp(5)
     );
 

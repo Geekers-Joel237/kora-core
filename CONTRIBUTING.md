@@ -109,14 +109,16 @@ cp .env.example .env
 Docker Compose can consume. It is versioned; `.env` is not, and must never be
 committed.
 
-Then generate your own JWT signing key and put it in `.env`:
+Then generate your own JWT signing keys — one per token use, two separate runs —
+and put them in `.env` as `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET`:
 
 ```bash
 openssl rand -base64 48
 ```
 
-> **Security note**: `JWT_SECRET` must be at least 32 characters — HMAC-SHA256
-> rejects anything shorter, and `SecurityProperties` refuses to start on it.
+> **Security note**: each key must be at least 32 characters — HMAC-SHA256
+> rejects anything shorter — and the two must differ. `SecurityProperties`
+> refuses to start on either violation.
 > The placeholder shipped in `.env.example` is deliberately non-functional.
 > Never commit a real secret; use a secrets manager outside local development.
 
@@ -309,7 +311,7 @@ is `always` in dev and `never` in prod, so no single value could be correct for 
 | `POSTGRES_USER` `POSTGRES_PASSWORD` | Compose only — superuser, initialises a fresh volume | — |
 | `POSTGRES_MIGRATION_USER` `POSTGRES_MIGRATION_PASSWORD` | `application.yaml` → `spring.flyway.*` | all |
 | `POSTGRES_APP_USER` `POSTGRES_APP_PASSWORD` | `application.yaml` → `spring.datasource.*` | all |
-| `JWT_SECRET` | `application.yaml` | all |
+| `JWT_ACCESS_SECRET` `JWT_REFRESH_SECRET` | `application.yaml` | all |
 | `SERVER_PORT` | `application.yaml` | all |
 | `MAIL_HOST` `MAIL_SMTP_PORT` | Compose + `application.yaml` | all |
 | `MAIL_UI_PORT` | Compose | — |
@@ -378,12 +380,12 @@ Description:
 
 Binding to target com.geekersjoel237.koracore.application.config.SecurityProperties failed:
 
-    Property: kora.security.jwt.secret
-    Value: "${JWT_SECRET}"
+    Property: kora.security.jwt.access-secret
+    Value: "${JWT_ACCESS_SECRET}"
     Reason: must be at least 32 characters for HMAC-SHA256
 ```
 
-Read `Value` carefully: Spring binds the unresolved text `${JWT_SECRET}` rather
+Read `Value` carefully: Spring binds the unresolved text `${JWT_ACCESS_SECRET}` rather
 than failing on the placeholder itself. A bare `${VAR}` is therefore *not* enough
 on a `@ConfigurationProperties` target — the `@Size` constraint on
 `SecurityProperties` is what turns a 14-character literal into a refusal to start
@@ -961,10 +963,11 @@ curl http://localhost:8081/actuator/health | python -m json.tool
 | `db` | PostgreSQL not running | `docker compose up -d` |
 | `mail` | MailDev not running | `docker compose up -d` |
 
-### `jwt.secret` too short
+### JWT key too short, or both keys equal
 
-Spring will reject startup if `kora.security.jwt.secret` is shorter than 32 characters.
-Update the value in `.env` and restart.
+Spring will reject startup if `kora.security.jwt.access-secret` or
+`kora.security.jwt.refresh-secret` is shorter than 32 characters, or if the two are
+equal. Update the values in `.env` and restart.
 
 ### Testcontainers fails to start
 
