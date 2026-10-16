@@ -18,9 +18,6 @@ import com.geekersjoel237.koracore.shared.domain.vo.Id;
 import com.geekersjoel237.koracore.shared.domain.vo.PhoneNumber;
 import com.geekersjoel237.koracore.auth.domain.vo.Tokens;
 import com.geekersjoel237.koracore.auth.domain.vo.RefreshToken;
-import com.geekersjoel237.koracore.auth.domain.vo.AccessToken;
-import com.geekersjoel237.koracore.auth.domain.vo.VerifiedToken;
-import com.geekersjoel237.koracore.auth.domain.enums.TokenUse;
 import com.geekersjoel237.koracore.auth.domain.exception.InvalidTokenException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -242,96 +239,104 @@ class AuthServiceTest {
         assertFalse(tokens.refreshToken().token().value().isBlank());
     }
 
-    @Test
-    void should_verify_refresh_token_as_refresh_use() {
-        Tokens tokens = tokenIssuer.issue(buildVerifiedUser());
+    // ── JWT adapter: what L-10 requires of it ────────────────────────────────
 
-        VerifiedToken verified = tokenIssuer.verify(tokens.refreshToken().token());
+    private JwtTokenIssuer jwt() {
+        return (JwtTokenIssuer) tokenIssuer;
+    }
 
-        assertThat(verified.use()).isEqualTo(TokenUse.REFRESH);
-        assertThat(verified.subject()).isEqualTo(USER_ID);
+    private static String signed(String secret, String use, String role) {
+        var builder = Jwts.builder()
+                .subject(USER_ID.value())
+                .expiration(Date.from(Instant.now().plus(1, DAYS)));
+        if (use != null)
+            builder.claim(JwtTokenIssuer.USE_CLAIM, use);
+        if (role != null)
+            builder.claim("role", role);
+        return builder.signWith(Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8)))
+                .compact();
     }
 
     @Test
-    void should_refuse_an_access_token_presented_for_refresh_on_its_signature() {
+    void should_name_the_holder_of_a_refresh_token() {
+        Tokens tokens = tokenIssuer.issue(buildVerifiedUser());
+
+        assertThat(tokenIssuer.holderOf(tokens.refreshToken().token())).isEqualTo(USER_ID);
+    }
+
+    @Test
+    void should_refuse_an_access_token_presented_for_refresh() {
         Tokens tokens = tokenIssuer.issue(buildVerifiedUser());
         RefreshToken misused = RefreshToken.of(tokens.accessToken().token().value());
 
-        assertThatThrownBy(() -> tokenIssuer.verify(misused))
+        assertThatThrownBy(() -> tokenIssuer.holderOf(misused))
                 .isInstanceOf(InvalidTokenException.class);
     }
 
     @Test
     void should_refuse_a_refresh_claim_signed_with_the_access_key() {
-        String forged = Jwts.builder()
-                .subject(USER_ID.value())
-                .claim(JwtTokenIssuer.USE_CLAIM, "refresh")
-                .expiration(Date.from(Instant.now().plus(1, DAYS)))
-                .signWith(Keys.hmacShaKeyFor(
-                        TEST_SECURITY.jwt().accessSecret().getBytes(StandardCharsets.UTF_8)))
-                .compact();
+        String forged = signed(TEST_SECURITY.jwt().accessSecret(), "refresh", null);
 
-        assertThatThrownBy(() -> tokenIssuer.verify(RefreshToken.of(forged)))
+        assertThatThrownBy(() -> tokenIssuer.holderOf(RefreshToken.of(forged)))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    @Test
+    void should_refuse_an_access_claim_signed_with_the_refresh_key() {
+        String confused = signed(TEST_SECURITY.jwt().refreshSecret(), "access", null);
+
+        assertThatThrownBy(() -> tokenIssuer.holderOf(RefreshToken.of(confused)))
                 .isInstanceOf(InvalidTokenException.class);
     }
 
     @Test
     void should_refuse_a_signed_token_without_use_claim() {
-        String legacy = Jwts.builder()
-                .subject(USER_ID.value())
-                .expiration(Date.from(Instant.now().plus(1, DAYS)))
-                .signWith(Keys.hmacShaKeyFor(
-                        TEST_SECURITY.jwt().refreshSecret().getBytes(StandardCharsets.UTF_8)))
-                .compact();
+        String legacy = signed(TEST_SECURITY.jwt().refreshSecret(), null, null);
 
-        assertThatThrownBy(() -> tokenIssuer.verify(RefreshToken.of(legacy)))
+        assertThatThrownBy(() -> tokenIssuer.holderOf(RefreshToken.of(legacy)))
                 .isInstanceOf(InvalidTokenException.class);
     }
 
     @Test
     void should_refuse_a_token_signed_with_another_key() {
-        String forged = Jwts.builder()
-                .subject(USER_ID.value())
-                .claim(JwtTokenIssuer.USE_CLAIM, "refresh")
-                .expiration(Date.from(Instant.now().plus(1, DAYS)))
-                .signWith(Keys.hmacShaKeyFor(
-                        "another-secret-key-also-at-least-32-chars".getBytes(StandardCharsets.UTF_8)))
-                .compact();
+        String forged = signed("another-secret-key-also-at-least-32-chars", "refresh", null);
 
-        assertThatThrownBy(() -> tokenIssuer.verify(RefreshToken.of(forged)))
+        assertThatThrownBy(() -> tokenIssuer.holderOf(RefreshToken.of(forged)))
                 .isInstanceOf(InvalidTokenException.class);
     }
 
     @Test
-    void should_verify_access_token_with_its_role() {
+    void should_authenticate_the_bearer_of_an_access_token() {
         Tokens tokens = tokenIssuer.issue(buildVerifiedUser());
 
-        VerifiedToken verified = tokenIssuer.verify(tokens.accessToken().token());
-
-        assertThat(verified).isEqualTo(VerifiedToken.access(USER_ID, Role.CUSTOMER));
+        assertThat(jwt().authenticate(tokens.accessToken().token().value()))
+                .contains(new JwtTokenIssuer.Bearer(USER_ID, Role.CUSTOMER));
     }
 
     @Test
-    void should_refuse_a_refresh_token_presented_as_bearer_on_its_signature() {
+    void should_not_authenticate_with_a_refresh_token() {
         Tokens tokens = tokenIssuer.issue(buildVerifiedUser());
-        AccessToken misused = AccessToken.of(tokens.refreshToken().token().value());
 
-        assertThatThrownBy(() -> tokenIssuer.verify(misused))
-                .isInstanceOf(InvalidTokenException.class);
+        assertThat(jwt().authenticate(tokens.refreshToken().token().value())).isEmpty();
     }
 
     @Test
-    void should_refuse_an_access_token_with_an_unknown_role() {
-        String forged = Jwts.builder()
-                .subject(USER_ID.value())
-                .claim("role", "ROOT")
-                .claim(JwtTokenIssuer.USE_CLAIM, "access")
-                .expiration(Date.from(Instant.now().plus(1, DAYS)))
-                .signWith(Keys.hmacShaKeyFor(
-                        TEST_SECURITY.jwt().accessSecret().getBytes(StandardCharsets.UTF_8)))
-                .compact();
+    void should_not_authenticate_a_refresh_claim_even_under_the_access_key() {
+        String confused = signed(TEST_SECURITY.jwt().accessSecret(), "refresh", "CUSTOMER");
 
-        assertThatThrownBy(() -> tokenIssuer.verify(AccessToken.of(forged)))
-                .isInstanceOf(InvalidTokenException.class);
+        assertThat(jwt().authenticate(confused)).isEmpty();
+    }
+
+    @Test
+    void should_not_authenticate_an_unknown_or_missing_role() {
+        assertThat(jwt().authenticate(signed(TEST_SECURITY.jwt().accessSecret(), "access", "ROOT")))
+                .isEmpty();
+        assertThat(jwt().authenticate(signed(TEST_SECURITY.jwt().accessSecret(), "access", null)))
+                .isEmpty();
+    }
+
+    @Test
+    void should_not_authenticate_garbage() {
+        assertThat(jwt().authenticate("not-a-jwt")).isEmpty();
     }
 }

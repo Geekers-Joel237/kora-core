@@ -2,13 +2,11 @@ package com.geekersjoel237.koracore.auth.adapters.out.security;
 
 import com.geekersjoel237.koracore.auth.config.SecurityProperties;
 import com.geekersjoel237.koracore.auth.domain.enums.Role;
-import com.geekersjoel237.koracore.auth.domain.enums.TokenUse;
 import com.geekersjoel237.koracore.auth.domain.vo.AccessToken;
 import com.geekersjoel237.koracore.auth.ports.out.security.TokenIssuer;
 import com.geekersjoel237.koracore.auth.domain.model.User;
 import com.geekersjoel237.koracore.auth.domain.vo.RefreshToken;
 import com.geekersjoel237.koracore.auth.domain.vo.Tokens;
-import com.geekersjoel237.koracore.auth.domain.vo.VerifiedToken;
 import com.geekersjoel237.koracore.shared.domain.vo.Id;
 import com.geekersjoel237.koracore.auth.domain.exception.InvalidTokenException;
 import io.jsonwebtoken.Claims;
@@ -23,13 +21,24 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
+import java.util.Optional;
 
 
 @Component
 public class JwtTokenIssuer implements TokenIssuer {
 
-    /** Payload claim naming the {@link TokenUse}. Not the JOSE header {@code typ}. */
     public static final String USE_CLAIM = "typ";
+
+    private enum Use {
+        ACCESS, REFRESH;
+
+        String claim() {
+            return name().toLowerCase();
+        }
+    }
+
+    public record Bearer(Id userId, Role role) {
+    }
 
     private final SecurityProperties securityProperties;
     private final Clock clock;
@@ -52,20 +61,20 @@ public class JwtTokenIssuer implements TokenIssuer {
                 .id(Id.generate().value())
                 .claim("email", user.snapshot().email())
                 .claim("role", user.snapshot().role().name())
-                .claim(USE_CLAIM, claimOf(TokenUse.ACCESS))
+                .claim(USE_CLAIM, Use.ACCESS.claim())
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(accessExpiry))
-                .signWith(signingKey(TokenUse.ACCESS))
+                .signWith(signingKey(Use.ACCESS))
                 .compact();
 
         // Carries no email and no role: a refresh token proves who, nothing more.
         String refresh = Jwts.builder()
                 .subject(user.snapshot().id().value())
                 .id(Id.generate().value())
-                .claim(USE_CLAIM, claimOf(TokenUse.REFRESH))
+                .claim(USE_CLAIM, Use.REFRESH.claim())
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(refreshExpiry))
-                .signWith(signingKey(TokenUse.REFRESH))
+                .signWith(signingKey(Use.REFRESH))
                 .compact();
 
         return new Tokens(
@@ -74,48 +83,45 @@ public class JwtTokenIssuer implements TokenIssuer {
     }
 
     @Override
-    public VerifiedToken verify(RefreshToken refreshToken) {
-        return verify(refreshToken.value(), TokenUse.REFRESH);
+    public Id holderOf(RefreshToken refreshToken) {
+        return read(refreshToken.value(), Use.REFRESH)
+                .map(claims -> new Id(claims.getSubject()))
+                .orElseThrow(InvalidTokenException::new);
     }
 
-    @Override
-    public VerifiedToken verify(AccessToken accessToken) {
-        return verify(accessToken.value(), TokenUse.ACCESS);
+    public Optional<Bearer> authenticate(String accessToken) {
+        return read(accessToken, Use.ACCESS).flatMap(JwtTokenIssuer::bearerOf);
     }
 
-    // Checked against the key of the door it came through, so a token minted for the other
-    // use fails here on its signature. The claims are still reported, not judged: the use
-    // check stays with the caller.
-    private VerifiedToken verify(String compact, TokenUse door) {
+    private static Optional<Bearer> bearerOf(Claims claims) {
+        String role = claims.get("role", String.class);
         try {
-            Claims claims = Jwts.parser()
-                    .verifyWith(signingKey(door))
-                    .build()
-                    .parseSignedClaims(compact)
-                    .getPayload();
-
-            String role = claims.get("role", String.class);
-            return new VerifiedToken(new Id(claims.getSubject()),
-                    useOf(claims.get(USE_CLAIM, String.class)),
-                    role == null ? null : Role.valueOf(role));
-        } catch (JwtException | IllegalArgumentException e) {
-            throw new InvalidTokenException(e);
+            return role == null
+                    ? Optional.empty()
+                    : Optional.of(new Bearer(new Id(claims.getSubject()), Role.valueOf(role)));
+        } catch (IllegalArgumentException e) {
+            return Optional.empty();
         }
     }
 
-    private static String claimOf(TokenUse use) {
-        return use.name().toLowerCase();
+    // A token minted for the other use fails on its signature; one that carries no use
+    // claim — minted before the claim existed — or the wrong one is refused, not guessed.
+    private Optional<Claims> read(String compact, Use expected) {
+        try {
+            Claims claims = Jwts.parser()
+                    .verifyWith(signingKey(expected))
+                    .build()
+                    .parseSignedClaims(compact)
+                    .getPayload();
+            boolean usable = expected.claim().equals(claims.get(USE_CLAIM, String.class))
+                    && claims.getSubject() != null && !claims.getSubject().isBlank();
+            return usable ? Optional.of(claims) : Optional.empty();
+        } catch (JwtException | IllegalArgumentException e) {
+            return Optional.empty();
+        }
     }
 
-    /** A token minted before the claim existed carries none: it is refused, not guessed. */
-    private static TokenUse useOf(String claim) {
-        for (TokenUse use : TokenUse.values())
-            if (claimOf(use).equals(claim))
-                return use;
-        throw new InvalidTokenException();
-    }
-
-    private SecretKey signingKey(TokenUse use) {
+    private SecretKey signingKey(Use use) {
         String secret = switch (use) {
             case ACCESS -> securityProperties.jwt().accessSecret();
             case REFRESH -> securityProperties.jwt().refreshSecret();

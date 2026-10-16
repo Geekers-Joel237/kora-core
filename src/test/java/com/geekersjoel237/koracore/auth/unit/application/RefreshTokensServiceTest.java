@@ -5,7 +5,7 @@ import com.geekersjoel237.koracore.auth.application.usecases.RefreshTokensServic
 import com.geekersjoel237.koracore.auth.domain.enums.Role;
 import com.geekersjoel237.koracore.auth.domain.exception.CustomerNotFoundException;
 import com.geekersjoel237.koracore.auth.domain.exception.InvalidTokenException;
-import com.geekersjoel237.koracore.auth.domain.exception.TokenUseMismatchException;
+import com.geekersjoel237.koracore.auth.domain.exception.UserNotActiveException;
 import com.geekersjoel237.koracore.auth.domain.model.User;
 import com.geekersjoel237.koracore.auth.domain.vo.RefreshToken;
 import com.geekersjoel237.koracore.auth.domain.vo.Tokens;
@@ -36,8 +36,11 @@ class RefreshTokensServiceTest {
         service = new RefreshTokensService(new DirectTransactionBoundary(), users, tokenIssuer);
     }
 
-    private Tokens loggedIn() {
-        User user = User.create(USER_ID, "Joel Geekers", "test@koracore.com", Role.CUSTOMER);
+    private User aUser() {
+        return User.create(USER_ID, "Joel Geekers", "test@koracore.com", Role.CUSTOMER);
+    }
+
+    private Tokens loggedIn(User user) {
         users.save(user);
         return tokenIssuer.issue(user);
     }
@@ -48,25 +51,25 @@ class RefreshTokensServiceTest {
 
     @Test
     void should_issue_a_new_pair_for_a_refresh_token() {
-        Tokens tokens = loggedIn();
+        Tokens tokens = loggedIn(aUser());
 
         Tokens renewed = service.execute(refreshWith(tokens.refreshToken().token().value()));
 
-        assertThat(tokenIssuer.verify(renewed.refreshToken().token()).subject()).isEqualTo(USER_ID);
+        assertThat(tokenIssuer.holderOf(renewed.refreshToken().token())).isEqualTo(USER_ID);
         assertThat(renewed.refreshToken().token()).isNotEqualTo(tokens.refreshToken().token());
     }
 
     @Test
     void should_refuse_an_access_token_presented_as_refresh_token() {
-        Tokens tokens = loggedIn();
+        Tokens tokens = loggedIn(aUser());
 
         assertThatThrownBy(() -> service.execute(refreshWith(tokens.accessToken().token().value())))
-                .isInstanceOf(TokenUseMismatchException.class);
+                .isInstanceOf(InvalidTokenException.class);
     }
 
     @Test
     void should_refuse_a_token_the_issuer_does_not_recognise() {
-        loggedIn();
+        loggedIn(aUser());
 
         assertThatThrownBy(() -> service.execute(refreshWith("forged")))
                 .isInstanceOf(InvalidTokenException.class);
@@ -74,10 +77,21 @@ class RefreshTokensServiceTest {
 
     @Test
     void should_refuse_a_refresh_token_whose_user_is_gone() {
-        Tokens tokens = loggedIn();
+        Tokens tokens = loggedIn(aUser());
         users.reset();
 
         assertThatThrownBy(() -> service.execute(refreshWith(tokens.refreshToken().token().value())))
                 .isInstanceOf(CustomerNotFoundException.class);
+    }
+
+    @Test
+    void should_not_renew_access_for_a_suspended_user() {
+        User user = aUser();
+        Tokens tokens = loggedIn(user);
+        user.suspend();
+        users.save(user);
+
+        assertThatThrownBy(() -> service.execute(refreshWith(tokens.refreshToken().token().value())))
+                .isInstanceOf(UserNotActiveException.class);
     }
 }

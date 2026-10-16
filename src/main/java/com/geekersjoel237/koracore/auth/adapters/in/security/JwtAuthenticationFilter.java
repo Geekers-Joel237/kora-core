@@ -1,10 +1,6 @@
 package com.geekersjoel237.koracore.auth.adapters.in.security;
 
-import com.geekersjoel237.koracore.auth.application.query.authenticate.AuthenticateQuery;
-import com.geekersjoel237.koracore.auth.domain.vo.AccessToken;
-import com.geekersjoel237.koracore.auth.domain.vo.AuthenticatedUser;
-import com.geekersjoel237.koracore.auth.ports.in.AuthenticateQueryHandler;
-import com.geekersjoel237.koracore.shared.domain.exception.BusinessException;
+import com.geekersjoel237.koracore.auth.adapters.out.security.JwtTokenIssuer;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -26,10 +22,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
 
-    private final AuthenticateQueryHandler authenticate;
+    private final JwtTokenIssuer tokens;
 
-    public JwtAuthenticationFilter(AuthenticateQueryHandler authenticate) {
-        this.authenticate = authenticate;
+    public JwtAuthenticationFilter(JwtTokenIssuer tokens) {
+        this.tokens = tokens;
     }
 
     @Override
@@ -38,21 +34,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                     @NonNull FilterChain filterChain) throws ServletException, IOException {
         String header = request.getHeader("Authorization");
         if (header != null && header.startsWith("Bearer ")) {
-            try {
-                AuthenticatedUser user = authenticate.execute(
-                        new AuthenticateQuery(AccessToken.of(header.substring(7))));
-
-                String userId = user.userId().value();
+            tokens.authenticate(header.substring(7)).ifPresentOrElse(bearer -> {
+                String userId = bearer.userId().value();
                 request.setAttribute("customerId", userId);
 
-                var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + user.role().name()));
+                var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + bearer.role().name()));
                 var auth = new UsernamePasswordAuthenticationToken(userId, null, authorities);
                 SecurityContextHolder.getContext().setAuthentication(auth);
-
-            } catch (BusinessException | IllegalArgumentException e) {
-                log.warn("[JWT] Token validation failed — customerId will not be set: {}", e.getMessage());
+            }, () -> {
+                log.warn("[JWT] Token validation failed — customerId will not be set");
                 SecurityContextHolder.clearContext();
-            }
+            });
         }
         filterChain.doFilter(request, response);
     }
