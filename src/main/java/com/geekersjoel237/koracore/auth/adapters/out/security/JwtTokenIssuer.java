@@ -96,6 +96,14 @@ public class JwtTokenIssuer implements TokenIssuer {
                 .orElseThrow(InvalidTokenException::new);
     }
 
+     @Override
+    public void revoke(RefreshToken refreshToken) {
+        Claims claims = read(refreshToken.value(), Use.REFRESH)
+                .filter(c -> c.getId() != null)
+                .orElseThrow(InvalidTokenException::new);
+        refreshTokens.revokeFamilyOf(new Id(claims.getId()), Instant.now(clock));
+    }
+
     public Optional<Bearer> authenticate(String accessToken) {
         return read(accessToken, Use.ACCESS).flatMap(JwtTokenIssuer::bearerOf);
     }

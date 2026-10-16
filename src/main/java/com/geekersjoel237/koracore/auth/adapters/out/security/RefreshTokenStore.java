@@ -30,6 +30,15 @@ class RefreshTokenStore {
                         "createdAt", Timestamp.from(issuedAt)));
     }
 
+    void revokeFamilyOf(Id tokenId, Instant at) {
+        jdbc.update("""
+                        UPDATE refresh_tokens SET revoked_at = :at
+                        WHERE revoked_at IS NULL
+                          AND family_id = (SELECT family_id FROM refresh_tokens WHERE id = :id)
+                        """,
+                Map.of("id", tokenId.value(), "at", Timestamp.from(at)));
+    }
+
     boolean isLive(Id tokenId) {
         Integer count = jdbc.queryForObject("""
                         SELECT COUNT(*) FROM refresh_tokens

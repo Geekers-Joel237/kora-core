@@ -17,7 +17,6 @@ import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -27,6 +26,7 @@ import static java.time.temporal.ChronoUnit.DAYS;
 import static java.time.temporal.ChronoUnit.HOURS;
 import static java.time.temporal.ChronoUnit.MINUTES;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatNoException;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class JwtTokenIssuerTest extends AbstractRepositoryTest {
@@ -39,9 +39,6 @@ class JwtTokenIssuerTest extends AbstractRepositoryTest {
 
     @Autowired
     private JpaUserRepository users;
-
-    @Autowired
-    private JdbcTemplate jdbc;
 
     @PersistenceContext
     private EntityManager em;
@@ -71,11 +68,6 @@ class JwtTokenIssuerTest extends AbstractRepositoryTest {
                 .compact();
     }
 
-    private String jtiOf(Tokens tokens) {
-        String payload = tokens.refreshToken().token().value().split("\\.")[1];
-        String json = new String(java.util.Base64.getUrlDecoder().decode(payload), StandardCharsets.UTF_8);
-        return json.replaceAll(".*\"jti\":\"([^\"]+)\".*", "$1");
-    }
 
     // ── issuing ──────────────────────────────────────────────────────────────
 
@@ -178,9 +170,44 @@ class JwtTokenIssuerTest extends AbstractRepositoryTest {
     @Test
     void should_refuse_a_refresh_token_once_revoked() {
         Tokens tokens = issuer.issue(user);
-        jdbc.update("UPDATE refresh_tokens SET revoked_at = now() WHERE id = ?", jtiOf(tokens));
+        issuer.revoke(tokens.refreshToken().token());
 
         assertThatThrownBy(() -> issuer.holderOf(tokens.refreshToken().token()))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    @Test
+    void should_accept_revoking_the_same_refresh_token_twice() {
+        Tokens tokens = issuer.issue(user);
+        issuer.revoke(tokens.refreshToken().token());
+
+        assertThatNoException().isThrownBy(() -> issuer.revoke(tokens.refreshToken().token()));
+    }
+
+    @Test
+    void should_end_only_the_session_of_the_revoked_token() {
+        Tokens phone = issuer.issue(user);
+        Tokens tablet = issuer.issue(user);
+
+        issuer.revoke(phone.refreshToken().token());
+
+        assertThat(issuer.holderOf(tablet.refreshToken().token())).isEqualTo(userId);
+    }
+
+    @Test
+    void should_refuse_to_revoke_an_access_token() {
+        Tokens tokens = issuer.issue(user);
+        RefreshToken misused = RefreshToken.of(tokens.accessToken().token().value());
+
+        assertThatThrownBy(() -> issuer.revoke(misused)).isInstanceOf(InvalidTokenException.class);
+    }
+
+    @Test
+    void should_refuse_to_revoke_a_token_signed_with_another_key() {
+        String forged = signed("another-secret-key-also-at-least-32-chars", "refresh", null,
+                Id.generate().value());
+
+        assertThatThrownBy(() -> issuer.revoke(RefreshToken.of(forged)))
                 .isInstanceOf(InvalidTokenException.class);
     }
 

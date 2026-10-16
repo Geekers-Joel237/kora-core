@@ -12,13 +12,17 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 // Opaque values instead of JWTs. Honours the port's contract the way the real issuer does:
-// only a refresh token it minted names a holder — an access token does not.
+// only a live refresh token it minted names a holder; revoking one it never minted — an
+// access token included — is refused, revoking one twice is not.
 public class InMemoryTokenIssuer implements TokenIssuer {
 
     private final Map<String, Id> refreshTokens = new HashMap<>();
+    private final Set<String> revoked = new HashSet<>();
     private final Clock clock;
 
     public InMemoryTokenIssuer(Clock clock) {
@@ -39,8 +43,15 @@ public class InMemoryTokenIssuer implements TokenIssuer {
     @Override
     public Id holderOf(RefreshToken refreshToken) {
         Id holder = refreshTokens.get(refreshToken.value());
-        if (holder == null)
+        if (holder == null || revoked.contains(refreshToken.value()))
             throw new InvalidTokenException();
         return holder;
+    }
+
+    @Override
+    public void revoke(RefreshToken refreshToken) {
+        if (!refreshTokens.containsKey(refreshToken.value()))
+            throw new InvalidTokenException();
+        revoked.add(refreshToken.value());
     }
 }

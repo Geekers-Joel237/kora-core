@@ -1,10 +1,12 @@
 package com.geekersjoel237.koracore.auth.config;
 
 import com.geekersjoel237.koracore.auth.application.command.LoginCommand;
+import com.geekersjoel237.koracore.auth.application.command.LogoutCommand;
 import com.geekersjoel237.koracore.auth.application.command.RefreshTokensCommand;
 import com.geekersjoel237.koracore.auth.application.command.RegisterCommand;
 import com.geekersjoel237.koracore.auth.application.command.VerifyOtpCommand;
 import com.geekersjoel237.koracore.auth.ports.in.LoginCommandHandler;
+import com.geekersjoel237.koracore.auth.ports.in.LogoutCommandHandler;
 import com.geekersjoel237.koracore.auth.ports.in.RefreshTokensCommandHandler;
 import com.geekersjoel237.koracore.auth.ports.in.RegisterCommandHandler;
 import com.geekersjoel237.koracore.auth.ports.in.VerifyOtpCommandHandler;
@@ -20,13 +22,16 @@ public class AuthCommandRegistrar implements CommandRegistrar {
     private final LoginCommandHandler login;
     private final VerifyOtpCommandHandler verifyOtp;
     private final RefreshTokensCommandHandler refreshTokens;
+    private final LogoutCommandHandler logout;
 
     public AuthCommandRegistrar(RegisterCommandHandler register, LoginCommandHandler login,
-                                VerifyOtpCommandHandler verifyOtp, RefreshTokensCommandHandler refreshTokens) {
+                                VerifyOtpCommandHandler verifyOtp, RefreshTokensCommandHandler refreshTokens,
+                                LogoutCommandHandler logout) {
         this.register = register;
         this.login = login;
         this.verifyOtp = verifyOtp;
         this.refreshTokens = refreshTokens;
+        this.logout = logout;
     }
 
     @Override
@@ -34,6 +39,7 @@ public class AuthCommandRegistrar implements CommandRegistrar {
         registry.register(RegisterCommand.class, register)
                 .register(LoginCommand.class, login)
                 .register(VerifyOtpCommand.class, verifyOtp)
-                .register(RefreshTokensCommand.class, refreshTokens);
+                .register(RefreshTokensCommand.class, refreshTokens)
+                .register(LogoutCommand.class, logout);
     }
 }

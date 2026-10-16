@@ -3,10 +3,12 @@ package com.geekersjoel237.koracore.auth.config;
 import com.geekersjoel237.koracore.auth.adapters.out.otp.MailedOtpChallenge;
 import com.geekersjoel237.koracore.auth.adapters.out.security.CustomerPinVerifier;
 import com.geekersjoel237.koracore.auth.application.usecases.LoginService;
+import com.geekersjoel237.koracore.auth.application.usecases.LogoutService;
 import com.geekersjoel237.koracore.auth.application.usecases.RefreshTokensService;
 import com.geekersjoel237.koracore.auth.application.usecases.RegisterService;
 import com.geekersjoel237.koracore.auth.application.usecases.VerifyOtpService;
 import com.geekersjoel237.koracore.auth.ports.in.LoginCommandHandler;
+import com.geekersjoel237.koracore.auth.ports.in.LogoutCommandHandler;
 import com.geekersjoel237.koracore.auth.ports.in.RefreshTokensCommandHandler;
 import com.geekersjoel237.koracore.auth.ports.in.RegisterCommandHandler;
 import com.geekersjoel237.koracore.auth.ports.in.VerifyOtpCommandHandler;
@@ -78,5 +80,10 @@ public class AuthUseCaseConfiguration {
     RefreshTokensCommandHandler refreshTokensCommandHandler(TransactionBoundary boundary, UserRepository users,
                                                             TokenIssuer tokenIssuer) {
         return new RefreshTokensService(boundary, users, tokenIssuer);
+    }
+
+    @Bean
+    LogoutCommandHandler logoutCommandHandler(TransactionBoundary boundary, TokenIssuer tokenIssuer) {
+        return new LogoutService(boundary, tokenIssuer);
     }
 }

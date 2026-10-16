@@ -11,4 +11,6 @@ public interface TokenIssuer {
     Tokens issue(User user);
 
     Id holderOf(RefreshToken refreshToken);
+
+    void revoke(RefreshToken refreshToken);
 }
