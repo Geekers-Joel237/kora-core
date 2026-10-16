@@ -90,6 +90,7 @@ and `Otp` do not exist here.
 | `Amount` | `record(BigDecimal value, String currency)` — the money type; `Balance` wraps one and returns new instances from `credit()` / `debit()` |
 | `Id`, `PhoneNumber`, `Pin` | Kernel value objects; `Id` is the business identifier. `PhoneNumber` is `(prefix, number)` and is the wallet identifier |
 | `OtpCode`, `OtpPurpose` | Auth value objects. `OtpCode` is both the issued and the submitted code — the store owns the lifetime |
+| `Tokens`, `AccessToken`, `RefreshToken` | Opaque credentials handed to and from `TokenIssuer`. What a token is made of — its use, its signing key, its `jti` — is the JWT adapter's business; the domain and the use cases never look inside |
 | `AccountType` | Payment value object |
 | `CustomerStatus` | What a customer sees of the 12 states: `PENDING`, `COMPLETED` (from capture on), `FAILED`, `REFUNDED`. Not persisted |
 | `PaymentMethod` | Enum `CARD`, `ORANGE_MONEY` (`OM`), `MOBILE_MONEY` (`MOMO`), `WALLET` |
@@ -125,6 +126,9 @@ Every aggregate exposes `snapshot()` returning an inner record, plus a static
 | No provider network call inside a DB transaction | `CashInService`, `CashOutService` and `ReversePaymentService` split into TX-1 (~10 ms) / provider I/O (~1 400 ms, zero connections held) / TX-2 (~20 ms). Per ADR-004, a class-level `@Transactional` produced p95 60 000 ms and a 73.93 % error rate at 25 req/s through HikariCP pool exhaustion |
 | A rollback happens by throwing | `BusinessException` — or any unchecked throwable — inside `TransactionBoundary.execute` discards the writes; returning normally commits. The port hands out no transaction status, so throwing is the only way for a use case to abort. Pinned in `SpringTransactionBoundaryTest` against a recording transaction manager |
 | Retry wraps the boundary, never the reverse | `ConcurrentUpdateException` surfaces at commit, so the transaction is already dead. Retry is scoped to the phase that is safe to replay — TX-2, after the provider answered (ADR-007) |
+| An access token and a refresh token are never interchangeable | `JwtTokenIssuer` signs each use with its own key — `kora.security.jwt.access-secret` and `refresh-secret`, which `SecurityProperties` refuses to start with equal — and checks a `typ` claim on top. Each is refused at the other's door with 401. Asserted in `JwtTokenIssuerTest` and `AuthE2ETest` |
+| A refresh token is honoured only while the server remembers it | Every refresh token is a row in `refresh_tokens`, keyed by its `jti`. `POST /auth/logout` revokes its whole family — every token descended from the same login |
+| A refresh token is exchanged once; a replay ends its session | `RefreshTokenStore.consume` marks the token used in one conditional `UPDATE`, so of two exchanges exactly one wins. A second exchange revokes the family through `revokeFamilyOfReplayed` — the only `@Transactional` in `src/main`, `REQUIRES_NEW`, so the revocation survives the 401 that rolls the caller back. Asserted end to end in `AuthE2ETest` |
 | An enumerated column holds only values the domain defines | Eleven `CHECK` constraints, `ck_<table>_<column>`, added by `V202609071725__constrain_enum_columns.sql` over `users.role`, `users.status`, `accounts.resource_type`, `transactions.state` / `type` / `payment_method`, `ledger_entries.type`, `trx_state_historics.old_state` / `new_state` / `triggered_by`, `authorization_records.status`. `EnumColumnConstraintsDbTest` in `auth` and in `payment` reads `pg_get_constraintdef` and asserts the constraint's literals **equal** the Java values, so a constant added on either side alone fails the build. Native `CREATE TYPE … AS ENUM` was rejected: no `DROP VALUE` exists, and it would put `@JdbcTypeCode(NAMED_ENUM)` in ten entities. The `currency` columns are deliberately out — currency is not a closed set here |
 
 ## 7. Review rules
@@ -180,17 +184,24 @@ Assertions to apply to a diff. Each one is decidable by reading the diff alone.
 19. A new enumerated column whose migration carries no `ck_<table>_<column>`
     constraint, and no matching equality assertion in the module's
     `EnumColumnConstraintsDbTest`, is a defect.
+20. Token protocol vocabulary — a token's use or type, its `jti`, a signing key,
+    `refresh_tokens` — named outside `auth/adapters/out/security/` and
+    `auth/adapters/in/security/` is a defect. Swapping the JWT adapter for an OAuth2
+    server must not touch the domain, the use cases or `TokenIssuer`.
+21. `@Transactional` in `src/main` anywhere but
+    `RefreshTokenStore.revokeFamilyOfReplayed` is a defect. A use case's transaction
+    goes through `TransactionBoundary`.
 
 ## 8. Testing strategy
 
-58 test classes under `src/test/java`. The tree states the pyramid level first, and
+62 test classes under `src/test/java`. The tree states the pyramid level first, and
 `TestPyramidTest` checks that the statement is true.
 
 ```
 src/test/java/com/geekersjoel237/koracore/
 └── <module>/            auth · payment · shared
-    ├── unit/            domain · application · doubles · (shared: adapters, ports, architecture)
-    ├── integration/     persistence · query
+    ├── unit/            domain · application · doubles · (auth: config) · (shared: adapters, ports, architecture)
+    ├── integration/     persistence · query · (auth: security)
     └── e2e/
 ```
 
@@ -238,15 +249,21 @@ Deliberate and tracked. Do not raise them on a PR.
 - `auth -> payment` and `payment -> auth` couplings remain, listed and asserted in
   `ModuleBoundariesTest`. Closing them needs a published `OpenWalletUseCase` and a
   wallet lookup by phone number.
+- Access tokens are not stored: after a logout, one stays valid until it expires, at
+  most 15 minutes. Checking them per request would put a database read on every call.
+- Expired `refresh_tokens` rows are never purged.
+- Two concurrent exchanges of the same refresh token count as a replay and end the
+  session. The mobile client sends one refresh at a time (`mobile/docs/06-architecture.md`).
 
 ## 10. Key files
 
 - `ROADMAP.md` — 10-step evolution plan, authoritative numbering
 - `HELP.md` — engineering standards, DDD/SOLID rules, project conventions
 - `CONTRIBUTING.md` — configuration assignment and migration naming, both test-enforced
-- `docs/kora-core-state-of-view-v2.md` — engineering retrospective, Steps 2 and 3.
-  `docs/kora-core-state-of-view.md` is the Step 1 snapshot, kept unedited; v2 lists
-  what it says that no longer holds
+- `docs/kora-core-state-of-view-v3.md` — review at `d28a6be`: what holds, what does
+  not, ranked limits L-1 to L-15. Kept as written; a closed limit gets a dated note.
+  `docs/kora-core-state-of-view-v2.md` is the Steps 2 and 3 retrospective and
+  `docs/kora-core-state-of-view.md` the Step 1 snapshot, both kept unedited
 - `docs/adr/` — ADR-001 immutable ledger and balance cache · ADR-002 payment lifecycle
   and locking · ADR-003 single-call payment API · ADR-004 micro-transaction model ·
   ADR-005 load-test calibration · ADR-006 compose topology ·
@@ -257,5 +274,7 @@ Deliberate and tracked. Do not raise them on a PR.
   `V202609071725__constrain_enum_columns.sql` closes every enumerated column with a
   `CHECK`, and its header records why not a native `ENUM` type;
   `V202610131159__allow_unknown_transaction_state.sql` re-adds the three state
-  constraints with `UNKNOWN`
+  constraints with `UNKNOWN`; `V202610161900__create_refresh_tokens.sql` creates the
+  JWT adapter's own table, one row per refresh token issued, with its family, its use
+  and its revocation
 - `perf/PERF.md`, `perf/SIMULATION.md` — load-test procedure

@@ -87,9 +87,21 @@ Durée de vie : **5 minutes**.
 { "refreshToken": "eyJ..." }
 ```
 
-`200` → nouveau `TokensResponse` (les deux jetons sont réémis). `401` → jeton invalide ou expiré.
+`200` → nouveau `TokensResponse` (les deux jetons sont réémis). `401` → jeton invalide, expiré, révoqué ou **déjà utilisé**. `403` → compte suspendu.
 
-> **Observation vérifiée sur le code.** `AuthService.refresh` parse le jeton avec la même clé HMAC et n'en lit que le `sub`. **Aucune distinction n'est faite entre un jeton d'accès et un jeton de rafraîchissement** : un jeton d'accès encore valide est accepté par `/auth/refresh`. Sans conséquence côté app — elle envoie le bon jeton — mais à ne pas exploiter, et à signaler côté backend.
+**Le jeton de rafraîchissement est à usage unique** (depuis le 2026-10-16). Chaque appel le consomme et en rend un nouveau, qui doit remplacer l'ancien dans le trousseau **avant** tout autre appel. Présenter une seconde fois un jeton déjà consommé est traité comme un vol : la session entière est close, y compris le jeton que l'app vient de recevoir. D'où la règle déjà posée en `06-architecture.md` : **un seul rafraîchissement en vol à la fois**.
+
+> ~~**Observation vérifiée sur le code.** Aucune distinction n'est faite entre un jeton d'accès et un jeton de rafraîchissement.~~ — corrigé le 2026-10-16. Un jeton d'accès envoyé ici reçoit `401`, et un jeton de rafraîchissement envoyé en `Bearer` aussi.
+
+### `POST /auth/logout`
+
+```jsonc
+{ "refreshToken": "eyJ..." }
+```
+
+`204` → session close côté serveur : le jeton de rafraîchissement et tous ceux qui en descendent sont révoqués. Rappeler avec un jeton déjà révoqué renvoie aussi `204`. `401` → ce n'est pas un jeton de rafraîchissement émis par le serveur (un jeton d'accès, par exemple).
+
+Le jeton d'**accès** n'est pas révoqué : il reste valide jusqu'à son expiration, 15 minutes au plus. La déconnexion locale (§6.5) reste donc nécessaire, en plus de cet appel.
 
 ### Contenu du jeton d'accès
 
@@ -428,11 +440,11 @@ Stratégie imposée : sondage ciblé. Tant qu'au moins une opération visible es
 
 L'opération se retrouve par sa **`reference`** : l'historique n'expose plus `transactionId`, mais la réponse immédiate d'un paiement porte `transactionNumber`, qui est la même valeur. Le sondage s'arrête dès que `status` n'est plus `PENDING`.
 
-### 6.5 Aucun endpoint de déconnexion
+### 6.5 ~~Aucun endpoint de déconnexion~~ — levé le 2026-10-16
 
-Aucune invalidation serveur des jetons. La déconnexion est strictement locale : effacement du trousseau, purge du cache de requêtes, purge du stockage local, retour à l'écran d'accueil non authentifié.
+`POST /auth/logout` (§1) révoque la session côté serveur. La déconnexion locale reste à faire, dans cet ordre : appel à `/auth/logout` (un échec réseau ne bloque pas la suite), puis effacement du trousseau, purge du cache de requêtes, purge du stockage local, retour à l'écran d'accueil non authentifié. Le jeton d'accès encore en mémoire reste valide 15 minutes au plus ; l'effacer suffit.
 
-Un jeton de rafraîchissement volé reste valide jusqu'à son expiration naturelle. C'est une limite connue du backend, à mentionner dans les notes de sécurité, pas à contourner côté client.
+Contournement à retirer quand l'appel est branché : drapeau `logout` (`09-api-evolution.md`).
 
 ### 6.6 Endpoints d'administration
 

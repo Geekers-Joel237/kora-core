@@ -146,6 +146,16 @@ the signing key and carry no type claim (`JwtTokenIssuer.subjectOf`). So an acce
 valid for 15 minutes can be exchanged for a refresh token valid for 7 days. Tokens cannot
 be revoked, and logout exists only on the client.
 
+> **Closed — 2026-10-16**, on `feature/KC-xx-l10-token-hardening`. Reproduced first: an
+> access token at `/auth/refresh` returned 200, a refresh token as `Bearer` returned 403.
+> Now each token use has its own signing key and a `typ` claim, and each is refused at the
+> other's door with 401. Every refresh token is recorded in `refresh_tokens`: it can be
+> exchanged once, a replay revokes its whole session, and `POST /auth/logout` revokes it
+> server-side. A suspended user can no longer renew. All of it lives in the JWT adapter;
+> the domain and the use cases see opaque tokens only, so an OAuth2 server could replace
+> the adapter without touching them. What remains: an access token stays valid up to
+> 15 minutes after logout, and expired `refresh_tokens` rows are not purged.
+
 **L-11 · The application connects to the database as the superuser.** The application user,
 the migration user and `POSTGRES_USER` are the same account in `.env`. The split into
 `kora_app` (DML only) and `kora_migration` (DDL) is designed but not done (KC-05). A SQL

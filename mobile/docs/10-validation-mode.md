@@ -235,7 +235,7 @@ Ce que l'application doit permettre de vérifier sur le backend, par ordre de va
 | 16 | Provider en mode `FAILURE` | **`PaymentProviderException` non mappée → `500` au corps non conforme** |
 | 17 | Transfert vers un numéro inexistant | Confirme que c'est un `404`, pas un `422` |
 | 18 | Montant `100.5` en `XAF`, injecté depuis le mode validation | **Confirme l'absence de contrôle d'échelle sur `Amount`** |
-| 19 | Jeton d'**accès** envoyé à `/auth/refresh` | **Confirme qu'il est accepté** — les deux types ne sont pas distingués |
+| 19 | Jeton d'**accès** envoyé à `/auth/refresh` | **Doit désormais être refusé** — `401` depuis le 2026-10-16 (L-10) ; s'il est accepté, c'est une régression |
 | 20 | Compte créé, OTP jamais vérifié, puis `/auth/login` | Confirme que le statut est `VERIFIED` dès l'inscription |
 | 21 | Détail d'une opération figurant en page 12 de l'historique | Le rejeu de page du contrat §6.7 |
 
