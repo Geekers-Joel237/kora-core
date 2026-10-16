@@ -19,7 +19,7 @@ public class AuthExceptionHandler {
 
     @ExceptionHandler({InvalidOtpException.class, OtpExpiredException.class,
             PinValidationException.class, InvalidRefreshTokenException.class,
-            JwtException.class})
+            TokenUseMismatchException.class, JwtException.class})
     ProblemDetail onUnauthorized(RuntimeException ex) {
         return ProblemDetails.of(HttpStatus.UNAUTHORIZED, ex.getMessage());
     }

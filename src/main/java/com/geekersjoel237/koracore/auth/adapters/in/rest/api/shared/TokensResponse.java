@@ -12,10 +12,10 @@ public record TokensResponse(
 ) {
     public static TokensResponse from(Tokens tokens) {
         return new TokensResponse(
-                tokens.accessToken().value(),
-                tokens.accessToken().expiredAt(),
-                tokens.refreshToken().value(),
-                tokens.refreshToken().expiredAt()
+                tokens.accessToken().token().value(),
+                tokens.accessToken().expiresAt(),
+                tokens.refreshToken().token().value(),
+                tokens.refreshToken().expiresAt()
         );
     }
 }

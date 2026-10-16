@@ -17,6 +17,14 @@ import com.geekersjoel237.koracore.auth.ports.out.security.CustomerPinEncoder;
 import com.geekersjoel237.koracore.shared.domain.vo.Id;
 import com.geekersjoel237.koracore.shared.domain.vo.PhoneNumber;
 import com.geekersjoel237.koracore.auth.domain.vo.Tokens;
+import com.geekersjoel237.koracore.auth.domain.vo.RefreshToken;
+import com.geekersjoel237.koracore.auth.domain.vo.VerifiedToken;
+import com.geekersjoel237.koracore.auth.domain.enums.TokenUse;
+import com.geekersjoel237.koracore.auth.domain.exception.InvalidRefreshTokenException;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
+import java.nio.charset.StandardCharsets;
+import java.util.Date;
 import com.geekersjoel237.koracore.auth.config.SecurityProperties;
 import com.geekersjoel237.koracore.auth.adapters.out.security.BCryptCustomerPinEncoder;
 import com.geekersjoel237.koracore.payment.unit.doubles.InMemoryAccountRepository;
@@ -195,7 +203,7 @@ class AuthServiceTest {
         Tokens tokens = tokenIssuer.issue(buildVerifiedUser());
         Instant after = Instant.now();
 
-        assertThat(tokens.accessToken().expiredAt())
+        assertThat(tokens.accessToken().expiresAt())
                 .isAfter(before.plus(14, MINUTES))
                 .isBefore(after.plus(16, MINUTES));
     }
@@ -206,7 +214,7 @@ class AuthServiceTest {
         Tokens tokens = tokenIssuer.issue(buildVerifiedUser());
         Instant after = Instant.now();
 
-        assertThat(tokens.refreshToken().expiredAt())
+        assertThat(tokens.refreshToken().expiresAt())
                 .isAfter(before.plus(6, DAYS).plus(23, HOURS))
                 .isBefore(after.plus(7, DAYS).plus(1, HOURS));
     }
@@ -215,19 +223,64 @@ class AuthServiceTest {
     void should_generate_distinct_token_values_on_successive_calls() {
         Tokens t1 = tokenIssuer.issue(buildVerifiedUser());
         Tokens t2 = tokenIssuer.issue(buildVerifiedUser());
-        assertNotEquals(t1.accessToken().value(), t2.accessToken().value());
-        assertNotEquals(t1.refreshToken().value(), t2.refreshToken().value());
+        assertNotEquals(t1.accessToken().token().value(), t2.accessToken().token().value());
+        assertNotEquals(t1.refreshToken().token().value(), t2.refreshToken().token().value());
     }
 
     @Test
     void should_return_non_blank_access_token_value() {
         Tokens tokens = tokenIssuer.issue(buildVerifiedUser());
-        assertFalse(tokens.accessToken().value().isBlank());
+        assertFalse(tokens.accessToken().token().value().isBlank());
     }
 
     @Test
     void should_return_non_blank_refresh_token_value() {
         Tokens tokens = tokenIssuer.issue(buildVerifiedUser());
-        assertFalse(tokens.refreshToken().value().isBlank());
+        assertFalse(tokens.refreshToken().token().value().isBlank());
+    }
+
+    @Test
+    void should_verify_refresh_token_as_refresh_use() {
+        Tokens tokens = tokenIssuer.issue(buildVerifiedUser());
+
+        VerifiedToken verified = tokenIssuer.verify(tokens.refreshToken().token());
+
+        assertThat(verified.use()).isEqualTo(TokenUse.REFRESH);
+        assertThat(verified.subject()).isEqualTo(USER_ID);
+    }
+
+    @Test
+    void should_report_access_use_when_access_token_is_presented_for_refresh() {
+        Tokens tokens = tokenIssuer.issue(buildVerifiedUser());
+        RefreshToken misused = RefreshToken.of(tokens.accessToken().token().value());
+
+        assertThat(tokenIssuer.verify(misused).use()).isEqualTo(TokenUse.ACCESS);
+    }
+
+    @Test
+    void should_refuse_a_signed_token_without_use_claim() {
+        String legacy = Jwts.builder()
+                .subject(USER_ID.value())
+                .expiration(Date.from(Instant.now().plus(1, DAYS)))
+                .signWith(Keys.hmacShaKeyFor(
+                        TEST_SECURITY.jwt().secret().getBytes(StandardCharsets.UTF_8)))
+                .compact();
+
+        assertThatThrownBy(() -> tokenIssuer.verify(RefreshToken.of(legacy)))
+                .isInstanceOf(InvalidRefreshTokenException.class);
+    }
+
+    @Test
+    void should_refuse_a_token_signed_with_another_key() {
+        String forged = Jwts.builder()
+                .subject(USER_ID.value())
+                .claim(JwtTokenIssuer.USE_CLAIM, "refresh")
+                .expiration(Date.from(Instant.now().plus(1, DAYS)))
+                .signWith(Keys.hmacShaKeyFor(
+                        "another-secret-key-also-at-least-32-chars".getBytes(StandardCharsets.UTF_8)))
+                .compact();
+
+        assertThatThrownBy(() -> tokenIssuer.verify(RefreshToken.of(forged)))
+                .isInstanceOf(InvalidRefreshTokenException.class);
     }
 }

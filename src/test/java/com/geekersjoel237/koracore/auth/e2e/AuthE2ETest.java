@@ -114,7 +114,6 @@ class AuthE2ETest extends AbstractE2ETest {
     // L-10: an access token is not a refresh token. Today both are signed with one key and
     // carry no type, so a stolen 15-minute access token buys a 7-day refresh token.
     @Test
-    @Disabled("L-10 — closed by iteration 1: refresh requires TokenUse.REFRESH")
     void should_reject_access_token_on_refresh() {
         TokensResponse tokens = registerAndLogin(EMAIL, FULL_NAME, PREFIX, PHONE, PIN);
 
