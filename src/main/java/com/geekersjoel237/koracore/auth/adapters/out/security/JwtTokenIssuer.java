@@ -41,10 +41,13 @@ public class JwtTokenIssuer implements TokenIssuer {
     }
 
     private final SecurityProperties securityProperties;
+    private final RefreshTokenStore refreshTokens;
     private final Clock clock;
 
-    public JwtTokenIssuer(SecurityProperties securityProperties, Clock clock) {
+    public JwtTokenIssuer(SecurityProperties securityProperties, RefreshTokenStore refreshTokens,
+                          Clock clock) {
         this.securityProperties = securityProperties;
+        this.refreshTokens = refreshTokens;
         this.clock = clock;
     }
 
@@ -68,9 +71,11 @@ public class JwtTokenIssuer implements TokenIssuer {
                 .compact();
 
         // Carries no email and no role: a refresh token proves who, nothing more.
+        Id refreshId = Id.generate();
+        refreshTokens.record(refreshId, user.snapshot().id(), refreshId, refreshExpiry, now);
         String refresh = Jwts.builder()
                 .subject(user.snapshot().id().value())
-                .id(Id.generate().value())
+                .id(refreshId.value())
                 .claim(USE_CLAIM, Use.REFRESH.claim())
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(refreshExpiry))
@@ -85,6 +90,8 @@ public class JwtTokenIssuer implements TokenIssuer {
     @Override
     public Id holderOf(RefreshToken refreshToken) {
         return read(refreshToken.value(), Use.REFRESH)
+                .filter(claims -> claims.getId() != null
+                        && refreshTokens.isLive(new Id(claims.getId())))
                 .map(claims -> new Id(claims.getSubject()))
                 .orElseThrow(InvalidTokenException::new);
     }
