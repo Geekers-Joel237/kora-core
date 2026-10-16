@@ -1,30 +1,3 @@
-# -----------------------------------------------------------------------------
-# Socle - what the application needs to exist at all, in every environment.
-#
-#   postgres   the ledger
-#
-# And nothing else. A service that only some environments run is declared in the
-# file of the environment that runs it, never here.
-#
-# Architecture only: image and tag, environment, healthcheck, named volume,
-# network. No `ports`, no `restart`, no `container_name`, no host bind mount -
-# those are operational decisions and belong to an environment file.
-#
-# The split is testable:
-#     docker compose -f docker-compose.yml config | grep -E 'ports:|restart:'
-# must print nothing.
-#
-# Two axes, never mixed (ADR-006 D4):
-#   a FILE    answers "which environment am I in"        -> override / prod
-#   a PROFILE answers "what optional group do I want"    -> tooling / observability
-#
-# The application is not a service here: it runs on the host through
-# ./gradlew bootRun and reaches Postgres over the published port. That is why
-# production still publishes the database port - bound to loopback only - and
-# why DB_HOST is a variable: the day the application moves into a container,
-# DB_HOST becomes `postgres` and nothing else changes.
-# -----------------------------------------------------------------------------
-
 services:
 
   postgres:

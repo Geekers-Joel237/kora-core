@@ -6,6 +6,7 @@ import com.geekersjoel237.koracore.auth.adapters.in.rest.api.shared.TokensRespon
 import com.geekersjoel237.koracore.auth.adapters.in.rest.api.register.RegisterRequest;
 import com.geekersjoel237.koracore.auth.adapters.in.rest.api.verifyOtp.VerifyOtpRequest;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -108,6 +109,32 @@ class AuthE2ETest extends AbstractE2ETest {
         Assertions.assertNotNull(newTokens);
         assertThat(newTokens.accessToken()).isNotBlank();
         assertThat(newTokens.refreshToken()).isNotBlank();
+    }
+
+    // L-10: an access token is not a refresh token. Today both are signed with one key and
+    // carry no type, so a stolen 15-minute access token buys a 7-day refresh token.
+    @Test
+    @Disabled("L-10 — closed by iteration 1: refresh requires TokenUse.REFRESH")
+    void should_reject_access_token_on_refresh() {
+        TokensResponse tokens = registerAndLogin(EMAIL, FULL_NAME, PREFIX, PHONE, PIN);
+
+        ResponseEntity<TokensResponse> response = refresh(tokens.accessToken());
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    // L-10, other direction: a refresh token must not authenticate a request at all.
+    // Today the filter accepts it with no authority, so the role check answers 403 — the
+    // route is protected by the missing role claim, not by the token's type.
+    @Test
+    @Disabled("L-10 — closed by iteration 2: the filter requires TokenUse.ACCESS")
+    void should_reject_refresh_token_as_bearer() {
+        SetupData ctx = setupCustomerWithAccount(EMAIL, FULL_NAME, PREFIX, PHONE, PIN);
+
+        ResponseEntity<String> response = getWithToken(
+                "/payments/balance", ctx.tokens().refreshToken(), String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
     @Test
