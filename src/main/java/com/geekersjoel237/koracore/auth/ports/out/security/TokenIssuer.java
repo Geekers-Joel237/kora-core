@@ -1,6 +1,7 @@
 package com.geekersjoel237.koracore.auth.ports.out.security;
 
 import com.geekersjoel237.koracore.auth.domain.model.User;
+import com.geekersjoel237.koracore.auth.domain.vo.AccessToken;
 import com.geekersjoel237.koracore.auth.domain.vo.RefreshToken;
 import com.geekersjoel237.koracore.auth.domain.vo.Tokens;
 import com.geekersjoel237.koracore.auth.domain.vo.VerifiedToken;
@@ -15,4 +16,6 @@ public interface TokenIssuer {
      * use is acceptable is the caller's decision, not the issuer's.
      */
     VerifiedToken verify(RefreshToken refreshToken);
+
+    VerifiedToken verify(AccessToken accessToken);
 }

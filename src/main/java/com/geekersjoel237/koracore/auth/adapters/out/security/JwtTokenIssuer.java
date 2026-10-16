@@ -1,6 +1,7 @@
 package com.geekersjoel237.koracore.auth.adapters.out.security;
 
 import com.geekersjoel237.koracore.auth.config.SecurityProperties;
+import com.geekersjoel237.koracore.auth.domain.enums.Role;
 import com.geekersjoel237.koracore.auth.domain.enums.TokenUse;
 import com.geekersjoel237.koracore.auth.domain.vo.AccessToken;
 import com.geekersjoel237.koracore.auth.ports.out.security.TokenIssuer;
@@ -9,7 +10,7 @@ import com.geekersjoel237.koracore.auth.domain.vo.RefreshToken;
 import com.geekersjoel237.koracore.auth.domain.vo.Tokens;
 import com.geekersjoel237.koracore.auth.domain.vo.VerifiedToken;
 import com.geekersjoel237.koracore.shared.domain.vo.Id;
-import com.geekersjoel237.koracore.auth.domain.exception.InvalidRefreshTokenException;
+import com.geekersjoel237.koracore.auth.domain.exception.InvalidTokenException;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
@@ -74,17 +75,29 @@ public class JwtTokenIssuer implements TokenIssuer {
 
     @Override
     public VerifiedToken verify(RefreshToken refreshToken) {
+        return verify(refreshToken.value());
+    }
+
+    @Override
+    public VerifiedToken verify(AccessToken accessToken) {
+        return verify(accessToken.value());
+    }
+
+    // Reports what the token says it is, whichever door it came through. The caller decides.
+    private VerifiedToken verify(String compact) {
         try {
             Claims claims = Jwts.parser()
                     .verifyWith(signingKey())
                     .build()
-                    .parseSignedClaims(refreshToken.value())
+                    .parseSignedClaims(compact)
                     .getPayload();
 
+            String role = claims.get("role", String.class);
             return new VerifiedToken(new Id(claims.getSubject()),
-                    useOf(claims.get(USE_CLAIM, String.class)));
+                    useOf(claims.get(USE_CLAIM, String.class)),
+                    role == null ? null : Role.valueOf(role));
         } catch (JwtException | IllegalArgumentException e) {
-            throw new InvalidRefreshTokenException(e);
+            throw new InvalidTokenException(e);
         }
     }
 
@@ -97,7 +110,7 @@ public class JwtTokenIssuer implements TokenIssuer {
         for (TokenUse use : TokenUse.values())
             if (claimOf(use).equals(claim))
                 return use;
-        throw new InvalidRefreshTokenException();
+        throw new InvalidTokenException();
     }
 
     private SecretKey signingKey() {

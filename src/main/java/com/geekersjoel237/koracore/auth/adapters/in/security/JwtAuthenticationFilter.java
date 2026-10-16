@@ -1,10 +1,10 @@
 package com.geekersjoel237.koracore.auth.adapters.in.security;
 
-import com.geekersjoel237.koracore.auth.config.SecurityProperties;
-import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.JwtException;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.security.Keys;
+import com.geekersjoel237.koracore.auth.application.query.authenticate.AuthenticateQuery;
+import com.geekersjoel237.koracore.auth.domain.vo.AccessToken;
+import com.geekersjoel237.koracore.auth.domain.vo.AuthenticatedUser;
+import com.geekersjoel237.koracore.auth.ports.in.AuthenticateQueryHandler;
+import com.geekersjoel237.koracore.shared.domain.exception.BusinessException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -18,9 +18,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-import javax.crypto.SecretKey;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @Component
@@ -28,10 +26,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
 
-    private final String jwtSecret;
+    private final AuthenticateQueryHandler authenticate;
 
-    public JwtAuthenticationFilter(SecurityProperties securityProperties) {
-        this.jwtSecret = securityProperties.jwt().secret();
+    public JwtAuthenticationFilter(AuthenticateQueryHandler authenticate) {
+        this.authenticate = authenticate;
     }
 
     @Override
@@ -40,26 +38,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                     @NonNull FilterChain filterChain) throws ServletException, IOException {
         String header = request.getHeader("Authorization");
         if (header != null && header.startsWith("Bearer ")) {
-            String token = header.substring(7);
             try {
-                SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
-                Claims claims = Jwts.parser()
-                        .verifyWith(key)
-                        .build()
-                        .parseSignedClaims(token)
-                        .getPayload();
+                AuthenticatedUser user = authenticate.execute(
+                        new AuthenticateQuery(AccessToken.of(header.substring(7))));
 
-                String userId = claims.getSubject();
+                String userId = user.userId().value();
                 request.setAttribute("customerId", userId);
 
-                String role = claims.get("role", String.class);
-                var authorities = (role != null)
-                        ? List.of(new SimpleGrantedAuthority("ROLE_" + role))
-                        : List.<SimpleGrantedAuthority>of();
+                var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + user.role().name()));
                 var auth = new UsernamePasswordAuthenticationToken(userId, null, authorities);
                 SecurityContextHolder.getContext().setAuthentication(auth);
 
-            } catch (JwtException e) {
+            } catch (BusinessException | IllegalArgumentException e) {
                 log.warn("[JWT] Token validation failed — customerId will not be set: {}", e.getMessage());
                 SecurityContextHolder.clearContext();
             }

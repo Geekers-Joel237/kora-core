@@ -4,7 +4,7 @@ import com.geekersjoel237.koracore.auth.application.command.RefreshTokensCommand
 import com.geekersjoel237.koracore.auth.application.usecases.RefreshTokensService;
 import com.geekersjoel237.koracore.auth.domain.enums.Role;
 import com.geekersjoel237.koracore.auth.domain.exception.CustomerNotFoundException;
-import com.geekersjoel237.koracore.auth.domain.exception.InvalidRefreshTokenException;
+import com.geekersjoel237.koracore.auth.domain.exception.InvalidTokenException;
 import com.geekersjoel237.koracore.auth.domain.exception.TokenUseMismatchException;
 import com.geekersjoel237.koracore.auth.domain.model.User;
 import com.geekersjoel237.koracore.auth.domain.vo.RefreshToken;
@@ -69,7 +69,7 @@ class RefreshTokensServiceTest {
         loggedIn();
 
         assertThatThrownBy(() -> service.execute(refreshWith("forged")))
-                .isInstanceOf(InvalidRefreshTokenException.class);
+                .isInstanceOf(InvalidTokenException.class);
     }
 
     @Test

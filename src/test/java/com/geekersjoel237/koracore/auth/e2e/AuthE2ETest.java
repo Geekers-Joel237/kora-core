@@ -6,7 +6,6 @@ import com.geekersjoel237.koracore.auth.adapters.in.rest.api.shared.TokensRespon
 import com.geekersjoel237.koracore.auth.adapters.in.rest.api.register.RegisterRequest;
 import com.geekersjoel237.koracore.auth.adapters.in.rest.api.verifyOtp.VerifyOtpRequest;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -126,7 +125,6 @@ class AuthE2ETest extends AbstractE2ETest {
     // Today the filter accepts it with no authority, so the role check answers 403 — the
     // route is protected by the missing role claim, not by the token's type.
     @Test
-    @Disabled("L-10 — closed by iteration 2: the filter requires TokenUse.ACCESS")
     void should_reject_refresh_token_as_bearer() {
         SetupData ctx = setupCustomerWithAccount(EMAIL, FULL_NAME, PREFIX, PHONE, PIN);
 

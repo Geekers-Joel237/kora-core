@@ -18,9 +18,10 @@ import com.geekersjoel237.koracore.shared.domain.vo.Id;
 import com.geekersjoel237.koracore.shared.domain.vo.PhoneNumber;
 import com.geekersjoel237.koracore.auth.domain.vo.Tokens;
 import com.geekersjoel237.koracore.auth.domain.vo.RefreshToken;
+import com.geekersjoel237.koracore.auth.domain.vo.AccessToken;
 import com.geekersjoel237.koracore.auth.domain.vo.VerifiedToken;
 import com.geekersjoel237.koracore.auth.domain.enums.TokenUse;
-import com.geekersjoel237.koracore.auth.domain.exception.InvalidRefreshTokenException;
+import com.geekersjoel237.koracore.auth.domain.exception.InvalidTokenException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import java.nio.charset.StandardCharsets;
@@ -267,7 +268,7 @@ class AuthServiceTest {
                 .compact();
 
         assertThatThrownBy(() -> tokenIssuer.verify(RefreshToken.of(legacy)))
-                .isInstanceOf(InvalidRefreshTokenException.class);
+                .isInstanceOf(InvalidTokenException.class);
     }
 
     @Test
@@ -281,6 +282,38 @@ class AuthServiceTest {
                 .compact();
 
         assertThatThrownBy(() -> tokenIssuer.verify(RefreshToken.of(forged)))
-                .isInstanceOf(InvalidRefreshTokenException.class);
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    @Test
+    void should_verify_access_token_with_its_role() {
+        Tokens tokens = tokenIssuer.issue(buildVerifiedUser());
+
+        VerifiedToken verified = tokenIssuer.verify(tokens.accessToken().token());
+
+        assertThat(verified).isEqualTo(VerifiedToken.access(USER_ID, Role.CUSTOMER));
+    }
+
+    @Test
+    void should_report_refresh_use_when_refresh_token_is_presented_as_bearer() {
+        Tokens tokens = tokenIssuer.issue(buildVerifiedUser());
+        AccessToken misused = AccessToken.of(tokens.refreshToken().token().value());
+
+        assertThat(tokenIssuer.verify(misused)).isEqualTo(VerifiedToken.refresh(USER_ID));
+    }
+
+    @Test
+    void should_refuse_an_access_token_with_an_unknown_role() {
+        String forged = Jwts.builder()
+                .subject(USER_ID.value())
+                .claim("role", "ROOT")
+                .claim(JwtTokenIssuer.USE_CLAIM, "access")
+                .expiration(Date.from(Instant.now().plus(1, DAYS)))
+                .signWith(Keys.hmacShaKeyFor(
+                        TEST_SECURITY.jwt().secret().getBytes(StandardCharsets.UTF_8)))
+                .compact();
+
+        assertThatThrownBy(() -> tokenIssuer.verify(AccessToken.of(forged)))
+                .isInstanceOf(InvalidTokenException.class);
     }
 }

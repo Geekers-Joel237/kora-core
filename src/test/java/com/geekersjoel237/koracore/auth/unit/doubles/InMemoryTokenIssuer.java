@@ -1,7 +1,6 @@
 package com.geekersjoel237.koracore.auth.unit.doubles;
 
-import com.geekersjoel237.koracore.auth.domain.enums.TokenUse;
-import com.geekersjoel237.koracore.auth.domain.exception.InvalidRefreshTokenException;
+import com.geekersjoel237.koracore.auth.domain.exception.InvalidTokenException;
 import com.geekersjoel237.koracore.auth.domain.model.User;
 import com.geekersjoel237.koracore.auth.domain.vo.AccessToken;
 import com.geekersjoel237.koracore.auth.domain.vo.RefreshToken;
@@ -32,23 +31,34 @@ public class InMemoryTokenIssuer implements TokenIssuer {
         Id subject = user.snapshot().id();
         Instant now = Instant.now(clock);
         return new Tokens(
-                new Tokens.Issued<>(AccessToken.of(mint(subject, TokenUse.ACCESS)),
+                new Tokens.Issued<>(AccessToken.of(
+                        mint("access", VerifiedToken.access(subject, user.snapshot().role()))),
                         now.plus(Duration.ofMinutes(15))),
-                new Tokens.Issued<>(RefreshToken.of(mint(subject, TokenUse.REFRESH)),
+                new Tokens.Issued<>(RefreshToken.of(
+                        mint("refresh", VerifiedToken.refresh(subject))),
                         now.plus(Duration.ofDays(7))));
     }
 
     @Override
     public VerifiedToken verify(RefreshToken refreshToken) {
-        VerifiedToken token = issued.get(refreshToken.value());
+        return lookup(refreshToken.value());
+    }
+
+    @Override
+    public VerifiedToken verify(AccessToken accessToken) {
+        return lookup(accessToken.value());
+    }
+
+    private VerifiedToken lookup(String value) {
+        VerifiedToken token = issued.get(value);
         if (token == null)
-            throw new InvalidRefreshTokenException();
+            throw new InvalidTokenException();
         return token;
     }
 
-    private String mint(Id subject, TokenUse use) {
-        String value = use.name().toLowerCase() + "-" + Id.generate().value();
-        issued.put(value, new VerifiedToken(subject, use));
+    private String mint(String prefix, VerifiedToken token) {
+        String value = prefix + "-" + Id.generate().value();
+        issued.put(value, token);
         return value;
     }
 }
