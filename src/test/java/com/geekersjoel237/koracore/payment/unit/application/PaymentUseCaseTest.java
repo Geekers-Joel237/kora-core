@@ -51,6 +51,8 @@ import com.geekersjoel237.koracore.payment.ports.in.CashOutCommandHandler;
 import com.geekersjoel237.koracore.payment.application.query.balance.BalanceQuery;
 import com.geekersjoel237.koracore.payment.ports.in.BalanceQueryHandler;
 import com.geekersjoel237.koracore.payment.ports.in.ReversePaymentCommandHandler;
+import com.geekersjoel237.koracore.payment.unit.doubles.InMemoryFundsHoldRepository;
+import com.geekersjoel237.koracore.payment.domain.model.FundsHold;
 import com.geekersjoel237.koracore.payment.ports.in.TransferCommandHandler;
 import com.geekersjoel237.koracore.shared.unit.doubles.DirectTransactionBoundary;
 
@@ -58,6 +60,7 @@ import static com.geekersjoel237.koracore.payment.domain.model.state.Transaction
 import static com.geekersjoel237.koracore.payment.domain.model.state.TransactionState.COMPLETED;
 import static com.geekersjoel237.koracore.payment.domain.model.state.TransactionState.REVERSED;
 import static com.geekersjoel237.koracore.payment.unit.doubles.InMemoryPaymentProviderAdapter.Behavior.FAIL;
+import static com.geekersjoel237.koracore.payment.unit.doubles.InMemoryPaymentProviderAdapter.Behavior.FAIL_ON_CAPTURE;
 import static com.geekersjoel237.koracore.payment.unit.doubles.InMemoryPaymentProviderAdapter.Behavior.SUCCESS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -98,6 +101,7 @@ class PaymentUseCaseTest {
     private CashOutCommandHandler cashOut;
     private TransferCommandHandler transfer;
     private ReversePaymentCommandHandler reversePayment;
+    private InMemoryFundsHoldRepository holdRepo;
     private BalanceQueryHandler getBalance;
     private LedgerRepository ledgerRepository;
 
@@ -115,7 +119,8 @@ class PaymentUseCaseTest {
 
     @BeforeEach
     void setUp() {
-        accountRepo = new InMemoryAccountRepository();
+        holdRepo = new InMemoryFundsHoldRepository();
+        accountRepo = new InMemoryAccountRepository(holdRepo);
         customerRepo = new InMemoryCustomerRepository();
         historicRepo = new InMemoryTrxHistoricStatesRepository();
         transactionRepo = new InMemoryTransactionRepository(historicRepo);
@@ -127,7 +132,7 @@ class PaymentUseCaseTest {
         var useCases = UseCaseFixtures.build(
                 new DirectTransactionBoundary(), accountRepo, customerRepo, provider,
                 transactionRepo, historicRepo, ledgerRepository,
-                authorizationRecordRepo, pinEncoder);
+                authorizationRecordRepo, holdRepo, pinEncoder);
         cashIn = useCases.cashIn();
         cashOut = useCases.cashOut();
         transfer = useCases.transfer();
@@ -536,6 +541,97 @@ class PaymentUseCaseTest {
             assertThatThrownBy(() -> reversePayment.execute(new ReversePaymentCommand(
                     new Id(result.transactionId()), new Id("op-001"), "OPERATOR", "second", new Id("corr-006"))))
                     .isInstanceOf(InvalidStateTransitionException.class);
+        }
+    }
+
+    @Nested
+    class FundsHoldTests {
+
+        private Id walletA() {
+            return accountRepo.findByCustomerId(CUST_ID_A).orElseThrow().snapshot().accountId();
+        }
+
+        private Amount heldOnWalletA() {
+            return accountRepo.findByCustomerId(CUST_ID_A).orElseThrow().snapshot().reserved();
+        }
+
+        private void holdOnWalletA(Amount amount) {
+            holdRepo.save(FundsHold.place(Id.generate(), walletA(), amount));
+        }
+
+        private PaymentResult cashOut(Amount amount) {
+            return cashOut.execute(new CashOutCommand(Id.generate(), CUST_ID_A, RAW_PIN, amount, PAYMENT_METHOD));
+        }
+
+        @BeforeEach
+        void fundWalletA() {
+            cashIn.execute(new CashInCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
+        }
+
+        @Test
+        void a_completed_cash_out_leaves_no_active_hold() {
+            PaymentResult result = cashOut(AMOUNT_5K);
+
+            assertEquals(COMPLETED.name(), result.state());
+            assertTrue(AMOUNT_ZERO.equals(heldOnWalletA()));
+        }
+
+        @Test
+        void a_cash_out_refused_at_authorization_releases_its_hold() {
+            provider.setBehavior(FAIL);
+
+            PaymentResult result = cashOut(AMOUNT_5K);
+
+            assertEquals(AUTHORIZATION_FAILED.name(), result.state());
+            assertTrue(AMOUNT_ZERO.equals(heldOnWalletA()));
+        }
+
+        @Test
+        void a_cash_out_failed_at_capture_releases_its_hold() {
+            provider.setBehavior(FAIL_ON_CAPTURE);
+
+            cashOut(AMOUNT_5K);
+
+            assertTrue(AMOUNT_ZERO.equals(heldOnWalletA()));
+        }
+
+        @Test
+        void a_cash_out_cannot_spend_held_funds() {
+            holdOnWalletA(AMOUNT_10K);
+
+            assertThatThrownBy(() -> cashOut(AMOUNT_5K))
+                    .isInstanceOf(InsufficientFundsException.class);
+        }
+
+        @Test
+        void a_transfer_cannot_spend_held_funds() {
+            preloadCustomerB();
+            holdOnWalletA(AMOUNT_10K);
+
+            assertThatThrownBy(() -> transfer.execute(new TransferCommand(Id.generate(),
+                    CUST_ID_A, RAW_PIN, AMOUNT_5K, phoneNumberB())))
+                    .isInstanceOf(InsufficientFundsException.class);
+        }
+
+        @Test
+        void the_balance_reports_what_is_available_beside_the_ledger_balance() {
+            holdOnWalletA(AMOUNT_5K);
+
+            BalanceResult balance = getBalance.execute(new BalanceQuery(CUST_ID_A));
+
+            assertTrue(AMOUNT_10K.equals(balance.balance()));
+            assertTrue(AMOUNT_5K.equals(balance.available()));
+        }
+
+        @Test
+        void a_reversal_cannot_take_back_funds_held_by_an_in_flight_debit() {
+            PaymentResult deposit = cashIn.execute(
+                    new CashInCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
+            holdOnWalletA(Amount.of(BigDecimal.valueOf(15_000), "XAF"));
+
+            assertThatThrownBy(() -> reversePayment.execute(new ReversePaymentCommand(
+                    new Id(deposit.transactionId()), new Id("op-001"), "OPERATOR", "chargeback", Id.generate())))
+                    .isInstanceOf(InsufficientFundsException.class);
         }
     }
 }

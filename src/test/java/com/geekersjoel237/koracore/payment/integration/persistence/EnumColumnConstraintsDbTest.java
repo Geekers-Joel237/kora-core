@@ -1,5 +1,6 @@
 package com.geekersjoel237.koracore.payment.integration.persistence;
 
+import com.geekersjoel237.koracore.payment.domain.enums.HoldStatus;
 import com.geekersjoel237.koracore.payment.domain.enums.LedgerEntryType;
 import com.geekersjoel237.koracore.payment.domain.enums.PaymentMethod;
 import com.geekersjoel237.koracore.payment.domain.enums.ResourceType;
@@ -88,6 +89,12 @@ class EnumColumnConstraintsDbTest extends AbstractRepositoryTest {
     void authorization_records_status_accepts_exactly_the_authorization_statuses() {
         assertThat(allowedValues(em, "authorization_records", "ck_authorization_records_status"))
                 .isEqualTo(namesOf(AuthorizationStatus.values()));
+    }
+
+    @Test
+    void funds_holds_status_accepts_exactly_the_hold_statuses() {
+        assertThat(allowedValues(em, "funds_holds", "ck_funds_holds_status"))
+                .isEqualTo(namesOf(HoldStatus.values()));
     }
 
     @Test

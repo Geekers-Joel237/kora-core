@@ -9,6 +9,8 @@ import com.geekersjoel237.koracore.payment.domain.vo.Balance;
 import com.geekersjoel237.koracore.shared.domain.vo.Id;
 import com.geekersjoel237.koracore.payment.adapters.out.persistence.entities.AccountEntity;
 import com.geekersjoel237.koracore.payment.adapters.out.persistence.repository.SpringDataAccountRepository;
+import com.geekersjoel237.koracore.payment.adapters.out.persistence.repository.SpringDataFundsHoldRepository;
+import com.geekersjoel237.koracore.payment.domain.enums.HoldStatus;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
@@ -17,9 +19,12 @@ import java.util.Optional;
 public class JpaAccountRepository implements AccountRepository {
 
     private final SpringDataAccountRepository jpaRepository;
+    private final SpringDataFundsHoldRepository holdRepository;
 
-    public JpaAccountRepository(SpringDataAccountRepository jpaRepository) {
+    public JpaAccountRepository(SpringDataAccountRepository jpaRepository,
+                                SpringDataFundsHoldRepository holdRepository) {
         this.jpaRepository = jpaRepository;
+        this.holdRepository = holdRepository;
     }
 
     @Override
@@ -45,6 +50,11 @@ public class JpaAccountRepository implements AccountRepository {
     }
 
     @Override
+    public Optional<Account> findByIdForUpdate(Id accountId) {
+        return jpaRepository.findByIdForUpdate(accountId.value()).map(this::toDomain);
+    }
+
+    @Override
     public Optional<Account> findByCustomerId(Id customerId) {
         return jpaRepository.findByResourceTypeAndResourceId(ResourceType.CUSTOMER_ACCOUNT, customerId.value())
                 .map(this::toDomain);
@@ -59,12 +69,6 @@ public class JpaAccountRepository implements AccountRepository {
     @Override
     public Optional<Account> findFloatByProviderId(Id providerId) {
         return jpaRepository.findByResourceTypeAndResourceId(ResourceType.FLOAT_ACCOUNT, providerId.value())
-                .map(this::toDomain);
-    }
-
-    @Override
-    public Optional<Account> findFloatByProviderIdForUpdate(Id providerId) {
-        return jpaRepository.findFloatAccountForUpdate(providerId.value())
                 .map(this::toDomain);
     }
 
@@ -83,11 +87,13 @@ public class JpaAccountRepository implements AccountRepository {
     }
 
     private Account toDomain(AccountEntity entity) {
+        String currency = entity.getBalanceCurrency();
         return Account.createFromSnapshot(new Account.Snapshot(
                 new Id(entity.getId()),
                 entity.getAccountNumber(),
                 new AccountType(new Id(entity.getResourceId()), entity.getResourceType()),
-                new Balance(new Amount(entity.getBalanceAmount(), entity.getBalanceCurrency())),
+                new Balance(new Amount(entity.getBalanceAmount(), currency)),
+                new Amount(holdRepository.sumAmount(entity.getId(), currency, HoldStatus.ACTIVE), currency),
                 entity.isBlocked()
         ));
     }

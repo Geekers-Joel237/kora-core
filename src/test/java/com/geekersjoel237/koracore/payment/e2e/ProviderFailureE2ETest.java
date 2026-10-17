@@ -66,6 +66,8 @@ class ProviderFailureE2ETest {
             TransactionResponse tx = response.getBody();
             assertThat(tx).isNotNull();
             assertThat(tx.state()).isEqualTo("AUTHORIZATION_FAILED");
+            assertThat(accountRepository.findByCustomerId(ctx.customerId()).orElseThrow().available().value())
+                    .isEqualByComparingTo("10000");
         }
     }
 
@@ -95,6 +97,28 @@ class ProviderFailureE2ETest {
             TransactionResponse tx = response.getBody();
             assertThat(tx).isNotNull();
             assertThat(tx.state()).isEqualTo("CAPTURE_FAILED");
+        }
+
+        @Test
+        void cash_out_releases_its_funds_on_capture_failure() {
+            SetupData ctx = setupCustomerWithAccount(
+                    "fail-cap-co@example.com", "FailCapCO", "+225", "07000009005", "1234");
+            var account = accountRepository.findByCustomerId(ctx.customerId()).orElseThrow();
+            account.credit(com.geekersjoel237.koracore.shared.domain.vo.Amount.of(
+                    new BigDecimal("10000"), "XAF"));
+            accountRepository.save(account);
+
+            ResponseEntity<TransactionResponse> response = postWithToken(
+                    "/payments/cash-out",
+                    new CashOutRequest("1234", new BigDecimal("3000"), "XAF", "ORANGE_MONEY"),
+                    ctx.tokens().accessToken(),
+                    TransactionResponse.class);
+
+            assertThat(response.getBody()).isNotNull();
+            assertThat(response.getBody().state()).isEqualTo("CAPTURE_FAILED");
+            var after = accountRepository.findByCustomerId(ctx.customerId()).orElseThrow();
+            assertThat(after.available().value()).isEqualByComparingTo("10000");
+            assertThat(after.snapshot().balance().solde().value()).isEqualByComparingTo("10000");
         }
 
         @Test

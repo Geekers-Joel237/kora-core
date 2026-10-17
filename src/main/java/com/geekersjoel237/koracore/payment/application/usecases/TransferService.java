@@ -11,7 +11,6 @@ import com.geekersjoel237.koracore.payment.domain.exception.AccountBlockedExcept
 import com.geekersjoel237.koracore.payment.domain.exception.AccountNotFoundException;
 import com.geekersjoel237.koracore.payment.domain.exception.AccountSuspendedException;
 import com.geekersjoel237.koracore.payment.domain.model.Account;
-import com.geekersjoel237.koracore.payment.domain.model.BalanceCache;
 import com.geekersjoel237.koracore.payment.domain.model.Ledger;
 import com.geekersjoel237.koracore.payment.domain.model.Transaction;
 import com.geekersjoel237.koracore.payment.ports.in.TransferCommandHandler;
@@ -21,7 +20,6 @@ import com.geekersjoel237.koracore.payment.ports.out.repository.TransactionRepos
 import com.geekersjoel237.koracore.payment.ports.out.repository.TrxHistoricStatesRepository;
 import com.geekersjoel237.koracore.payment.ports.out.security.PinVerifier;
 import com.geekersjoel237.koracore.shared.application.transaction.RetryPolicy;
-import com.geekersjoel237.koracore.shared.domain.vo.Amount;
 import com.geekersjoel237.koracore.shared.domain.vo.PhoneNumber;
 import com.geekersjoel237.koracore.shared.ports.out.transaction.TransactionBoundary;
 
@@ -69,8 +67,9 @@ public final class TransferService implements TransferCommandHandler {
         trxHistoricStatesRepository.save(tx.history().getFirst());
 
         tx.authorize();
-        ledger.writeEntries(tx, payerAccount, payeeAccount, cmd.amount());
-        applyBalanceUpdate(payerAccount, payeeAccount, cmd.amount());
+        ledger.post(tx, payerAccount, payeeAccount);
+        accountRepository.save(payerAccount);
+        accountRepository.save(payeeAccount);
         tx.capture();
         tx.pendSettlement();
         tx.settle();
@@ -110,9 +109,5 @@ public final class TransferService implements TransferCommandHandler {
                     "Recipient account is blocked: " + account.snapshot().accountId().value());
 
         return account;
-    }
-
-    private void applyBalanceUpdate(Account from, Account to, Amount amount) {
-        BalanceCache.post(from, to, amount).forEach(accountRepository::save);
     }
 }

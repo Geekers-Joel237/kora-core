@@ -90,6 +90,13 @@ a transfer, can both pass TX-1. In that case:
 concurrency test (`MoneyIntegrityE2ETest.concurrent_cash_ins_all_return_200`) covers
 credits, never debits.
 
+> **Closed — 2026-10-17** (ADR-008). Reproduced first by `ConcurrentDebitE2ETest`: two
+> concurrent cash-outs left one transaction `INITIALIZED` after a payout, and a transfer
+> could drain a wallet while a cash-out waited on the provider. A cash-out now places a
+> funds hold in TX-1 under the wallet lock, and every debit is checked against the
+> available balance (ledger balance minus active holds). The second debit is refused
+> before the provider pays.
+
 **L-2 · A provider success followed by a TX-2 failure leaves no internal trace.**
 ADR-004 documents this gap as G-2/G-3 and states that the `AuthorizationRecord` makes it
 auditable. It does not: the record is created inside TX-2 (`CashInService.settle`,
@@ -99,9 +106,13 @@ the `INITIALIZED` row written by TX-1.
 The same outcome follows when the retry runs out (`RetryExhaustedException` → 503): the
 provider moved the money, and the client receives a 503.
 
+> **Confirmed — 2026-10-17.** To be done.
+
 **L-3 · A crash between TX-1 and TX-2 leaves the transaction `INITIALIZED` forever** (G-1).
 There is no reaper and no detection query. ADR-004 planned both for Step 3; they did not
 ship.
+
+> **Confirmed — 2026-10-17.** To be done.
 
 **L-4 · No idempotency.** A client retry creates a second transaction. Roadmap Step 4. The
 anti-replay middleware is not a substitute:
@@ -113,6 +124,9 @@ anti-replay middleware is not a substitute:
 
 The mobile app compensates with a four-layer lock on the client side.
 
+> **Accepted — 2026-10-17.** A known bug, accepted for now. Idempotency is planned for
+> roadmap Step 4 and is not to be fixed before it.
+
 ### 3.2 Money — structural
 
 **L-5 · `SETTLED` and `COMPLETED` are written when the capture succeeds** (D-7). A customer
@@ -120,16 +134,25 @@ sees `COMPLETED` before any settlement has been confirmed. `SETTLEMENT_FAILED` c
 reached from `SETTLEMENT_PENDING`, which never persists. A provider that fails at D+1 can
 therefore only be recorded as a reversal of a `COMPLETED` transaction.
 
+> **Withdrawn — 2026-10-17.** Not a limit. Settlement is internal; the customer never sees
+> it. What the customer sees is `CustomerStatus`, which reads `COMPLETED` from capture on:
+> once the money is captured, the operation is done for them. The internal settlement
+> states belong to reconciliation (roadmap Step 6), which is not built yet.
+
 **L-6 · The ledger invariants are not enforced by the database.** No constraint enforces
 `SUM(DEBIT) = SUM(CREDIT)`, and no trigger prevents `UPDATE` or `DELETE` on
 `ledger_entries`. Both rules live in the domain and in tests, so any SQL client that
 bypasses the domain bypasses them too. Given L-11, that SQL client is the application's own
 connection, which has every right.
 
+> **Confirmed — 2026-10-17.** To be done.
+
 **L-7 · Nothing checks the balance cache against the ledger** (D-1). On divergence, the
 ledger wins (ADR-001), but no process computes the divergence. The float account keeps
 `balance_amount = 0` by design, so its position is visible only through a query on
 `ledger_entries`.
+
+> **Confirmed — 2026-10-17.** To be done.
 
 ### 3.3 Security
 
@@ -137,9 +160,15 @@ ledger wins (ADR-001), but no process computes the divergence. The float account
 invalidate the challenge. A 6-digit code lives 5 minutes, and nothing limits how many codes
 can be tried in that window.
 
+> **Confirmed — 2026-10-17.** To be done. Planned in roadmap Step 4: "Brute-force /
+> credential stuffing protection".
+
 **L-9 · No rate limiting.** Nothing limits requests on `/auth/**`, on PIN checks, or on
 payments. ROADMAP Step 3 required hardened configuration with rate limiting; it was not
 built.
+
+> **Confirmed — 2026-10-17.** To be done. Planned in roadmap Step 4: "Strict rate limiting
+> (anti-abuse)", carried over from Step 3.
 
 **L-10 · `/auth/refresh` accepts any validly signed token.** Access and refresh tokens share
 the signing key and carry no type claim (`JwtTokenIssuer.subjectOf`). So an access token
@@ -161,6 +190,8 @@ the migration user and `POSTGRES_USER` are the same account in `.env`. The split
 `kora_app` (DML only) and `kora_migration` (DDL) is designed but not done (KC-05). A SQL
 injection would therefore have DDL rights.
 
+> **Confirmed — 2026-10-17.** To be done.
+
 Lower: the `/test/**` endpoints are compiled into every build and enabled by the `perf`
 profile alone; one of them returns OTP codes.
 
@@ -171,14 +202,28 @@ constraints (migration `V202610131159`). Nothing transitions into it. Unlike the
 states, it throws `IllegalStateException` instead of `InvalidStateTransitionException`, and
 no test covers it. Likewise, `UserStatus.PENDING` is never assigned.
 
+> **Requalified — 2026-10-17.** `UNKNOWN` is not dead by design: it is the state for a
+> provider timeout with no clear answer. It is **unwired**. Nothing leads into it, and the
+> adapter throws the same `PaymentProviderException` for a timeout and for a refusal, so a
+> timeout today ends in `AUTHORIZATION_FAILED` or `CAPTURE_FAILED`.
+
 **L-13 · A provider failure during a reversal returns an unhandled 500.**
 `ReversePaymentService` calls `provider.reverse` outside any `try`.
 `PaymentProviderException` has no `@ExceptionHandler`, which breaks review rule 15. The
 mobile team reported this on 2026-08-06; it is still open.
 
+> **Still open — 2026-10-17.** Also found: the result of `provider.reverse` is ignored. A
+> `ReverseResult` with `success = false` still marks the transaction `REVERSED` and cancels
+> the authorization record, while the hold stays in place at the provider. A fix was drafted
+> (timeout retried 3 times; refusal 502, unknown outcome 504; the transaction stays
+> `AUTHORIZED`) and set aside, not merged.
+
 **L-14 · The XAF rule (whole units only) is enforced at the web edge, not in the domain.**
 `@Digits(fraction = 0)` on the three request types is the only guard. `Amount` accepts any
 scale, so any other driving adapter (scheduler, event consumer) would bypass the rule.
+
+> **Withdrawn — 2026-10-17.** Not a limit. Currency is an open set; XAF is today's usage,
+> not a rule the domain has to formalise.
 
 ### 3.5 Performance and scale
 
@@ -281,5 +326,66 @@ re-run.
 
 ---
 
-*v1 — Step 1 snapshot · v2 — Steps 3 and 2A · v3 — review at `d28a6be`.*
+## 8. Status at 2026-10-17
+
+**Basis**: commit `6ead50e` on `feature/KC-xx-l10-token-hardening`. Sections 0 to 7 stay
+as written. This section records what has changed since the review and what the review got
+wrong. Each change also has a dated note under its limit.
+
+### 8.1 The limits
+
+| ID | Status | Note |
+|---|---|---|
+| L-1 | **Closed** 2026-10-17 | Funds holds, ADR-008. Reproduced first, then fixed |
+| L-2 | **To do** | Confirmed. The trace written before the provider call will need a state for an unknown outcome (L-12) |
+| L-3 | **To do** | Confirmed |
+| L-4 | **Accepted** | Known bug, accepted until roadmap Step 4, where idempotency is planned |
+| L-5 | **Withdrawn** | Settlement is internal; for the customer, a capture completes the operation |
+| L-6 | **To do** | Confirmed |
+| L-7 | **To do** | Confirmed |
+| L-8 | **To do** | Planned, roadmap Step 4 (brute-force protection) |
+| L-9 | **To do** | Planned, roadmap Step 4 (strict rate limiting), carried over from Step 3 |
+| L-10 | **Closed** 2026-10-16 | Reproduced first, then fixed on this branch. See the note under L-10 |
+| L-11 | **To do** | Confirmed |
+| L-12 | **Requalified** | Not dead: reserved for provider timeouts, and not wired yet |
+| L-13 | Open | A fix exists but is not merged. Also: `ReverseResult.success` is ignored |
+| L-14 | **Withdrawn** | Not a limit |
+| L-15 | Open | |
+
+### 8.2 Found since the review
+
+- **N-1 · Reversing a posted transaction calls no provider (to confirm).** For a `CAPTURED`
+  to `COMPLETED` transaction, `ReversePaymentService` writes the compensating ledger
+  entries and nothing else. Whether a refund must also go back through the provider is a
+  product decision that has not been made.
+- **N-3 · `refresh_tokens` is never purged.** Every login and every refresh adds a row,
+  kept 7 days past its use. A consequence of closing L-10.
+- **H-1 · Dead code — removed 2026-10-17.** `AccountRepository.findFloatByProviderIdForUpdate`
+  and its Spring Data query, `SpringDataTransactionRepository.findByFromAccountIdOrToAccountId`,
+  and the unused `JpaSpecificationExecutor` on that repository. A scan of `src/main` found
+  nothing else that nothing calls.
+- **Accepted with L-10.** An access token stays valid up to 15 minutes after logout. Two
+  concurrent refreshes with the same token count as a replay and end the session; the
+  mobile client sends one refresh at a time.
+
+The `/test/**` endpoints (§3.3, "Lower") and the documentation drift (§3.6) are
+unchanged.
+
+### 8.3 What else changed
+
+- **Tests**: 62 classes and 621 tests in the last full run (2026-10-16), against 58 and 579
+  in §1. L-10 is no longer "not verified by execution" (§7): both directions were
+  reproduced by an e2e test before being fixed.
+- **Token protocol**: confined to the JWT adapter. The domain and the use cases see opaque
+  tokens only, so an OAuth2 server could replace the adapter without touching them.
+- **Transactions**: the first `@Transactional` in `src/main`, `REQUIRES_NEW`, on
+  `RefreshTokenStore.revokeFamilyOfReplayed`. A replay's revocation has to survive the 401
+  that rolls the caller back.
+- **Code that only tests used**: three members removed from `payment`
+  (`HistoryCriteria.everything`, `HistoryCriteria.continuingAfter`,
+  `TrxHistoricStatesRepository.findByTransactionId`). None found in `auth` or `shared`.
+
+---
+
+*v1 — Step 1 snapshot · v2 — Steps 3 and 2A · v3 — review at `d28a6be`, status updated 2026-10-17.*
 *[github.com/Geekers-Joel237](https://github.com/Geekers-Joel237) · [geekersjoel237.substack.com](https://geekersjoel237.substack.com)*

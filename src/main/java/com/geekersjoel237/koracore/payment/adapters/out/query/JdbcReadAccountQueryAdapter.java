@@ -16,11 +16,16 @@ import java.util.Optional;
 public class JdbcReadAccountQueryAdapter implements ReadAccountRepository {
 
     private static final String BALANCE = """
-            SELECT id, account_number, balance_amount, balance_currency
-            FROM accounts
-            WHERE resource_type = 'CUSTOMER_ACCOUNT'
-              AND resource_id = :customerId
-              AND deleted_at IS NULL
+            SELECT a.id, a.account_number, a.balance_amount, a.balance_currency,
+                   a.balance_amount - COALESCE((
+                       SELECT SUM(h.amount) FROM funds_holds h
+                       WHERE h.account_id = a.id
+                         AND h.currency = a.balance_currency
+                         AND h.status = 'ACTIVE'), 0) AS available_amount
+            FROM accounts a
+            WHERE a.resource_type = 'CUSTOMER_ACCOUNT'
+              AND a.resource_id = :customerId
+              AND a.deleted_at IS NULL
             """;
 
     private static final String WALLET_ID = """
@@ -45,6 +50,8 @@ public class JdbcReadAccountQueryAdapter implements ReadAccountRepository {
                         rs.getString("id"),
                         rs.getString("account_number"),
                         new Amount(rs.getBigDecimal("balance_amount"),
+                                rs.getString("balance_currency")),
+                        new Amount(rs.getBigDecimal("available_amount"),
                                 rs.getString("balance_currency"))));
 
         return found.stream().findFirst();

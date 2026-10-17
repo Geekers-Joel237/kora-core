@@ -4,6 +4,7 @@ import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.Map;
@@ -46,6 +47,19 @@ final class QueryFixtures {
                 .addValue("balance", new BigDecimal(balance)));
     }
 
+    void hold(String accountId, String transactionId, String amount, String status) {
+        jdbc.update("""
+                INSERT INTO funds_holds (id, account_id, transaction_id, amount, currency, status,
+                                         created_at, updated_at)
+                VALUES (:id, :accountId, :transactionId, :amount, 'XAF', :status, now(), now())
+                """, new MapSqlParameterSource()
+                .addValue("id", UUID.randomUUID().toString())
+                .addValue("accountId", accountId)
+                .addValue("transactionId", transactionId)
+                .addValue("amount", new BigDecimal(amount))
+                .addValue("status", status));
+    }
+
     void transaction(String id, String fromAccountId, String toAccountId,
                      String type, String state, String amount, Instant occurredAt) {
         jdbc.update("""
@@ -71,7 +85,7 @@ final class QueryFixtures {
                                                  occurred_at, created_at, updated_at)
                 VALUES (:id, :trx, :old, :new, :occurredAt, now(), now())
                 """, new MapSqlParameterSource()
-                .addValue("id", java.util.UUID.randomUUID().toString())
+                .addValue("id", UUID.randomUUID().toString())
                 .addValue("trx", transactionId)
                 .addValue("old", oldState)
                 .addValue("new", newState)

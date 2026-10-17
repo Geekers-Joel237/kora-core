@@ -8,12 +8,14 @@ public record BalanceResponse(
         String accountId,
         String accountNumber,
         BigDecimal amount,
+        BigDecimal ledgerAmount,
         String currency
 ) {
     public static BalanceResponse from(BalanceResult result) {
         return new BalanceResponse(
                 result.accountId(),
                 result.accountNumber(),
+                result.available().value(),
                 result.balance().value(),
                 result.balance().currency()
         );

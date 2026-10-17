@@ -13,7 +13,6 @@ import com.geekersjoel237.koracore.payment.domain.exception.AccountSuspendedExce
 import com.geekersjoel237.koracore.payment.domain.exception.PaymentProviderException;
 import com.geekersjoel237.koracore.payment.domain.model.Account;
 import com.geekersjoel237.koracore.payment.domain.model.AuthorizationRecord;
-import com.geekersjoel237.koracore.payment.domain.model.BalanceCache;
 import com.geekersjoel237.koracore.payment.domain.model.Transaction;
 import com.geekersjoel237.koracore.payment.domain.vo.AuthorizationResult;
 import com.geekersjoel237.koracore.payment.ports.in.CashInCommandHandler;
@@ -21,7 +20,6 @@ import com.geekersjoel237.koracore.payment.ports.out.provider.PaymentProviderPor
 import com.geekersjoel237.koracore.payment.ports.out.repository.*;
 import com.geekersjoel237.koracore.payment.ports.out.security.PinVerifier;
 import com.geekersjoel237.koracore.shared.application.transaction.RetryPolicy;
-import com.geekersjoel237.koracore.shared.domain.vo.Amount;
 import com.geekersjoel237.koracore.shared.domain.vo.Id;
 import com.geekersjoel237.koracore.shared.domain.vo.PhoneNumber;
 import com.geekersjoel237.koracore.shared.ports.out.transaction.TransactionBoundary;
@@ -121,8 +119,8 @@ public final class CashInService implements CashInCommandHandler {
 
         tx.authorize();
         tx.capture();
-        ledgerRepository.findFirst().writeEntries(tx, floatAccount, wallet, cmd.amount());
-        applyBalanceUpdate(floatAccount, wallet, cmd.amount());
+        ledgerRepository.findFirst().post(tx, floatAccount, wallet);
+        accountRepository.save(wallet);
         record.consume();
         authorizationRecordRepository.save(record);
 
@@ -171,10 +169,6 @@ public final class CashInService implements CashInCommandHandler {
         return accountRepository.findFloatByProviderId(SystemConstants.PROVIDER_ID)
                 .orElseThrow(() -> new AccountNotFoundException(
                         "Float account not found for provider: " + SystemConstants.PROVIDER_ID.value()));
-    }
-
-    private void applyBalanceUpdate(Account from, Account to, Amount amount) {
-        BalanceCache.post(from, to, amount).forEach(accountRepository::save);
     }
 
     private void flushHistorySince(Transaction tx) {

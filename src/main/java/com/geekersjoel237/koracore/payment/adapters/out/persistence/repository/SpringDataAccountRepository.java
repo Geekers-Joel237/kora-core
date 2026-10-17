@@ -16,16 +16,13 @@ public interface SpringDataAccountRepository extends JpaRepository<AccountEntity
     Optional<AccountEntity> findByResourceTypeAndResourceId(ResourceType resourceType, String resourceId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT a FROM AccountEntity a WHERE a.id = :id AND a.deletedAt IS NULL")
+    Optional<AccountEntity> findByIdForUpdate(@Param("id") String id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT a FROM AccountEntity a " +
            "WHERE a.resourceType = 'CUSTOMER_ACCOUNT' " +
            "AND a.resourceId = :customerId " +
            "AND a.deletedAt IS NULL")
     Optional<AccountEntity> findCustomerAccountForUpdate(@Param("customerId") String customerId);
-
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT a FROM AccountEntity a " +
-           "WHERE a.resourceType = 'FLOAT_ACCOUNT' " +
-           "AND a.resourceId = :providerId " +
-           "AND a.deletedAt IS NULL")
-    Optional<AccountEntity> findFloatAccountForUpdate(@Param("providerId") String providerId);
 }

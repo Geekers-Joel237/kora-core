@@ -135,12 +135,15 @@ Rôle requis : `CUSTOMER`. Un jeton `ADMIN` reçoit `403` sur `/payments/**`.
 {
   "accountId":     "3a91...",
   "accountNumber": "ACC-20260806-A3F91C2D",   // ACC-yyyyMMdd-<8 hex majuscules>
-  "amount":         125000,                    // BigDecimal sérialisé en nombre JSON
+  "amount":         120000,                    // solde DISPONIBLE — BigDecimal sérialisé en nombre JSON
+  "ledgerAmount":   125000,                    // solde comptable
   "currency":      "XAF"
 }
 ```
 
 `401` non authentifié · `404` compte introuvable.
+
+**Depuis le 2026-10-17, `amount` est le solde disponible** : le solde comptable moins les fonds réservés par un retrait en attente du provider. C'est le montant à afficher et le seul que le client peut dépenser ; un retrait ou un transfert qui le dépasse reçoit `422`. `ledgerAmount` est le solde comptable. Les deux sont égaux quand aucun retrait n'est en cours.
 
 > `amount` arrive comme un **nombre JSON**. En JavaScript, il transite par un `double`. Voir §5 pour la règle de manipulation obligatoire.
 

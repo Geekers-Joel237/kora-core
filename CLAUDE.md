@@ -82,10 +82,11 @@ and `Otp` do not exist here.
 |---|---|
 | `Transaction` | Aggregate root of a money movement; owns ledger entries, state, history |
 | `LedgerEntry` | One ledger entry, `DEBIT` or `CREDIT`; append-only. Table `ledger_entries` |
-| `Ledger` | Domain service creating transactions (`initiate`, `writeEntries`, `reverse`) |
-| `Account` | Balance holder; `CUSTOMER_ACCOUNT` or `FLOAT_ACCOUNT` |
+| `Ledger` | Owns everything a transaction does to money: `initiate`, `hold`, `post`, `capture`, `release`, `reverse`. Writes the entries and moves the accounts in the same call |
+| `Account` | A view on a customer's funds: ledger balance (the cache), reserved amount, `available()`. Knows no transaction. `CUSTOMER_ACCOUNT` or `FLOAT_ACCOUNT` |
 | `TrxStateHistoric` | Immutable audit row emitted on every state transition |
 | `AuthorizationRecord` | Provider authorization with TTL, used when capture fails |
+| `FundsHold` | Funds set aside on a customer wallet while a debit awaits the provider (ADR-008): `ACTIVE`, then `CONSUMED` with the ledger entries or `RELEASED` on a known failure. Table `funds_holds`. Not a ledger entry. Placed, captured and released by the `Ledger`; an `Account` is loaded with the sum of its `ACTIVE` holds as its reserved amount, never stored |
 | `Customer`, `User` | Identity and credentials |
 | `Amount` | `record(BigDecimal value, String currency)` — the money type; `Balance` wraps one and returns new instances from `credit()` / `debit()` |
 | `Id`, `PhoneNumber`, `Pin` | Kernel value objects; `Id` is the business identifier. `PhoneNumber` is `(prefix, number)` and is the wallet identifier |
@@ -119,7 +120,7 @@ Every aggregate exposes `snapshot()` returning an inner record, plus a static
 | `SUM(DEBIT) == SUM(CREDIT)` per transaction and currency | Domain: `Transaction.verifyDoubleEntry()` runs after every `recordDoubleEntry()`. No DB constraint. Asserted in `FinancialInvariantsDbTest` and `MoneyIntegrityE2ETest` |
 | Ledger entries are append-only; a correction is a compensating entry | `Ledger.reverse()` writes a mirrored pair; `JpaTransactionRepository.save()` only appends. No DB trigger |
 | Ledger entries are the source of truth for balance | Domain + ADR-001. `accounts.balance_amount` is a denormalized read cache updated in the same transaction as the ledger write; on divergence, `LedgerEntry` rows win. It is **not** derived on read |
-| Float account is unbounded | `Account.debit()` is a no-op for `FLOAT_ACCOUNT`, so its `balance_amount` stays 0; audit it through `ledger_entries` |
+| Float account is unbounded | `Account.debit()` and `Account.credit()` are no-ops for `FLOAT_ACCOUNT`, and it cannot be reserved, so its `balance_amount` stays 0; audit it through `ledger_entries` |
 | Money is `BigDecimal`, never `double` or `float` | `Amount.value` is `BigDecimal`; all money columns are `NUMERIC(19,4)` |
 | Currency is mandatory; cross-currency arithmetic forbidden | `Amount` compact constructor rejects a blank currency; `add` / `subtract` / `isGreaterThan*` throw `CurrencyMismatchException` |
 | No illegal state transition | Each `*State` class validates its own successors and throws `InvalidStateTransitionException`. Legal edges: INITIALIZED to AUTHORIZED, FAILED, AUTHORIZATION_FAILED; AUTHORIZED to CAPTURED, FAILED, AUTHORIZATION_FAILED, CAPTURE_FAILED, REVERSED; CAPTURED to SETTLEMENT_PENDING, CAPTURE_FAILED, REVERSED; SETTLEMENT_PENDING to SETTLED, SETTLEMENT_FAILED, REVERSED; SETTLED to COMPLETED, REVERSED; COMPLETED to REVERSED; UNKNOWN to AUTHORIZED, CAPTURED |
@@ -128,6 +129,8 @@ Every aggregate exposes `snapshot()` returning an inner record, plus a static
 | Retry wraps the boundary, never the reverse | `ConcurrentUpdateException` surfaces at commit, so the transaction is already dead. Retry is scoped to the phase that is safe to replay — TX-2, after the provider answered (ADR-007) |
 | An access token and a refresh token are never interchangeable | `JwtTokenIssuer` signs each use with its own key — `kora.security.jwt.access-secret` and `refresh-secret`, which `SecurityProperties` refuses to start with equal — and checks a `typ` claim on top. Each is refused at the other's door with 401. Asserted in `JwtTokenIssuerTest` and `AuthE2ETest` |
 | A refresh token is honoured only while the server remembers it | Every refresh token is a row in `refresh_tokens`, keyed by its `jti`. `POST /auth/logout` revokes its whole family — every token descended from the same login |
+| No debit spends funds an in-flight debit holds | `Account.debit` and `Account.reserve` refuse anything beyond `available()`, the ledger balance minus the reserved amount. The cash-out places its `FundsHold` (`Ledger.hold`) in TX-1 under the wallet lock (`findByCustomerIdForUpdate`); a transfer locks the payer, a reversal locks the account it debits (`findByIdForUpdate`). Asserted end to end in `ConcurrentDebitE2ETest` (L-1) |
+| A hold is resolved with its outcome, never by time | `CONSUMED` in TX-2 by `Ledger.capture`, which writes the entries and debits the reserved amount in the same call; `RELEASED` in the transaction that records a provider failure, or when a reversal releases the provider's hold. Nothing expires a hold; one left `ACTIVE` by a crash stays until resolved |
 | A refresh token is exchanged once; a replay ends its session | `RefreshTokenStore.consume` marks the token used in one conditional `UPDATE`, so of two exchanges exactly one wins. A second exchange revokes the family through `revokeFamilyOfReplayed` — the only `@Transactional` in `src/main`, `REQUIRES_NEW`, so the revocation survives the 401 that rolls the caller back. Asserted end to end in `AuthE2ETest` |
 | An enumerated column holds only values the domain defines | Eleven `CHECK` constraints, `ck_<table>_<column>`, added by `V202609071725__constrain_enum_columns.sql` over `users.role`, `users.status`, `accounts.resource_type`, `transactions.state` / `type` / `payment_method`, `ledger_entries.type`, `trx_state_historics.old_state` / `new_state` / `triggered_by`, `authorization_records.status`. `EnumColumnConstraintsDbTest` in `auth` and in `payment` reads `pg_get_constraintdef` and asserts the constraint's literals **equal** the Java values, so a constant added on either side alone fails the build. Native `CREATE TYPE … AS ENUM` was rejected: no `DROP VALUE` exists, and it would put `@JdbcTypeCode(NAMED_ENUM)` in ten entities. The `currency` columns are deliberately out — currency is not a closed set here |
 
@@ -178,7 +181,7 @@ Assertions to apply to a diff. Each one is decidable by reading the diff alone.
     `@SpringBootTest` under `unit/` or an HTTP client under `integration/`.
 18. A constant added to or removed from a persisted enum — `Role`, `UserStatus`,
     `ResourceType`, `TransactionType`, `PaymentMethod`, `LedgerEntryType`,
-    `TriggerSource`, `AuthorizationStatus` — or a singleton added to or removed from
+    `TriggerSource`, `AuthorizationStatus`, `HoldStatus` — or a singleton added to or removed from
     `TransactionState`, without a migration in the same diff dropping and re-adding
     the matching `ck_<table>_<column>` constraint, is a defect.
 19. A new enumerated column whose migration carries no `ck_<table>_<column>`
@@ -194,7 +197,7 @@ Assertions to apply to a diff. Each one is decidable by reading the diff alone.
 
 ## 8. Testing strategy
 
-62 test classes under `src/test/java`. The tree states the pyramid level first, and
+64 test classes under `src/test/java`. The tree states the pyramid level first, and
 `TestPyramidTest` checks that the statement is true.
 
 ```
@@ -206,7 +209,7 @@ src/test/java/com/geekersjoel237/koracore/
 ```
 
 Within a level, files are grouped by type, then by concern — `payment/unit/domain/`
-splits into `account`, `ledger`, `transaction`, `authorization`.
+splits into `account`, `ledger`, `transaction`, `authorization`, `hold`.
 
 - **Unit** — plain JUnit 5, no Spring context. Ports faked by the in-memory out
   adapters in `<module>/unit/doubles/`. No `@SpringBootTest`, no container, asserted.
@@ -267,7 +270,7 @@ Deliberate and tracked. Do not raise them on a PR.
 - `docs/adr/` — ADR-001 immutable ledger and balance cache · ADR-002 payment lifecycle
   and locking · ADR-003 single-call payment API · ADR-004 micro-transaction model ·
   ADR-005 load-test calibration · ADR-006 compose topology ·
-  ADR-007 hexagonal before modular
+  ADR-007 hexagonal before modular · ADR-008 funds holds
 - `src/main/resources/db/migration/` — `V202605270702__initial_schema.sql` creates the
   whole schema; `V202609051542__rename_ledger_vocabulary.sql` renames `operations` to
   `ledger_entries` and `from_id`/`to_id` to `from_account_id`/`to_account_id`;
@@ -276,5 +279,6 @@ Deliberate and tracked. Do not raise them on a PR.
   `V202610131159__allow_unknown_transaction_state.sql` re-adds the three state
   constraints with `UNKNOWN`; `V202610161900__create_refresh_tokens.sql` creates the
   JWT adapter's own table, one row per refresh token issued, with its family, its use
-  and its revocation
+  and its revocation; `V202610171530__create_funds_holds.sql` creates the funds holds of
+  ADR-008, with `ck_funds_holds_status` and at most one active hold per transaction
 - `perf/PERF.md`, `perf/SIMULATION.md` — load-test procedure

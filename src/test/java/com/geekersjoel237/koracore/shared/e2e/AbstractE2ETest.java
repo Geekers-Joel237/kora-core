@@ -82,7 +82,7 @@ public abstract class AbstractE2ETest {
         http.setErrorHandler(new NoOpResponseErrorHandler());
 
         jdbcTemplate.execute(
-                "TRUNCATE TABLE refresh_tokens, authorization_records, ledger_entries, trx_state_historics, transactions, accounts, customers, users");
+                "TRUNCATE TABLE refresh_tokens, funds_holds, authorization_records, ledger_entries, trx_state_historics, transactions, accounts, customers, users");
         accountRepository.save(Account.createFloatAccount(Id.generate(), SYSTEM_PROVIDER_ID));
     }
 
