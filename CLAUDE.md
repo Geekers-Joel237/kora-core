@@ -118,7 +118,7 @@ Every aggregate exposes `snapshot()` returning an inner record, plus a static
 | Invariant | Enforced today |
 |---|---|
 | `SUM(DEBIT) == SUM(CREDIT)` per transaction and currency | Domain: `Transaction.verifyDoubleEntry()` runs after every `recordDoubleEntry()`. No DB constraint. Asserted in `FinancialInvariantsDbTest` and `MoneyIntegrityE2ETest` |
-| Ledger entries are append-only; a correction is a compensating entry | `Ledger.reverse()` writes a mirrored pair; `JpaTransactionRepository.save()` only appends. No DB trigger |
+| Ledger entries are append-only; a correction is a compensating entry | `Ledger.reverse()` writes a mirrored pair; `JpaTransactionRepository.save()` only appends. The database refuses any `UPDATE` or `DELETE` on `ledger_entries` and `trx_state_historics` — a soft delete included — through the triggers of `V202610171900__make_ledger_append_only.sql`, and `ck_ledger_entries_amount` refuses a negative amount. The join column of `TransactionEntity.entries` is read-only, so Hibernate never re-points an entry. Asserted in `AppendOnlyLedgerDbTest` |
 | Ledger entries are the source of truth for balance | Domain + ADR-001. `accounts.balance_amount` is a denormalized read cache updated in the same transaction as the ledger write; on divergence, `LedgerEntry` rows win. It is **not** derived on read |
 | Float account is unbounded | `Account.debit()` and `Account.credit()` are no-ops for `FLOAT_ACCOUNT`, and it cannot be reserved, so its `balance_amount` stays 0; audit it through `ledger_entries` |
 | Money is `BigDecimal`, never `double` or `float` | `Amount.value` is `BigDecimal`; all money columns are `NUMERIC(19,4)` |
@@ -197,7 +197,7 @@ Assertions to apply to a diff. Each one is decidable by reading the diff alone.
 
 ## 8. Testing strategy
 
-64 test classes under `src/test/java`. The tree states the pyramid level first, and
+66 test classes under `src/test/java`. The tree states the pyramid level first, and
 `TestPyramidTest` checks that the statement is true.
 
 ```
@@ -252,9 +252,10 @@ Deliberate and tracked. Do not raise them on a PR.
   Redis replaces it by changing one `@Bean` line in `AuthUseCaseConfiguration`.
 - `SETTLEMENT_PENDING` to `SETTLED` is not automated; the reconciliation engine is
   roadmap Step 6.
-- The double-entry and append-only invariants have no database-level constraint.
-  Enumerated columns do, since `V202609071725__constrain_enum_columns.sql`; the
-  balance and ledger invariants stay in the domain.
+- The double-entry invariant has no database-level constraint; it stays in the domain.
+  Append-only and non-negative amounts are enforced by the database since
+  `V202610171900__make_ledger_append_only.sql`, enumerated columns since
+  `V202609071725__constrain_enum_columns.sql`. `TRUNCATE` is not blocked.
 - A deterministic lock order for crossing transfers is not implemented; a deadlock
   surfaces as `ConcurrentUpdateException` and is retried.
 - `auth -> payment` and `payment -> auth` couplings remain, listed and asserted in
@@ -288,5 +289,7 @@ Deliberate and tracked. Do not raise them on a PR.
   constraints with `UNKNOWN`; `V202610161900__create_refresh_tokens.sql` creates the
   JWT adapter's own table, one row per refresh token issued, with its family, its use
   and its revocation; `V202610171530__create_funds_holds.sql` creates the funds holds of
-  ADR-008, with `ck_funds_holds_status` and at most one active hold per transaction
+  ADR-008, with `ck_funds_holds_status` and at most one active hold per transaction;
+  `V202610171900__make_ledger_append_only.sql` refuses `UPDATE` and `DELETE` on
+  `ledger_entries` and `trx_state_historics`, and negative ledger amounts
 - `perf/PERF.md`, `perf/SIMULATION.md` — load-test procedure

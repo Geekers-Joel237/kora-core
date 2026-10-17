@@ -2,7 +2,6 @@ package com.geekersjoel237.koracore.payment.adapters.out.persistence.entities;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import lombok.*;
 
@@ -10,8 +9,7 @@ import java.time.Instant;
 import com.geekersjoel237.koracore.shared.adapters.out.persistence.entities.BaseEntity;
 
 @Entity
-@Table(name = "trx_state_historics",
-        indexes = @Index(name = "idx_trx_state_historics_transaction_id", columnList = "transaction_id"))
+@Table(name = "trx_state_historics")
 @Getter
 @Setter
 @ToString(callSuper = true)

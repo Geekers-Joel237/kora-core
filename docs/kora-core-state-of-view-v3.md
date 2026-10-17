@@ -157,7 +157,14 @@ therefore only be recorded as a reversal of a `COMPLETED` transaction.
 bypasses the domain bypasses them too. Given L-11, that SQL client is the application's own
 connection, which has every right.
 
-> **Confirmed — 2026-10-17.** To be done.
+> **Closed — 2026-10-17**, for append-only. The database refuses any `UPDATE` or `DELETE`
+> on `ledger_entries` and `trx_state_historics`, a soft delete included, and a negative
+> ledger amount (`V202610171900__make_ledger_append_only.sql`). Reproduced first by
+> `AppendOnlyLedgerDbTest`. The trigger then caught the application itself: the
+> unidirectional `@OneToMany` of `TransactionEntity` re-pointed every new entry with an
+> `UPDATE ledger_entries SET transaction_id`; its join column is now read-only.
+> Double entry stays a domain rule, by decision. `TRUNCATE` is not blocked, and a
+> superuser can disable a trigger: L-11 closes that door.
 
 **L-7 · Nothing checks the balance cache against the ledger** (D-1). On divergence, the
 ledger wins (ADR-001), but no process computes the divergence. The float account keeps
@@ -353,7 +360,7 @@ wrong. Each change also has a dated note under its limit.
 | L-3 | **Accepted** | Known gap. Recovery comes with the cash-out saga and its compensations (event-driven, roadmap Step 5), reconciliation (Step 6) as safety net |
 | L-4 | **Accepted** | Known bug, accepted until roadmap Step 4, where idempotency is planned |
 | L-5 | **Withdrawn** | Settlement is internal; for the customer, a capture completes the operation |
-| L-6 | **To do** | Confirmed |
+| L-6 | **Closed** 2026-10-17 | Append-only enforced by the database for `ledger_entries` and `trx_state_historics`; double entry stays in the domain |
 | L-7 | **To do** | Confirmed |
 | L-8 | **To do** | Planned, roadmap Step 4 (brute-force protection) |
 | L-9 | **To do** | Planned, roadmap Step 4 (strict rate limiting), carried over from Step 3 |

@@ -55,7 +55,7 @@ public class TransactionEntity extends VersionedEntity {
     private Instant occurredAt;
 
     @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
-    @JoinColumn(name = "transaction_id")
+    @JoinColumn(name = "transaction_id", insertable = false, updatable = false)
     @Builder.Default
     private List<LedgerEntryEntity> entries = new ArrayList<>();
 }
