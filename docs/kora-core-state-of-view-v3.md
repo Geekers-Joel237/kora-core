@@ -171,7 +171,14 @@ ledger wins (ADR-001), but no process computes the divergence. The float account
 `balance_amount = 0` by design, so its position is visible only through a query on
 `ledger_entries`.
 
-> **Confirmed — 2026-10-17.** To be done.
+> **Closed — 2026-10-17.** `docker/postgres/initdb/10-kora-roles.sh` creates `kora_migration`,
+> owner of the schema, and `kora_app`; `V202610171921__grant_application_role.sql` gives
+> `kora_app` DML only, without `UPDATE` or `DELETE` on `ledger_entries` and
+> `trx_state_historics`. The application can no longer `CREATE`, `ALTER`, `DROP` or
+> `TRUNCATE`, nor disable the append-only triggers. Reproduced first by
+> `ApplicationDatabaseRoleTest`; every test now connects as `kora_app`. The perf
+> `/test/reset` truncates through the migration role. An existing volume is recreated,
+> or realigned by running the script by hand (CONTRIBUTING.md section 9).
 
 ### 3.3 Security
 
@@ -365,7 +372,7 @@ wrong. Each change also has a dated note under its limit.
 | L-8 | **To do** | Planned, roadmap Step 4 (brute-force protection) |
 | L-9 | **To do** | Planned, roadmap Step 4 (strict rate limiting), carried over from Step 3 |
 | L-10 | **Closed** 2026-10-16 | Reproduced first, then fixed on this branch. See the note under L-10 |
-| L-11 | **To do** | Confirmed |
+| L-11 | **Closed** 2026-10-17 | `kora_migration` owns the schema, the application connects as `kora_app`, DML only |
 | L-12 | **Requalified** | Not dead: reserved for provider timeouts, and not wired yet |
 | L-13 | Open | A fix exists but is not merged. Also: `ReverseResult.success` is ignored |
 | L-14 | **Withdrawn** | Not a limit |

@@ -1,11 +1,13 @@
 package com.geekersjoel237.koracore.payment.integration.persistence;
 
 import com.geekersjoel237.koracore.shared.integration.persistence.AbstractRepositoryTest;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.SingleConnectionDataSource;
 
+import java.sql.SQLException;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThatNoException;
@@ -13,8 +15,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AppendOnlyLedgerDbTest extends AbstractRepositoryTest {
 
-    @Autowired
-    private JdbcTemplate jdbc;
+    private final SingleConnectionDataSource owner = ownerTransaction();
+    private final JdbcTemplate jdbc = new JdbcTemplate(owner);
 
     private final String account = UUID.randomUUID().toString();
     private final String transaction = UUID.randomUUID().toString();
@@ -40,6 +42,12 @@ class AppendOnlyLedgerDbTest extends AbstractRepositoryTest {
                                                  occurred_at, created_at, updated_at)
                 VALUES (?, ?, NULL, 'INITIALIZED', now(), now(), now())
                 """, historic, transaction);
+    }
+
+    @AfterEach
+    void rollBack() throws SQLException {
+        owner.getConnection().rollback();
+        owner.destroy();
     }
 
     private void insertEntry(String id, String amount) {

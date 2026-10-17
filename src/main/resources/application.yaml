@@ -59,10 +59,9 @@ spring:
   # migration runner never serves traffic. Splitting them means a SQL injection
   # that reaches the connection pool still cannot DROP a table.
   #
-  # Until KC-05 creates the roles in PostgreSQL, both pairs point at the same
-  # superuser in .env and behaviour is unchanged. KC-05 then creates
-  # kora_migration (owner, DDL) and kora_app (DML only, no CREATE/DROP) and
-  # updates .env — no file here changes.
+  # docker/postgres/initdb/10-kora-roles.sh creates both roles and makes the
+  # migration role the owner of the schema. V202610171921 grants the
+  # application role DML only, minus UPDATE and DELETE on the ledger tables.
   datasource:
     url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${POSTGRES_DB}
     username: ${POSTGRES_APP_USER}
@@ -95,6 +94,8 @@ spring:
     user: ${POSTGRES_MIGRATION_USER}
     password: ${POSTGRES_MIGRATION_PASSWORD}
     out-of-order: false
+    placeholders:
+      app_role: ${POSTGRES_APP_USER}
 
 server:
   port: ${SERVER_PORT}

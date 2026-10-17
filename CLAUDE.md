@@ -132,6 +132,7 @@ Every aggregate exposes `snapshot()` returning an inner record, plus a static
 | No debit spends funds an in-flight debit holds | `Account.debit` and `Account.reserve` refuse anything beyond `available()`, the ledger balance minus the reserved amount. The cash-out places its `FundsHold` (`Ledger.hold`) in TX-1 under the wallet lock (`findByCustomerIdForUpdate`); a transfer locks the payer, a reversal locks the account it debits (`findByIdForUpdate`). Asserted end to end in `ConcurrentDebitE2ETest` (L-1) |
 | A hold is resolved with its outcome, never by time | `CONSUMED` in TX-2 by `Ledger.capture`, which writes the entries and debits the reserved amount in the same call; `RELEASED` in the transaction that records a provider failure, or when a reversal releases the provider's hold. Nothing expires a hold; one left `ACTIVE` by a crash stays until resolved |
 | A refresh token is exchanged once; a replay ends its session | `RefreshTokenStore.consume` marks the token used in one conditional `UPDATE`, so of two exchanges exactly one wins. A second exchange revokes the family through `revokeFamilyOfReplayed` — the only `@Transactional` in `src/main`, `REQUIRES_NEW`, so the revocation survives the 401 that rolls the caller back. Asserted end to end in `AuthE2ETest` |
+| The application connects as a role that cannot change the schema | `docker/postgres/initdb/10-kora-roles.sh` creates `kora_migration`, owner of the schema, which runs Flyway, and `kora_app`, which serves traffic. `V202610171921__grant_application_role.sql` gives `kora_app` `SELECT`, `INSERT`, `UPDATE`, `DELETE` on every table, present and future, except `flyway_schema_history`, and no `UPDATE` or `DELETE` on `ledger_entries` and `trx_state_historics`. Not the owner, it can neither `CREATE`, `ALTER`, `DROP` nor `TRUNCATE`, nor disable the append-only triggers. Every test connects as `kora_app` through `KoraPostgres`; asserted in `ApplicationDatabaseRoleTest` |
 | An enumerated column holds only values the domain defines | Eleven `CHECK` constraints, `ck_<table>_<column>`, added by `V202609071725__constrain_enum_columns.sql` over `users.role`, `users.status`, `accounts.resource_type`, `transactions.state` / `type` / `payment_method`, `ledger_entries.type`, `trx_state_historics.old_state` / `new_state` / `triggered_by`, `authorization_records.status`. `EnumColumnConstraintsDbTest` in `auth` and in `payment` reads `pg_get_constraintdef` and asserts the constraint's literals **equal** the Java values, so a constant added on either side alone fails the build. Native `CREATE TYPE … AS ENUM` was rejected: no `DROP VALUE` exists, and it would put `@JdbcTypeCode(NAMED_ENUM)` in ten entities. The `currency` columns are deliberately out — currency is not a closed set here |
 
 ## 7. Review rules
@@ -194,10 +195,14 @@ Assertions to apply to a diff. Each one is decidable by reading the diff alone.
 21. `@Transactional` in `src/main` anywhere but
     `RefreshTokenStore.revokeFamilyOfReplayed` is a defect. A use case's transaction
     goes through `TransactionBoundary`.
+22. A migration that grants `${app_role}` a right beyond `SELECT`, `INSERT`, `UPDATE`,
+    `DELETE`, or a new append-only table without a `REVOKE UPDATE, DELETE` from it, is a
+    defect. So is code in `src/main` connecting with the migration credentials outside
+    the `perf` profile.
 
 ## 8. Testing strategy
 
-66 test classes under `src/test/java`. The tree states the pyramid level first, and
+67 test classes under `src/test/java`. The tree states the pyramid level first, and
 `TestPyramidTest` checks that the statement is true.
 
 ```
@@ -215,13 +220,15 @@ splits into `account`, `ledger`, `transaction`, `authorization`, `hold`.
   adapters in `<module>/unit/doubles/`. No `@SpringBootTest`, no container, asserted.
 - **Integration** — extends `AbstractRepositoryTest`: `@SpringBootTest` +
   `@Transactional` + `@ActiveProfiles("test")` + `@Import(TestMailConfig.class)`, with
-  a static `PostgreSQLContainer<>("postgres:16-alpine")` wired via
-  `@DynamicPropertySource`. No HTTP, asserted. `@DataJpaTest` and
+  a static `PostgreSQLContainer<>("postgres:16-alpine")` started by `KoraPostgres`, which
+  runs the production role script and wires the datasource as `kora_app` and Flyway as
+  `kora_migration` via `@DynamicPropertySource`. A test that must act as the owner — the
+  append-only trigger, an injected failure, the e2e `TRUNCATE` — asks `KoraPostgres` for
+  that connection. No HTTP, asserted. `@DataJpaTest` and
   `@AutoConfigureTestDatabase` are gone in Spring Boot 4 — do not reintroduce them.
 - **E2E** — extends `AbstractE2ETest`: `@SpringBootTest(RANDOM_PORT)` over real HTTP
   with `RestTemplate`; isolation by `TRUNCATE` in `@BeforeEach`, not by rollback.
-  `KoraCoreApplicationTests` is the only class using `@Testcontainers` +
-  `@ServiceConnection`.
+  `KoraCoreApplicationTests` starts its own container through `KoraPostgres` too.
 
 Flyway owns the schema in tests exactly as in production.
 
@@ -255,7 +262,8 @@ Deliberate and tracked. Do not raise them on a PR.
 - The double-entry invariant has no database-level constraint; it stays in the domain.
   Append-only and non-negative amounts are enforced by the database since
   `V202610171900__make_ledger_append_only.sql`, enumerated columns since
-  `V202609071725__constrain_enum_columns.sql`. `TRUNCATE` is not blocked.
+  `V202609071725__constrain_enum_columns.sql`. The owner role can still `TRUNCATE` them;
+  the application role cannot.
 - A deterministic lock order for crossing transfers is not implemented; a deadlock
   surfaces as `ConcurrentUpdateException` and is retried.
 - `auth -> payment` and `payment -> auth` couplings remain, listed and asserted in
@@ -291,5 +299,9 @@ Deliberate and tracked. Do not raise them on a PR.
   and its revocation; `V202610171530__create_funds_holds.sql` creates the funds holds of
   ADR-008, with `ck_funds_holds_status` and at most one active hold per transaction;
   `V202610171900__make_ledger_append_only.sql` refuses `UPDATE` and `DELETE` on
-  `ledger_entries` and `trx_state_historics`, and negative ledger amounts
+  `ledger_entries` and `trx_state_historics`, and negative ledger amounts;
+  `V202610171921__grant_application_role.sql` grants the application role its DML rights,
+  the role names coming from Flyway placeholders. `docker/postgres/initdb/10-kora-roles.sh`
+  creates both roles on a fresh volume, and transfers ownership when run by hand on an
+  existing one
 - `perf/PERF.md`, `perf/SIMULATION.md` — load-test procedure

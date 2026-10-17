@@ -19,6 +19,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.web.client.NoOpResponseErrorHandler;
 import org.springframework.web.client.RestTemplate;
+import com.geekersjoel237.koracore.shared.integration.persistence.KoraPostgres;
 import org.testcontainers.containers.PostgreSQLContainer;
 import com.geekersjoel237.koracore.auth.domain.model.Customer;
 import com.geekersjoel237.koracore.auth.adapters.in.rest.api.login.LoginRequest;
@@ -48,15 +49,12 @@ public abstract class AbstractE2ETest {
     static final PostgreSQLContainer<?> POSTGRES;
 
     static {
-        POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
-        POSTGRES.start();
+        POSTGRES = KoraPostgres.start();
     }
 
     @DynamicPropertySource
     static void overridePostgresProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url",      POSTGRES::getJdbcUrl);
-        registry.add("spring.datasource.username", POSTGRES::getUsername);
-        registry.add("spring.datasource.password", POSTGRES::getPassword);
+        KoraPostgres.register(POSTGRES, registry);
     }
 
     @LocalServerPort
@@ -71,9 +69,6 @@ public abstract class AbstractE2ETest {
     @Autowired
     protected ExpiringStore<OtpCode> otpCodes;
 
-    @Autowired
-    private JdbcTemplate jdbcTemplate;
-
     protected RestTemplate http;
 
     @BeforeEach
@@ -81,9 +76,13 @@ public abstract class AbstractE2ETest {
         http = new RestTemplate();
         http.setErrorHandler(new NoOpResponseErrorHandler());
 
-        jdbcTemplate.execute(
+        asOwner().execute(
                 "TRUNCATE TABLE refresh_tokens, funds_holds, authorization_records, ledger_entries, trx_state_historics, transactions, accounts, customers, users");
         accountRepository.save(Account.createFloatAccount(Id.generate(), SYSTEM_PROVIDER_ID));
+    }
+
+    protected JdbcTemplate asOwner() {
+        return KoraPostgres.asOwner(POSTGRES);
     }
 
     protected String url(String path) {

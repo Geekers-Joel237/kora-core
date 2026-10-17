@@ -26,7 +26,7 @@ class ProviderSuccessLostE2ETest extends AbstractE2ETest {
     private JdbcTemplate jdbc;
 
     private void failTx2WithSqlState(String sqlState) {
-        jdbc.execute("""
+        asOwner().execute("""
                 CREATE OR REPLACE FUNCTION l2_fail_tx2() RETURNS trigger AS $$
                 BEGIN
                     RAISE EXCEPTION 'TX-2 failure injected by ProviderSuccessLostE2ETest'
@@ -34,7 +34,7 @@ class ProviderSuccessLostE2ETest extends AbstractE2ETest {
                 END;
                 $$ LANGUAGE plpgsql
                 """.formatted(sqlState));
-        jdbc.execute("""
+        asOwner().execute("""
                 CREATE TRIGGER l2_fail_tx2 BEFORE INSERT ON ledger_entries
                 FOR EACH ROW EXECUTE FUNCTION l2_fail_tx2()
                 """);
@@ -42,8 +42,8 @@ class ProviderSuccessLostE2ETest extends AbstractE2ETest {
 
     @AfterEach
     void removeFailure() {
-        jdbc.execute("DROP TRIGGER IF EXISTS l2_fail_tx2 ON ledger_entries");
-        jdbc.execute("DROP FUNCTION IF EXISTS l2_fail_tx2()");
+        asOwner().execute("DROP TRIGGER IF EXISTS l2_fail_tx2 ON ledger_entries");
+        asOwner().execute("DROP FUNCTION IF EXISTS l2_fail_tx2()");
     }
 
     private String transactionOfType(String type) {

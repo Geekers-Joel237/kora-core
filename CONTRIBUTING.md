@@ -309,8 +309,8 @@ is `always` in dev and `never` in prod, so no single value could be correct for 
 |---|---|---|
 | `POSTGRES_DB` `DB_HOST` `DB_PORT` | Compose + `application.yaml` | all |
 | `POSTGRES_USER` `POSTGRES_PASSWORD` | Compose only — superuser, initialises a fresh volume | — |
-| `POSTGRES_MIGRATION_USER` `POSTGRES_MIGRATION_PASSWORD` | `application.yaml` → `spring.flyway.*` | all |
-| `POSTGRES_APP_USER` `POSTGRES_APP_PASSWORD` | `application.yaml` → `spring.datasource.*` | all |
+| `POSTGRES_MIGRATION_USER` `POSTGRES_MIGRATION_PASSWORD` | Compose (role script) + `application.yaml` → `spring.flyway.*` | all |
+| `POSTGRES_APP_USER` `POSTGRES_APP_PASSWORD` | Compose (role script) + `application.yaml` → `spring.datasource.*` and the `app_role` Flyway placeholder | all |
 | `JWT_ACCESS_SECRET` `JWT_REFRESH_SECRET` | `application.yaml` | all |
 | `SERVER_PORT` | `application.yaml` | all |
 | `MAIL_HOST` `MAIL_SMTP_PORT` | Compose + `application.yaml` | all |
@@ -889,6 +889,38 @@ docker compose down -v && docker compose up -d postgres
 
 Testcontainers-backed tests need neither: each run starts an empty database and
 replays every migration.
+
+### Database roles
+
+The application never connects as the superuser. `docker/postgres/initdb/10-kora-roles.sh`
+creates two roles from `.env` and makes the first one owner of the schema:
+
+| Role | Used by | Rights |
+|---|---|---|
+| `POSTGRES_MIGRATION_USER` (`kora_migration`) | Flyway, the perf `/test/reset` | owner: DDL, `TRUNCATE` |
+| `POSTGRES_APP_USER` (`kora_app`) | the application | `SELECT` `INSERT` `UPDATE` `DELETE`, no `UPDATE` or `DELETE` on `ledger_entries` and `trx_state_historics` |
+
+The DML rights come from `V202610171921__grant_application_role.sql`, which also
+covers every table created afterwards. A new append-only table revokes `UPDATE` and
+`DELETE` from `${app_role}` in its own migration.
+
+Postgres runs the script on a **fresh volume only**. A volume created before it
+keeps the superuser as owner of every table. Recreate it if it holds nothing worth
+keeping:
+
+```bash
+docker compose down -v && docker compose up -d postgres
+```
+
+Otherwise run the script by hand. It creates the missing roles and transfers the
+schema, its tables and its functions to the migration role; running it twice
+changes nothing:
+
+```bash
+docker compose exec postgres sh /docker-entrypoint-initdb.d/10-kora-roles.sh
+```
+
+The next start then applies the grants migration as the new owner.
 
 ---
 
