@@ -237,7 +237,15 @@ Deliberate and tracked. Do not raise them on a PR.
 - No idempotency store: a client retry can create duplicate `INITIALIZED`
   transactions. Roadmap Step 4 — deliberately not folded into the command bus.
 - No recovery for a crash between TX-1 and TX-2, and no TX-2 retry after provider
-  success; `AuthorizationRecord` exists only to make these auditable (ADR-004 G-1 to G-4).
+  success (ADR-004 G-1 to G-4, L-3). Accepted: the transaction stays `INITIALIZED`, and a
+  cash-out's funds hold stays `ACTIVE` until resolved by hand. Recovery comes with the
+  cash-out saga and its compensations once the flow is event-driven (roadmap Step 5);
+  reconciliation (Step 6) catches what is left.
+- A provider success whose TX-2 fails leaves no internal trace: the transaction stays
+  `INITIALIZED`, the provider reference is lost, and `AuthorizationRecord` — created in
+  TX-2 — rolls back with it (L-2). Accepted: the reconciliation engine of roadmap Step 6
+  catches it after the fact as `MISSING_INTERNAL`. Reproduced by
+  `ProviderSuccessLostE2ETest`, disabled.
 - `MobileMoneyProviderAdapter` is a latency-simulating stub, not an HTTP client,
   and has no circuit breaker.
 - `InMemoryExpiringStore` holds OTP codes in one JVM's heap. Single-instance only;

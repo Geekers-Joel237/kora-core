@@ -106,8 +106,10 @@ the `INITIALIZED` row written by TX-1.
 The same outcome follows when the retry runs out (`RetryExhaustedException` → 503): the
 provider moved the money, and the client receives a 503.
 
-> **Confirmed — 2026-10-17.** To be done. Reproduced by `ProviderSuccessLostE2ETest`
-> (disabled until the fix): with TX-2 forced to fail after the provider succeeded, a
+> **Accepted — 2026-10-17.** A known gap, not fixed in the payment path: the
+> reconciliation engine of roadmap Step 6 catches it after the fact, as
+> `MISSING_INTERNAL`. Reproduced by `ProviderSuccessLostE2ETest`, kept disabled to
+> document it: with TX-2 forced to fail after the provider succeeded, a
 > cash-in ends `INITIALIZED` with its wallet not credited (503), and a cash-out ends
 > `INITIALIZED` with its hold still `ACTIVE` (401, see N-4). In both cases no provider
 > reference is stored anywhere. The cash-out hold of L-1 keeps the paid-out funds from
@@ -117,7 +119,12 @@ provider moved the money, and the client receives a 503.
 There is no reaper and no detection query. ADR-004 planned both for Step 3; they did not
 ship.
 
-> **Confirmed — 2026-10-17.** To be done.
+> **Accepted — 2026-10-17.** A known gap, not fixed in the current payment path. With the
+> event-driven architecture of roadmap Step 5 and a real transactional flow per use case,
+> the cash-out becomes a saga with its own compensations; recovery belongs there, and
+> reconciliation (Step 6) catches what is left. Until then, a crash between TX-1 and TX-2
+> also leaves a cash-out's funds hold `ACTIVE` (ADR-008): the customer's funds stay
+> blocked until someone resolves it by hand.
 
 **L-4 · No idempotency.** A client retry creates a second transaction. Roadmap Step 4. The
 anti-replay middleware is not a substitute:
@@ -342,8 +349,8 @@ wrong. Each change also has a dated note under its limit.
 | ID | Status | Note |
 |---|---|---|
 | L-1 | **Closed** 2026-10-17 | Funds holds, ADR-008. Reproduced first, then fixed |
-| L-2 | **To do** | Reproduced 2026-10-17 (`ProviderSuccessLostE2ETest`, disabled). The trace written before the provider call will need a state for an unknown outcome (L-12) |
-| L-3 | **To do** | Confirmed |
+| L-2 | **Accepted** | Known gap, reproduced 2026-10-17 (`ProviderSuccessLostE2ETest`, disabled). Caught after the fact by reconciliation, roadmap Step 6 (`MISSING_INTERNAL`) |
+| L-3 | **Accepted** | Known gap. Recovery comes with the cash-out saga and its compensations (event-driven, roadmap Step 5), reconciliation (Step 6) as safety net |
 | L-4 | **Accepted** | Known bug, accepted until roadmap Step 4, where idempotency is planned |
 | L-5 | **Withdrawn** | Settlement is internal; for the customer, a capture completes the operation |
 | L-6 | **To do** | Confirmed |

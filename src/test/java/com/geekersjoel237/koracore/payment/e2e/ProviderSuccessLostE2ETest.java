@@ -16,7 +16,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@Disabled("L-2 — closed by recording the provider's answer before TX-2")
+@Disabled("L-2 — known gap, accepted: caught after the fact by reconciliation (ROADMAP Step 6)")
 class ProviderSuccessLostE2ETest extends AbstractE2ETest {
 
     private static final String PIN = "1234";
