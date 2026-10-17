@@ -106,7 +106,12 @@ the `INITIALIZED` row written by TX-1.
 The same outcome follows when the retry runs out (`RetryExhaustedException` → 503): the
 provider moved the money, and the client receives a 503.
 
-> **Confirmed — 2026-10-17.** To be done.
+> **Confirmed — 2026-10-17.** To be done. Reproduced by `ProviderSuccessLostE2ETest`
+> (disabled until the fix): with TX-2 forced to fail after the provider succeeded, a
+> cash-in ends `INITIALIZED` with its wallet not credited (503), and a cash-out ends
+> `INITIALIZED` with its hold still `ACTIVE` (401, see N-4). In both cases no provider
+> reference is stored anywhere. The cash-out hold of L-1 keeps the paid-out funds from
+> being spent twice, but does not say whether the provider paid.
 
 **L-3 · A crash between TX-1 and TX-2 leaves the transaction `INITIALIZED` forever** (G-1).
 There is no reaper and no detection query. ADR-004 planned both for Step 3; they did not
@@ -337,7 +342,7 @@ wrong. Each change also has a dated note under its limit.
 | ID | Status | Note |
 |---|---|---|
 | L-1 | **Closed** 2026-10-17 | Funds holds, ADR-008. Reproduced first, then fixed |
-| L-2 | **To do** | Confirmed. The trace written before the provider call will need a state for an unknown outcome (L-12) |
+| L-2 | **To do** | Reproduced 2026-10-17 (`ProviderSuccessLostE2ETest`, disabled). The trace written before the provider call will need a state for an unknown outcome (L-12) |
 | L-3 | **To do** | Confirmed |
 | L-4 | **Accepted** | Known bug, accepted until roadmap Step 4, where idempotency is planned |
 | L-5 | **Withdrawn** | Settlement is internal; for the customer, a capture completes the operation |
@@ -360,6 +365,13 @@ wrong. Each change also has a dated note under its limit.
   product decision that has not been made.
 - **N-3 · `refresh_tokens` is never purged.** Every login and every refresh adds a row,
   kept 7 days past its use. A consequence of closing L-10.
+- **N-4 · An unhandled server error reaches the client as 401.** Found while reproducing
+  L-2: a cash-out whose TX-2 failed on a database error answered **401**, not 500. The
+  exception has no `@ExceptionHandler`, so Tomcat dispatches to `/error`; `/error` is not
+  permitted in `SecurityConfig` and falls under `anyRequest().authenticated()`, and that
+  dispatch carries no authentication. The logs fit this reading; it is not yet proven by a
+  dedicated test. Consequence: a server fault looks like an expired session, and the mobile
+  client refreshes its token or logs the user out.
 - **H-1 · Dead code — removed 2026-10-17.** `AccountRepository.findFloatByProviderIdForUpdate`
   and its Spring Data query, `SpringDataTransactionRepository.findByFromAccountIdOrToAccountId`,
   and the unused `JpaSpecificationExecutor` on that repository. A scan of `src/main` found
