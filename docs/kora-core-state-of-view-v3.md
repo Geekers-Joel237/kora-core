@@ -171,14 +171,12 @@ ledger wins (ADR-001), but no process computes the divergence. The float account
 `balance_amount = 0` by design, so its position is visible only through a query on
 `ledger_entries`.
 
-> **Closed — 2026-10-17.** `docker/postgres/initdb/10-kora-roles.sh` creates `kora_migration`,
-> owner of the schema, and `kora_app`; `V202610171921__grant_application_role.sql` gives
-> `kora_app` DML only, without `UPDATE` or `DELETE` on `ledger_entries` and
-> `trx_state_historics`. The application can no longer `CREATE`, `ALTER`, `DROP` or
-> `TRUNCATE`, nor disable the append-only triggers. Reproduced first by
-> `ApplicationDatabaseRoleTest`; every test now connects as `kora_app`. The perf
-> `/test/reset` truncates through the migration role. An existing volume is recreated,
-> or realigned by running the script by hand (CONTRIBUTING.md section 9).
+> **Deferred — 2026-10-17.** Detection only, never automatic correction (ADR-001): a read
+> query listing customer accounts whose `balance_amount` differs from their ledger sum,
+> with the float account's ledger position, run by a scheduled check — incremental on
+> touched accounts, full at night. Off the payment path, no cost on TX-1 or TX-2. A
+> trigger recomputing the sum at commit was rejected: under the wallet lock, it grows
+> with the ledger. Comes with the daily balance snapshots of reconciliation (Step 6).
 
 ### 3.3 Security
 
@@ -216,7 +214,14 @@ the migration user and `POSTGRES_USER` are the same account in `.env`. The split
 `kora_app` (DML only) and `kora_migration` (DDL) is designed but not done (KC-05). A SQL
 injection would therefore have DDL rights.
 
-> **Confirmed — 2026-10-17.** To be done.
+> **Closed — 2026-10-17.** `docker/postgres/initdb/10-kora-roles.sh` creates `kora_migration`,
+> owner of the schema, and `kora_app`; `V202610171921__grant_application_role.sql` gives
+> `kora_app` DML only, without `UPDATE` or `DELETE` on `ledger_entries` and
+> `trx_state_historics`. The application can no longer `CREATE`, `ALTER`, `DROP` or
+> `TRUNCATE`, nor disable the append-only triggers. Reproduced first by
+> `ApplicationDatabaseRoleTest`; every test now connects as `kora_app`. The perf
+> `/test/reset` truncates through the migration role. An existing volume is recreated,
+> or realigned by running the script by hand (CONTRIBUTING.md section 9).
 
 Lower: the `/test/**` endpoints are compiled into every build and enabled by the `perf`
 profile alone; one of them returns OTP codes.
@@ -232,6 +237,16 @@ no test covers it. Likewise, `UserStatus.PENDING` is never assigned.
 > provider timeout with no clear answer. It is **unwired**. Nothing leads into it, and the
 > adapter throws the same `PaymentProviderException` for a timeout and for a refusal, so a
 > timeout today ends in `AUTHORIZATION_FAILED` or `CAPTURE_FAILED`.
+>
+> **Closed — 2026-10-17.** `PaymentTimeoutProviderException` extends
+> `PaymentProviderException` and is caught before it at every provider call. A timeout on
+> `authorize` moves the transaction from `INITIALIZED` to `UNKNOWN`; on `capture`, the
+> authorization is recorded first, its provider reference kept for reconciliation, then
+> `AUTHORIZED` to `UNKNOWN`; on `reverse`, `AUTHORIZED` to `UNKNOWN`. A cash-out hold stays
+> `ACTIVE`. Any other provider error keeps its failed state. `UnknownState` now throws
+> `InvalidStateTransitionException`. Reproduced first in `PaymentUseCaseTest` and
+> `ProviderFailureE2ETest`. Leaving `UNKNOWN` belongs to reconciliation (Step 6): today it
+> leads only to `AUTHORIZED` or `CAPTURED`, not yet to a failed state or `REVERSED`.
 
 **L-13 · A provider failure during a reversal returns an unhandled 500.**
 `ReversePaymentService` calls `provider.reverse` outside any `try`.
@@ -243,6 +258,11 @@ mobile team reported this on 2026-08-06; it is still open.
 > the authorization record, while the hold stays in place at the provider. A fix was drafted
 > (timeout retried 3 times; refusal 502, unknown outcome 504; the transaction stays
 > `AUTHORIZED`) and set aside, not merged.
+>
+> **Partly closed — 2026-10-17**, with L-12. `PaymentProviderException` is mapped to 502,
+> so a refusal during a reversal no longer escapes as a 500; a timeout leaves the
+> transaction `UNKNOWN`. Still open: `ReverseResult.success` is ignored. The drafted fix
+> is obsolete: it kept a timed-out reversal `AUTHORIZED`.
 
 **L-14 · The XAF rule (whole units only) is enforced at the web edge, not in the domain.**
 `@Digits(fraction = 0)` on the three request types is the only guard. `Amount` accepts any
@@ -368,13 +388,13 @@ wrong. Each change also has a dated note under its limit.
 | L-4 | **Accepted** | Known bug, accepted until roadmap Step 4, where idempotency is planned |
 | L-5 | **Withdrawn** | Settlement is internal; for the customer, a capture completes the operation |
 | L-6 | **Closed** 2026-10-17 | Append-only enforced by the database for `ledger_entries` and `trx_state_historics`; double entry stays in the domain |
-| L-7 | **To do** | Confirmed |
+| L-7 | **Deferred** | Scheduled detection, off the payment path, with the Step 6 snapshots |
 | L-8 | **To do** | Planned, roadmap Step 4 (brute-force protection) |
 | L-9 | **To do** | Planned, roadmap Step 4 (strict rate limiting), carried over from Step 3 |
 | L-10 | **Closed** 2026-10-16 | Reproduced first, then fixed on this branch. See the note under L-10 |
 | L-11 | **Closed** 2026-10-17 | `kora_migration` owns the schema, the application connects as `kora_app`, DML only |
-| L-12 | **Requalified** | Not dead: reserved for provider timeouts, and not wired yet |
-| L-13 | Open | A fix exists but is not merged. Also: `ReverseResult.success` is ignored |
+| L-12 | **Closed** 2026-10-17 | A provider timeout leaves the transaction `UNKNOWN`, for reconciliation to resolve |
+| L-13 | Partly closed 2026-10-17 | Provider refusal mapped to 502. Still open: `ReverseResult.success` is ignored |
 | L-14 | **Withdrawn** | Not a limit |
 | L-15 | Open | |
 

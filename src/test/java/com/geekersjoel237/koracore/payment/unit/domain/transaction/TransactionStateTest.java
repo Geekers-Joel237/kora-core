@@ -176,4 +176,26 @@ class TransactionStateTest {
         assertTrue(TransactionState.SETTLEMENT_FAILED.isTerminal());
         assertTrue(TransactionState.REVERSED.isTerminal());
     }
+
+    @Test
+    void should_allow_transition_from_initialized_to_unknown() {
+        assertDoesNotThrow(() -> TransactionState.INITIALIZED.transitionTo(TransactionState.UNKNOWN));
+    }
+
+    @Test
+    void should_allow_transition_from_authorized_to_unknown() {
+        assertDoesNotThrow(() -> TransactionState.AUTHORIZED.transitionTo(TransactionState.UNKNOWN));
+    }
+
+    @Test
+    void should_throw_when_transitioning_from_captured_to_unknown() {
+        assertThrows(InvalidStateTransitionException.class,
+                () -> TransactionState.CAPTURED.transitionTo(TransactionState.UNKNOWN));
+    }
+
+    @Test
+    void should_throw_an_invalid_state_transition_when_leaving_unknown_for_an_unlisted_state() {
+        assertThrows(InvalidStateTransitionException.class,
+                () -> TransactionState.UNKNOWN.transitionTo(TransactionState.COMPLETED));
+    }
 }

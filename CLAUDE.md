@@ -123,7 +123,7 @@ Every aggregate exposes `snapshot()` returning an inner record, plus a static
 | Float account is unbounded | `Account.debit()` and `Account.credit()` are no-ops for `FLOAT_ACCOUNT`, and it cannot be reserved, so its `balance_amount` stays 0; audit it through `ledger_entries` |
 | Money is `BigDecimal`, never `double` or `float` | `Amount.value` is `BigDecimal`; all money columns are `NUMERIC(19,4)` |
 | Currency is mandatory; cross-currency arithmetic forbidden | `Amount` compact constructor rejects a blank currency; `add` / `subtract` / `isGreaterThan*` throw `CurrencyMismatchException` |
-| No illegal state transition | Each `*State` class validates its own successors and throws `InvalidStateTransitionException`. Legal edges: INITIALIZED to AUTHORIZED, FAILED, AUTHORIZATION_FAILED; AUTHORIZED to CAPTURED, FAILED, AUTHORIZATION_FAILED, CAPTURE_FAILED, REVERSED; CAPTURED to SETTLEMENT_PENDING, CAPTURE_FAILED, REVERSED; SETTLEMENT_PENDING to SETTLED, SETTLEMENT_FAILED, REVERSED; SETTLED to COMPLETED, REVERSED; COMPLETED to REVERSED; UNKNOWN to AUTHORIZED, CAPTURED |
+| No illegal state transition | Each `*State` class validates its own successors and throws `InvalidStateTransitionException`. Legal edges: INITIALIZED to AUTHORIZED, FAILED, AUTHORIZATION_FAILED, UNKNOWN; AUTHORIZED to CAPTURED, FAILED, AUTHORIZATION_FAILED, CAPTURE_FAILED, REVERSED, UNKNOWN; CAPTURED to SETTLEMENT_PENDING, CAPTURE_FAILED, REVERSED; SETTLEMENT_PENDING to SETTLED, SETTLEMENT_FAILED, REVERSED; SETTLED to COMPLETED, REVERSED; COMPLETED to REVERSED; UNKNOWN to AUTHORIZED, CAPTURED |
 | No provider network call inside a DB transaction | `CashInService`, `CashOutService` and `ReversePaymentService` split into TX-1 (~10 ms) / provider I/O (~1 400 ms, zero connections held) / TX-2 (~20 ms). Per ADR-004, a class-level `@Transactional` produced p95 60 000 ms and a 73.93 % error rate at 25 req/s through HikariCP pool exhaustion |
 | A rollback happens by throwing | `BusinessException` — or any unchecked throwable — inside `TransactionBoundary.execute` discards the writes; returning normally commits. The port hands out no transaction status, so throwing is the only way for a use case to abort. Pinned in `SpringTransactionBoundaryTest` against a recording transaction manager |
 | Retry wraps the boundary, never the reverse | `ConcurrentUpdateException` surfaces at commit, so the transaction is already dead. Retry is scoped to the phase that is safe to replay — TX-2, after the provider answered (ADR-007) |
@@ -133,6 +133,7 @@ Every aggregate exposes `snapshot()` returning an inner record, plus a static
 | A hold is resolved with its outcome, never by time | `CONSUMED` in TX-2 by `Ledger.capture`, which writes the entries and debits the reserved amount in the same call; `RELEASED` in the transaction that records a provider failure, or when a reversal releases the provider's hold. Nothing expires a hold; one left `ACTIVE` by a crash stays until resolved |
 | A refresh token is exchanged once; a replay ends its session | `RefreshTokenStore.consume` marks the token used in one conditional `UPDATE`, so of two exchanges exactly one wins. A second exchange revokes the family through `revokeFamilyOfReplayed` — the only `@Transactional` in `src/main`, `REQUIRES_NEW`, so the revocation survives the 401 that rolls the caller back. Asserted end to end in `AuthE2ETest` |
 | The application connects as a role that cannot change the schema | `docker/postgres/initdb/10-kora-roles.sh` creates `kora_migration`, owner of the schema, which runs Flyway, and `kora_app`, which serves traffic. `V202610171921__grant_application_role.sql` gives `kora_app` `SELECT`, `INSERT`, `UPDATE`, `DELETE` on every table, present and future, except `flyway_schema_history`, and no `UPDATE` or `DELETE` on `ledger_entries` and `trx_state_historics`. Not the owner, it can neither `CREATE`, `ALTER`, `DROP` nor `TRUNCATE`, nor disable the append-only triggers. Every test connects as `kora_app` through `KoraPostgres`; asserted in `ApplicationDatabaseRoleTest` |
+| A provider timeout is not a refusal | `PaymentTimeoutProviderException`, a subclass of `PaymentProviderException`, is caught before it at every provider call and moves the transaction to `UNKNOWN` (`markUnknown()`): from `INITIALIZED` on `authorize`; from `AUTHORIZED` on `capture`, after the `AuthorizationRecord` keeps the provider reference; from `AUTHORIZED` on `reverse`. A cash-out hold stays `ACTIVE`. Any other provider error keeps its failed state, and reaches HTTP as 502. Asserted in `PaymentUseCaseTest` and `ProviderFailureE2ETest` |
 | An enumerated column holds only values the domain defines | Eleven `CHECK` constraints, `ck_<table>_<column>`, added by `V202609071725__constrain_enum_columns.sql` over `users.role`, `users.status`, `accounts.resource_type`, `transactions.state` / `type` / `payment_method`, `ledger_entries.type`, `trx_state_historics.old_state` / `new_state` / `triggered_by`, `authorization_records.status`. `EnumColumnConstraintsDbTest` in `auth` and in `payment` reads `pg_get_constraintdef` and asserts the constraint's literals **equal** the Java values, so a constant added on either side alone fails the build. Native `CREATE TYPE … AS ENUM` was rejected: no `DROP VALUE` exists, and it would put `@JdbcTypeCode(NAMED_ENUM)` in ten entities. The `currency` columns are deliberately out — currency is not a closed set here |
 
 ## 7. Review rules
@@ -155,7 +156,7 @@ Assertions to apply to a diff. Each one is decidable by reading the diff alone.
    `Amount` methods bypasses the currency check and is a defect.
 8. A state change written as a direct field assignment instead of going through
    the named methods on `Transaction` (`authorize()`, `capture()`, `settle()`,
-   `markCompleted()`, `reverse()`, `fail*()`) is a defect.
+   `markCompleted()`, `reverse()`, `markUnknown()`, `fail*()`) is a defect.
 9. Any `UPDATE` or `DELETE` on `ledger_entries` or `trx_state_historics`, and any
    `clear()` or `remove()` on the entries collection of `Transaction` or
    `TransactionEntity`, is a defect.
@@ -264,6 +265,9 @@ Deliberate and tracked. Do not raise them on a PR.
   `V202610171900__make_ledger_append_only.sql`, enumerated columns since
   `V202609071725__constrain_enum_columns.sql`. The owner role can still `TRUNCATE` them;
   the application role cannot.
+- Nothing compares `accounts.balance_amount` with the ledger sum, and the float account's
+  position is visible only through `ledger_entries` (L-7). Deferred: a scheduled,
+  detection-only check comes with the balance snapshots of roadmap Step 6.
 - A deterministic lock order for crossing transfers is not implemented; a deadlock
   surfaces as `ConcurrentUpdateException` and is retried.
 - `auth -> payment` and `payment -> auth` couplings remain, listed and asserted in

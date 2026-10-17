@@ -11,6 +11,7 @@ import com.geekersjoel237.koracore.payment.domain.enums.TransactionType;
 import com.geekersjoel237.koracore.payment.domain.exception.AccountNotFoundException;
 import com.geekersjoel237.koracore.payment.domain.exception.AccountSuspendedException;
 import com.geekersjoel237.koracore.payment.domain.exception.PaymentProviderException;
+import com.geekersjoel237.koracore.payment.domain.exception.PaymentTimeoutProviderException;
 import com.geekersjoel237.koracore.payment.domain.model.Account;
 import com.geekersjoel237.koracore.payment.domain.model.AuthorizationRecord;
 import com.geekersjoel237.koracore.payment.domain.model.Transaction;
@@ -70,12 +71,16 @@ public final class CashInService implements CashInCommandHandler {
         try {
             authorization = provider.authorize(cmd.amount(), cmd.paymentMethod(),
                     correlationId, ProviderOperationType.COLLECTION, initiated.phone());
+        } catch (PaymentTimeoutProviderException e) {
+            return boundary.execute(() -> recordAuthorizationUnknown(initiated.transactionId()));
         } catch (PaymentProviderException e) {
             return boundary.execute(() -> failAuthorization(initiated.transactionId()));
         }
 
         try {
             provider.capture(authorization.providerReference(), correlationId);
+        } catch (PaymentTimeoutProviderException e) {
+            return boundary.execute(() -> recordCaptureUnknown(initiated.transactionId(), authorization, cmd));
         } catch (PaymentProviderException e) {
             return boundary.execute(() -> failCapture(initiated.transactionId(), authorization, cmd));
         }
@@ -128,6 +133,25 @@ public final class CashInService implements CashInCommandHandler {
         tx.settle();
         tx.markCompleted();
 
+        flushHistorySince(tx);
+        transactionRepository.save(tx);
+        return PaymentResult.of(tx);
+    }
+
+    private PaymentResult recordAuthorizationUnknown(Id transactionId) {
+        Transaction tx = reload(transactionId);
+        tx.markUnknown();
+        flushHistorySince(tx);
+        transactionRepository.save(tx);
+        return PaymentResult.of(tx);
+    }
+
+    private PaymentResult recordCaptureUnknown(Id transactionId, AuthorizationResult authorization, CashInCommand cmd) {
+        Transaction tx = reload(transactionId);
+        authorizationRecordRepository.save(AuthorizationRecord.create(
+                transactionId, authorization.providerReference(), cmd.amount(), AUTHORIZATION_TTL));
+        tx.authorize();
+        tx.markUnknown();
         flushHistorySince(tx);
         transactionRepository.save(tx);
         return PaymentResult.of(tx);

@@ -173,6 +173,10 @@ public class Transaction {
         transitionTo(TransactionState.REVERSED);
     }
 
+    public void markUnknown() {
+        transitionTo(TransactionState.UNKNOWN);
+    }
+
     public record Snapshot(
             Id transactionId,
             String transactionNumber,

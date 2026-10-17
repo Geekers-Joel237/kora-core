@@ -6,6 +6,7 @@ import com.geekersjoel237.koracore.payment.application.result.PaymentResult;
 import com.geekersjoel237.koracore.payment.domain.enums.TriggerSource;
 import com.geekersjoel237.koracore.payment.domain.exception.AccountNotFoundException;
 import com.geekersjoel237.koracore.payment.domain.exception.InvalidStateTransitionException;
+import com.geekersjoel237.koracore.payment.domain.exception.PaymentTimeoutProviderException;
 import com.geekersjoel237.koracore.payment.domain.model.Account;
 import com.geekersjoel237.koracore.payment.domain.model.AuthorizationRecord;
 import com.geekersjoel237.koracore.payment.domain.model.Transaction;
@@ -70,7 +71,11 @@ public final class ReversePaymentService implements ReversePaymentCommandHandler
         if (plan.holdToRelease() == null)
             return retry.execute(() -> boundary.execute(() -> compensate(cmd)));
 
-        provider.reverse(plan.holdToRelease(), plan.amount(), cmd.correlationId());
+        try {
+            provider.reverse(plan.holdToRelease(), plan.amount(), cmd.correlationId());
+        } catch (PaymentTimeoutProviderException e) {
+            return retry.execute(() -> boundary.execute(() -> recordReversalUnknown(cmd)));
+        }
         return retry.execute(() -> boundary.execute(() -> recordRelease(cmd)));
     }
 
@@ -101,6 +106,15 @@ public final class ReversePaymentService implements ReversePaymentCommandHandler
 
         tx.reverse();
         recordTransition(cmd, tx, TransactionState.AUTHORIZED);
+        transactionRepository.save(tx);
+        return PaymentResult.of(tx);
+    }
+
+    private PaymentResult recordReversalUnknown(ReversePaymentCommand cmd) {
+        Transaction tx = reload(cmd.transactionId());
+        TransactionState from = tx.snapshot().state();
+        tx.markUnknown();
+        recordTransition(cmd, tx, from);
         transactionRepository.save(tx);
         return PaymentResult.of(tx);
     }
@@ -144,7 +158,7 @@ public final class ReversePaymentService implements ReversePaymentCommandHandler
 
     private void recordTransition(ReversePaymentCommand cmd, Transaction tx, TransactionState from) {
         trxHistoricStatesRepository.save(TrxStateHistoric.of(
-                tx.snapshot().transactionId(), from, TransactionState.REVERSED,
+                tx.snapshot().transactionId(), from, tx.snapshot().state(),
                 TriggerSource.OPERATOR_ACTION, cmd.correlationId(), null,
                 cmd.actorId(), cmd.reason()));
     }

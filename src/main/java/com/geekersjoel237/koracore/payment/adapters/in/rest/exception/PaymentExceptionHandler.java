@@ -24,4 +24,9 @@ public class PaymentExceptionHandler {
     ProblemDetail onUnprocessable(BusinessException ex) {
         return ProblemDetails.of(HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());
     }
+
+    @ExceptionHandler({PaymentProviderException.class, PaymentTimeoutProviderException.class})
+    ProblemDetail onProviderFailure(PaymentProviderException ex) {
+        return ProblemDetails.of(HttpStatus.BAD_GATEWAY, ex.getMessage());
+    }
 }
