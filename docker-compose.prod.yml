@@ -1,0 +1,56 @@
+# -----------------------------------------------------------------------------
+# Production. Passed explicitly - never loaded automatically:
+#
+#     docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Naming -f at all suppresses the automatic pickup of docker-compose.override.yml,
+# so none of the development bindings can reach a server by accident. Forgetting
+# the flags is the one mistake that matters here; the deploy runbook must carry
+# the full command, never a bare `docker compose up`.
+#
+# Only Postgres is configured below, and that is the whole point of the socle
+# rule: maildev, pgadmin, influxdb and grafana are declared in
+# docker-compose.override.yml, which this command does not load. They cannot
+# start here even by mistake - there is no service definition to activate, with
+# or without COMPOSE_PROFILES. Nothing has to be switched off, because nothing
+# is switched on.
+#
+# The application is not a container. It runs on the host and reaches Postgres
+# on 127.0.0.1, which is why the port is still published - bound to loopback,
+# so it is reachable from the host and from nowhere else. Operator access to the
+# database goes through an SSH tunnel onto that same loopback port; there is
+# deliberately no database GUI on a server.
+#
+# Server day: copy .env.example to .env, fill in the real values, run the
+# command above. No file below needs editing.
+# -----------------------------------------------------------------------------
+
+services:
+
+  postgres:
+    container_name: kora-postgres
+    ports:
+      - '127.0.0.1:${DB_PORT}:5432'
+
+    # unless-stopped, not always: the two differ only after a deliberate
+    # `docker stop`. With `always`, a daemon restart during maintenance brings
+    # the database back under the operator's hands. `unless-stopped` respects
+    # the stop and still survives a reboot, which is what we want.
+    restart: unless-stopped
+
+    # Docker gives a container 64 MB of /dev/shm. Postgres uses it for parallel
+    # workers and large sorts, and fails with "could not resize shared memory
+    # segment" under load well before it fails for any legitimate reason.
+    shm_size: '256mb'
+
+    # A clean shutdown flushes buffers and closes WAL properly. The 10 s default
+    # can cut that short on a busy instance and force recovery on next start.
+    stop_grace_period: 60s
+
+    # Container logs are unbounded by default and will fill the disk of a
+    # long-running server. Rotation is not optional on a machine nobody watches.
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '10m'
+        max-file: '3'

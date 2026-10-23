@@ -1,0 +1,24 @@
+package com.geekersjoel237.koracore.payment.domain.model.state;
+
+import com.geekersjoel237.koracore.payment.domain.exception.InvalidStateTransitionException;
+
+class InitializedState implements TransactionState {
+
+    @Override
+    public TransactionState transitionTo(TransactionState next) {
+        if (next instanceof AuthorizedState
+                || next instanceof FailedState
+                || next instanceof AuthorizationFailedState) return next;
+        throw new InvalidStateTransitionException(this, next);
+    }
+
+    @Override
+    public String name() {
+        return "INITIALIZED";
+    }
+
+    @Override
+    public boolean isTerminal() {
+        return false;
+    }
+}

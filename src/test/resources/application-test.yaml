@@ -1,0 +1,66 @@
+# Test profile — activated by @ActiveProfiles("test") on every test base class.
+#
+# Lives in src/test/resources, never in src/main/resources: it must not ship in
+# the production jar, and it holds a signing key that would otherwise be a
+# secret in the repository.
+#
+# Reads no environment variable. That is the whole point — `./gradlew test`
+# passes on a clean clone with no .env, so a broken local environment can never
+# be mistaken for a broken build.
+
+spring:
+  # Flyway creates the schema on the Testcontainers database from the same SQL
+  # as production. `none` rather than `validate`: Flyway is the single owner and
+  # Hibernate is not asked to re-check its work on every context start.
+  jpa:
+    hibernate:
+      ddl-auto: none
+
+    # Mirrors src/main/resources/application.yaml. Not a test-only preference:
+    # if the suite ran with OSIV on while production runs with it off, a lazy
+    # association touched outside a transaction would pass here and throw in
+    # production. The value is duplicated because the test classpath shadows the
+    # main base file (see application.yaml next to this one), so nothing is
+    # inherited from it.
+    open-in-view: false
+
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+# The exporter defaults to enabled whenever micrometer-registry-influx is on the
+# classpath, which it always is. Without this, every @SpringBootTest context
+# spends its life failing to reach localhost:8086 and fills the report with
+# stack traces.
+management:
+  influx:
+    metrics:
+      export:
+        enabled: false
+
+logging:
+  level:
+    "org.hibernate.SQL": DEBUG
+    "org.hibernate.orm.jdbc.bind": TRACE
+
+kora:
+  time-zone: Africa/Douala
+  security:
+    # Fixed, literal, and worthless outside the test classpath. Long enough to
+    # satisfy the @Size(min = 32) constraint on SecurityProperties.Jwt.
+    jwt:
+      secret: kora-core-test-signing-key-not-used-anywhere-else
+      access-token-expiration-minutes: 15
+      refresh-token-expiration-days: 7
+    otp:
+      expiration-minutes: 5
+
+  # No artificial latency: the stub answers immediately so the suite stays fast.
+  provider:
+    behavior: SUCCESS
+    simulate-latency: false
+
+# No datasource here either: every integration and E2E class injects one at
+# runtime through @DynamicPropertySource or @ServiceConnection, both of which
+# outrank any properties file.

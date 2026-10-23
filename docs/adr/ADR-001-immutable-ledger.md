@@ -42,10 +42,10 @@ For any coherent set of operations, across any time window:
 SUM(DEBIT operations) == SUM(CREDIT operations)
 ```
 
-Every transaction generates at minimum two mirror entries. A 10,000 XOF cash-in produces:
+Every transaction generates at minimum two mirror entries. A 10,000 XAF cash-in produces:
 ```
-CREDIT  10,000 XOF  → customer account
-DEBIT   10,000 XOF  → system float account
+CREDIT  10,000 XAF  → customer account
+DEBIT   10,000 XAF  → system float account
 ────────────────────────────────────────
 Net ledger impact   = 0
 ```
@@ -150,8 +150,8 @@ accountRepository.save(customerAccount);                                // WRITE
 ```
 
 This is a **lost update problem** under concurrent requests targeting the same
-account. Two threads reading the same balance (0 XOF) and both crediting 1,000 XOF
-may produce a final balance of 1,000 XOF instead of 2,000 XOF.
+account. Two threads reading the same balance (0 XAF) and both crediting 1,000 XAF
+may produce a final balance of 1,000 XAF instead of 2,000 XAF.
 
 **Why this is accepted at Step 0:**
 - Volume target: 5,000 tx/day → ~0.06 tx/sec nominal

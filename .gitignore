@@ -1,4 +1,3 @@
-HELP.md
 .gradle
 build/
 !gradle/wrapper/gradle-wrapper.jar
@@ -35,5 +34,9 @@ out/
 
 ### VS Code ###
 .vscode/
-/CLAUDE.md
-/.env
+# Every environment file is secret. .env.prod and .env.staging will exist on
+# their servers; only the example is versioned.
+.env
+.env.*
+!.env.example
+/logs/

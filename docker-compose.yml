@@ -1,61 +1,60 @@
+# -----------------------------------------------------------------------------
+# Socle - what the application needs to exist at all, in every environment.
+#
+#   postgres   the ledger
+#
+# And nothing else. A service that only some environments run is declared in the
+# file of the environment that runs it, never here.
+#
+# Architecture only: image and tag, environment, healthcheck, named volume,
+# network. No `ports`, no `restart`, no `container_name`, no host bind mount -
+# those are operational decisions and belong to an environment file.
+#
+# The split is testable:
+#     docker compose -f docker-compose.yml config | grep -E 'ports:|restart:'
+# must print nothing.
+#
+# Two axes, never mixed (ADR-006 D4):
+#   a FILE    answers "which environment am I in"        -> override / prod
+#   a PROFILE answers "what optional group do I want"    -> tooling / observability
+#
+# The application is not a service here: it runs on the host through
+# ./gradlew bootRun and reaches Postgres over the published port. That is why
+# production still publishes the database port - bound to loopback only - and
+# why DB_HOST is a variable: the day the application moves into a container,
+# DB_HOST becomes `postgres` and nothing else changes.
+# -----------------------------------------------------------------------------
+
 services:
+
   postgres:
-    image: 'postgres:17-alpine'
-    container_name: kora-postgres
-    restart: unless-stopped
+    image: 'postgres:17.7-alpine'
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    # $$ escapes Compose's own substitution, so the shell inside the container
+    # expands these against the container's environment. A single $ would make
+    # Compose resolve them on the host and bake the values into the command.
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}" ]
       interval: 10s
       timeout: 5s
       retries: 5
+      # Failures inside this window do not count against `retries`: initdb on a
+      # first boot takes far longer than a normal restart.
       start_period: 40s
-    environment:
-      - 'POSTGRES_DB=${POSTGRES_DB}'
-      - 'POSTGRES_PASSWORD=${POSTGRES_PASSWORD}'
-      - 'POSTGRES_USER=${POSTGRES_USER}'
-    ports:
-      - '${DB_PORT}:5432'
     volumes:
       - 'postgres-data:/var/lib/postgresql/data'
-
-  redis:
-    image: 'redis:8-alpine'
-    container_name: kora-redis
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    ports:
-      - '${CACHE_PORT}:6379'
-    volumes:
-      - 'redis-data:/data'
-
-  pgadmin:
-    image: 'dpage/pgadmin4:latest'
-    container_name: kora-db-admin
-    restart: unless-stopped
-    environment:
-      - 'PGADMIN_DEFAULT_EMAIL=admin@kora.com'
-      - 'PGADMIN_DEFAULT_PASSWORD=root'
-    ports:
-      - '${DB_ADMIN_PORT}:80'
-    depends_on:
-      - postgres
-
-  maildev:
-    image: 'maildev/maildev:latest'
-    container_name: kora-maildev
-    restart: unless-stopped
-    ports:
-      - '${MAIL_SMTP_PORT:-1025}:1025'   # SMTP — used by Spring Boot mail
-      - '${MAIL_UI_PORT:-1080}:1080'     # Web UI — http://localhost:1080
-    environment:
-      - MAILDEV_SMTP_PORT=1025
-      - MAILDEV_WEB_PORT=1080
+    networks: [ kora ]
 
 volumes:
   postgres-data:
-  redis-data:
+
+networks:
+  kora:
+    # Fixed name instead of the default <project>_kora. The k6 container joins
+    # this network by name from perf/*-run.sh; deriving it from the directory
+    # name would break the moment the repository is cloned elsewhere.
+    name: kora-net
+    driver: bridge
