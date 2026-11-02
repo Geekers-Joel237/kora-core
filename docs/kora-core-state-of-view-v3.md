@@ -245,8 +245,8 @@ no test covers it. Likewise, `UserStatus.PENDING` is never assigned.
 > `AUTHORIZED` to `UNKNOWN`; on `reverse`, `AUTHORIZED` to `UNKNOWN`. A cash-out hold stays
 > `ACTIVE`. Any other provider error keeps its failed state. `UnknownState` now throws
 > `InvalidStateTransitionException`. Reproduced first in `PaymentUseCaseTest` and
-> `ProviderFailureE2ETest`. Leaving `UNKNOWN` belongs to reconciliation (Step 6): today it
-> leads only to `AUTHORIZED` or `CAPTURED`, not yet to a failed state or `REVERSED`.
+> `ProviderFailureE2ETest`. Leaving `UNKNOWN` belongs to reconciliation (Step 6): until then
+> `UnknownState` refuses every transition.
 
 **L-13 · A provider failure during a reversal returns an unhandled 500.**
 `ReversePaymentService` calls `provider.reverse` outside any `try`.

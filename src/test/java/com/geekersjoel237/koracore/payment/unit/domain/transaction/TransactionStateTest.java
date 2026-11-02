@@ -198,4 +198,12 @@ class TransactionStateTest {
         assertThrows(InvalidStateTransitionException.class,
                 () -> TransactionState.UNKNOWN.transitionTo(TransactionState.COMPLETED));
     }
+
+    @Test
+    void should_throw_when_leaving_unknown_for_authorized_or_captured() {
+        assertThrows(InvalidStateTransitionException.class,
+                () -> TransactionState.UNKNOWN.transitionTo(TransactionState.AUTHORIZED));
+        assertThrows(InvalidStateTransitionException.class,
+                () -> TransactionState.UNKNOWN.transitionTo(TransactionState.CAPTURED));
+    }
 }

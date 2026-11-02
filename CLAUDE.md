@@ -123,7 +123,7 @@ Every aggregate exposes `snapshot()` returning an inner record, plus a static
 | Float account is unbounded | `Account.debit()` and `Account.credit()` are no-ops for `FLOAT_ACCOUNT`, and it cannot be reserved, so its `balance_amount` stays 0; audit it through `ledger_entries` |
 | Money is `BigDecimal`, never `double` or `float` | `Amount.value` is `BigDecimal`; all money columns are `NUMERIC(19,4)` |
 | Currency is mandatory; cross-currency arithmetic forbidden | `Amount` compact constructor rejects a blank currency; `add` / `subtract` / `isGreaterThan*` throw `CurrencyMismatchException` |
-| No illegal state transition | Each `*State` class validates its own successors and throws `InvalidStateTransitionException`. Legal edges: INITIALIZED to AUTHORIZED, FAILED, AUTHORIZATION_FAILED, UNKNOWN; AUTHORIZED to CAPTURED, FAILED, AUTHORIZATION_FAILED, CAPTURE_FAILED, REVERSED, UNKNOWN; CAPTURED to SETTLEMENT_PENDING, CAPTURE_FAILED, REVERSED; SETTLEMENT_PENDING to SETTLED, SETTLEMENT_FAILED, REVERSED; SETTLED to COMPLETED, REVERSED; COMPLETED to REVERSED; UNKNOWN to AUTHORIZED, CAPTURED |
+| No illegal state transition | Each `*State` class validates its own successors and throws `InvalidStateTransitionException`. Legal edges: INITIALIZED to AUTHORIZED, FAILED, AUTHORIZATION_FAILED, UNKNOWN; AUTHORIZED to CAPTURED, FAILED, AUTHORIZATION_FAILED, CAPTURE_FAILED, REVERSED, UNKNOWN; CAPTURED to SETTLEMENT_PENDING, CAPTURE_FAILED, REVERSED; SETTLEMENT_PENDING to SETTLED, SETTLEMENT_FAILED, REVERSED; SETTLED to COMPLETED, REVERSED; COMPLETED to REVERSED. UNKNOWN leads nowhere yet: its exits come with reconciliation |
 | No provider network call inside a DB transaction | `CashInService`, `CashOutService` and `ReversePaymentService` split into TX-1 (~10 ms) / provider I/O (~1 400 ms, zero connections held) / TX-2 (~20 ms). Per ADR-004, a class-level `@Transactional` produced p95 60 000 ms and a 73.93 % error rate at 25 req/s through HikariCP pool exhaustion |
 | A rollback happens by throwing | `BusinessException` — or any unchecked throwable — inside `TransactionBoundary.execute` discards the writes; returning normally commits. The port hands out no transaction status, so throwing is the only way for a use case to abort. Pinned in `SpringTransactionBoundaryTest` against a recording transaction manager |
 | Retry wraps the boundary, never the reverse | `ConcurrentUpdateException` surfaces at commit, so the transaction is already dead. Retry is scoped to the phase that is safe to replay — TX-2, after the provider answered (ADR-007) |
@@ -254,6 +254,9 @@ Deliberate and tracked. Do not raise them on a PR.
   TX-2 — rolls back with it (L-2). Accepted: the reconciliation engine of roadmap Step 6
   catches it after the fact as `MISSING_INTERNAL`. Reproduced by
   `ProviderSuccessLostE2ETest`, disabled.
+- A transaction left `UNKNOWN` by a provider timeout stays there: `UnknownState` refuses
+  every transition until reconciliation (roadmap Step 6) defines how it is resolved, and a
+  cash-out hold stays `ACTIVE` meanwhile.
 - `MobileMoneyProviderAdapter` is a latency-simulating stub, not an HTTP client,
   and has no circuit breaker.
 - `InMemoryExpiringStore` holds OTP codes in one JVM's heap. Single-instance only;

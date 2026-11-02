@@ -55,6 +55,9 @@ public class MobileMoneyPaymentProviderAdapter implements PaymentProviderPort {
                 operationType, amount.value(), amount.currency(),
                 paymentMethod.value(), correlationId.value());
 
+        checkBehavior(Checkpoint.AUTHORIZE);
+        simulateLatency(authorizeMs);
+
         return new AuthorizationResult(
                 UUID.randomUUID().toString(),
                 Instant.now().plus(15, ChronoUnit.MINUTES),
