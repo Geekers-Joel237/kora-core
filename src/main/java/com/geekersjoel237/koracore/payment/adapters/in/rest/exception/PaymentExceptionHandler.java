@@ -19,8 +19,14 @@ public class PaymentExceptionHandler {
 
     @ExceptionHandler({InsufficientFundsException.class, AccountBlockedException.class,
             AccountSuspendedException.class, SelfTransferException.class,
-            InvalidAccountException.class, InvalidStateTransitionException.class})
+            InvalidAccountException.class, InvalidStateTransitionException.class,
+            HoldNotActiveException.class})
     ProblemDetail onUnprocessable(BusinessException ex) {
         return ProblemDetails.of(HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());
+    }
+
+    @ExceptionHandler({PaymentProviderException.class, PaymentTimeoutProviderException.class})
+    ProblemDetail onProviderFailure(PaymentProviderException ex) {
+        return ProblemDetails.of(HttpStatus.BAD_GATEWAY, ex.getMessage());
     }
 }

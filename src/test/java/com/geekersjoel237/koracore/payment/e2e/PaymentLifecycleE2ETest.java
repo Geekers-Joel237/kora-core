@@ -95,10 +95,11 @@ class PaymentLifecycleE2ETest extends AbstractE2ETest {
 
     private String buildJwt(String subject, String role) {
         var key = Keys.hmacShaKeyFor(
-                securityProperties.jwt().secret().getBytes(StandardCharsets.UTF_8));
+                securityProperties.jwt().accessSecret().getBytes(StandardCharsets.UTF_8));
         return Jwts.builder()
                 .subject(subject)
                 .claim("role", role)
+                .claim("typ", "access")
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + 900_000L))
                 .signWith(key)

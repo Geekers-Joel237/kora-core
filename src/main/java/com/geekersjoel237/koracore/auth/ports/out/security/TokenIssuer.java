@@ -10,6 +10,9 @@ public interface TokenIssuer {
 
     Tokens issue(User user);
 
+    Id holderOf(RefreshToken refreshToken);
 
-    Id subjectOf(RefreshToken refreshToken);
+    Tokens renew(RefreshToken refreshToken, User holder);
+
+    void revoke(RefreshToken refreshToken);
 }

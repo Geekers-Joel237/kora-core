@@ -33,7 +33,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class JdbcTransactionQueryAdapterTest extends AbstractRepositoryTest {
 
     private static final Instant T0 = Instant.parse("2026-01-01T10:00:00Z");
-    private static final HistoryCriteria EVERYTHING = HistoryCriteria.everything();
+    private static final HistoryCriteria EVERYTHING = new HistoryCriteria(Set.of(), null, null, null, null);
 
     @Autowired
     private JdbcReadTransactionQueryAdapter adapter;
@@ -129,7 +129,7 @@ class JdbcTransactionQueryAdapterTest extends AbstractRepositoryTest {
         for (int i = 0; i < 5; i++) deposit("t" + i, T0.plusSeconds(i * 60L));
         HistoryCursor afterT3 = new HistoryCursor(T0.plusSeconds(180), new Id("t3"));
 
-        PageResult<TransactionRow> next = read(EVERYTHING.continuingAfter(afterT3), 2);
+        PageResult<TransactionRow> next = read(new HistoryCriteria(Set.of(), null, null, null, afterT3), 2);
 
         assertThat(next.content()).extracting(TransactionRow::transactionId).containsExactly("t2", "t1");
         assertThat(next.hasNext()).isTrue();
@@ -140,7 +140,7 @@ class JdbcTransactionQueryAdapterTest extends AbstractRepositoryTest {
         for (int i = 0; i < 3; i++) deposit("t" + i, T0.plusSeconds(i * 60L));
         HistoryCursor afterT1 = new HistoryCursor(T0.plusSeconds(60), new Id("t1"));
 
-        PageResult<TransactionRow> last = read(EVERYTHING.continuingAfter(afterT1), 2);
+        PageResult<TransactionRow> last = read(new HistoryCriteria(Set.of(), null, null, null, afterT1), 2);
 
         assertThat(last.content()).extracting(TransactionRow::transactionId).containsExactly("t0");
         assertThat(last.hasNext()).isFalse();
@@ -153,7 +153,7 @@ class JdbcTransactionQueryAdapterTest extends AbstractRepositoryTest {
         deposit("a", T0);
         HistoryCursor afterB = new HistoryCursor(T0, new Id("b"));
 
-        assertThat(read(EVERYTHING.continuingAfter(afterB), 20).content())
+        assertThat(read(new HistoryCriteria(Set.of(), null, null, null, afterB), 20).content())
                 .extracting(TransactionRow::transactionId)
                 .containsExactly("a");
     }

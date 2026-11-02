@@ -2,6 +2,7 @@ package com.geekersjoel237.koracore.auth.domain.model;
 
 import com.geekersjoel237.koracore.auth.domain.enums.Role;
 import com.geekersjoel237.koracore.auth.domain.enums.UserStatus;
+import com.geekersjoel237.koracore.auth.domain.exception.UserNotActiveException;
 import com.geekersjoel237.koracore.shared.domain.vo.Id;
 
 import java.util.regex.Pattern;
@@ -49,6 +50,11 @@ public class User {
 
     public boolean isActive() {
         return status == UserStatus.VERIFIED;
+    }
+
+    public void requireActive() {
+        if (!isActive())
+            throw new UserNotActiveException("User is not active: " + id.value());
     }
 
     public boolean isSuspended() {

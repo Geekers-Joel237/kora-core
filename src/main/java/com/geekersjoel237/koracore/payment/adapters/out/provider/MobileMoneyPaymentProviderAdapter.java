@@ -3,6 +3,7 @@ package com.geekersjoel237.koracore.payment.adapters.out.provider;
 import com.geekersjoel237.koracore.payment.domain.enums.PaymentMethod;
 import com.geekersjoel237.koracore.payment.domain.enums.ProviderOperationType;
 import com.geekersjoel237.koracore.payment.domain.exception.PaymentProviderException;
+import com.geekersjoel237.koracore.payment.domain.exception.PaymentTimeoutProviderException;
 import com.geekersjoel237.koracore.payment.ports.out.provider.PaymentProviderPort;
 import com.geekersjoel237.koracore.shared.domain.vo.Amount;
 import com.geekersjoel237.koracore.payment.domain.vo.AuthorizationResult;
@@ -53,18 +54,9 @@ public class MobileMoneyPaymentProviderAdapter implements PaymentProviderPort {
         log.debug("authorize — operationType={} amount={} currency={} method={} correlationId={}",
                 operationType, amount.value(), amount.currency(),
                 paymentMethod.value(), correlationId.value());
-        // customerPhone intentionally excluded from logs — PII
 
         checkBehavior(Checkpoint.AUTHORIZE);
         simulateLatency(authorizeMs);
-
-        // TODO Step 3: branch on operationType + customerPhone to call real provider endpoint
-        // COLLECTION   → POST /collection/v1_0/requesttopay
-        //                body: { payerParty: { partyIdType: "MSISDN",
-        //                                     partyId: customerPhone.fullNumber() } }
-        // DISBURSEMENT → POST /disbursement/v1_0/transfer
-        //                body: { payeeParty: { partyIdType: "MSISDN",
-        //                                     partyId: customerPhone.fullNumber() } }
 
         return new AuthorizationResult(
                 UUID.randomUUID().toString(),
@@ -108,7 +100,7 @@ public class MobileMoneyPaymentProviderAdapter implements PaymentProviderPort {
             case TIMEOUT -> {
                 log.warn("Provider simulation: TIMEOUT — checkpoint={}", checkpoint);
                 simulateLatency(timeoutThresholdMs + 500);
-                throw new PaymentProviderException(
+                throw new PaymentTimeoutProviderException(
                         "Provider timeout — no response after " + timeoutThresholdMs + "ms");
             }
             default -> { /* SUCCESS or SLOW — no error */ }

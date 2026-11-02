@@ -4,9 +4,11 @@ import com.geekersjoel237.koracore.payment.domain.SystemConstants;
 import com.geekersjoel237.koracore.payment.domain.model.Account;
 import com.geekersjoel237.koracore.payment.ports.out.repository.AccountRepository;
 import com.geekersjoel237.koracore.shared.domain.vo.Id;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -19,12 +21,15 @@ import java.util.Map;
 @RequestMapping("/test")
 public class ResetTestSupportAction {
 
-    private final JdbcTemplate jdbcTemplate;
-    private final AccountRepository accounts;
+    private final JdbcTemplate owner;
+    private final AccountRepository accountRepository;
 
-    public ResetTestSupportAction(JdbcTemplate jdbcTemplate, AccountRepository accounts) {
-        this.jdbcTemplate = jdbcTemplate;
-        this.accounts = accounts;
+    public ResetTestSupportAction(@Value("${spring.datasource.url}") String url,
+                                  @Value("${spring.flyway.user}") String user,
+                                  @Value("${spring.flyway.password}") String password,
+                                  AccountRepository accountRepository) {
+        this.owner = new JdbcTemplate(new DriverManagerDataSource(url, user, password));
+        this.accountRepository = accountRepository;
     }
 
     /**
@@ -32,11 +37,11 @@ public class ResetTestSupportAction {
      */
     @PostMapping("/reset")
     public ResponseEntity<Map<String, Object>> reset() {
-        jdbcTemplate.execute(
+        owner.execute(
                 "TRUNCATE TABLE authorization_records, ledger_entries, trx_state_historics, "
                         + "transactions, accounts, customers, users RESTART IDENTITY CASCADE");
 
-        accounts.save(Account.createFloatAccount(Id.generate(), SystemConstants.PROVIDER_ID));
+        accountRepository.save(Account.createFloatAccount(Id.generate(), SystemConstants.PROVIDER_ID));
 
         return ResponseEntity.ok(Map.of(
                 "status", "reset",

@@ -8,27 +8,41 @@ import com.geekersjoel237.koracore.shared.domain.vo.Id;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Predicate;
 
 public class InMemoryAccountRepository implements AccountRepository {
 
-    private final Map<String, Account> store = new HashMap<>();
+    private final Map<Id, Account.Snapshot> store = new HashMap<>();
+    private final InMemoryFundsHoldRepository holds;
+
+    public InMemoryAccountRepository() {
+        this(new InMemoryFundsHoldRepository());
+    }
+
+    public InMemoryAccountRepository(InMemoryFundsHoldRepository holds) {
+        this.holds = holds;
+    }
 
     @Override
     public void save(Account account) {
-        store.put(account.snapshot().accountId().value(), account);
+        Account.Snapshot snapshot = account.snapshot();
+        store.put(snapshot.accountId(), snapshot);
     }
 
     @Override
     public Optional<Account> findById(Id accountId) {
-        return Optional.ofNullable(store.get(accountId.value()));
+        return Optional.ofNullable(store.get(accountId)).map(this::load);
+    }
+
+    @Override
+    public Optional<Account> findByIdForUpdate(Id accountId) {
+        return findById(accountId);
     }
 
     @Override
     public Optional<Account> findByCustomerId(Id customerId) {
-        return store.values().stream()
-                .filter(a -> a.snapshot().accountType().resourceType() == ResourceType.CUSTOMER_ACCOUNT
-                        && a.snapshot().accountType().resourceId().equals(customerId))
-                .findFirst();
+        return find(snap -> snap.accountType().resourceType() == ResourceType.CUSTOMER_ACCOUNT
+                && snap.accountType().resourceId().equals(customerId));
     }
 
     @Override
@@ -38,25 +52,18 @@ public class InMemoryAccountRepository implements AccountRepository {
 
     @Override
     public Optional<Account> findFloatByProviderId(Id providerId) {
-        return store.values().stream()
-                .filter(a -> a.snapshot().accountType().resourceType() == ResourceType.FLOAT_ACCOUNT
-                        && a.snapshot().accountType().resourceId().equals(providerId))
-                .findFirst();
+        return find(snap -> snap.accountType().resourceType() == ResourceType.FLOAT_ACCOUNT
+                && snap.accountType().resourceId().equals(providerId));
     }
 
-    @Override
-    public Optional<Account> findFloatByProviderIdForUpdate(Id providerId) {
-        // In-memory: no locking needed — delegate to the same logic
-        return findFloatByProviderId(providerId);
+    private Optional<Account> find(Predicate<Account.Snapshot> matches) {
+        return store.values().stream().filter(matches).findFirst().map(this::load);
     }
 
-    public void reset() {
-        store.clear();
-    }
-
-    public void preload(Account... accounts) {
-        for (Account account : accounts) {
-            save(account);
-        }
+    private Account load(Account.Snapshot snap) {
+        return Account.createFromSnapshot(new Account.Snapshot(
+                snap.accountId(), snap.accountNumber(), snap.accountType(), snap.balance(),
+                holds.activeTotalOn(snap.accountId(), snap.balance().solde().currency()),
+                snap.isBlocked()));
     }
 }

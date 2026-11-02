@@ -1,6 +1,7 @@
 package com.geekersjoel237.koracore.auth.e2e;
 
 import com.geekersjoel237.koracore.shared.e2e.AbstractE2ETest;
+import com.geekersjoel237.koracore.auth.adapters.in.rest.api.logout.LogoutRequest;
 import com.geekersjoel237.koracore.auth.adapters.in.rest.api.shared.OtpResponse;
 import com.geekersjoel237.koracore.auth.adapters.in.rest.api.shared.TokensResponse;
 import com.geekersjoel237.koracore.auth.adapters.in.rest.api.register.RegisterRequest;
@@ -108,6 +109,73 @@ class AuthE2ETest extends AbstractE2ETest {
         Assertions.assertNotNull(newTokens);
         assertThat(newTokens.accessToken()).isNotBlank();
         assertThat(newTokens.refreshToken()).isNotBlank();
+    }
+
+    // L-10: an access token is not a refresh token. Were it accepted here, a stolen
+    // 15-minute access token would buy a 7-day refresh token.
+    @Test
+    void should_reject_access_token_on_refresh() {
+        TokensResponse tokens = registerAndLogin(EMAIL, FULL_NAME, PREFIX, PHONE, PIN);
+
+        ResponseEntity<TokensResponse> response = refresh(tokens.accessToken());
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    // L-10, other direction: a refresh token must not authenticate a request at all —
+    // 401, not a 403 that would mean the route was saved by a missing role claim.
+    @Test
+    void should_reject_refresh_token_as_bearer() {
+        SetupData ctx = setupCustomerWithAccount(EMAIL, FULL_NAME, PREFIX, PHONE, PIN);
+
+        ResponseEntity<String> response = getWithToken(
+                "/payments/balance", ctx.tokens().refreshToken(), String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    private ResponseEntity<String> logout(String refreshToken) {
+        return http.postForEntity(url("/auth/logout"), new LogoutRequest(refreshToken), String.class);
+    }
+
+    // L-10: logout used to exist only on the client; the refresh token stayed good for 7 days.
+    @Test
+    void should_refuse_a_refresh_token_after_logout() {
+        TokensResponse tokens = registerAndLogin(EMAIL, FULL_NAME, PREFIX, PHONE, PIN);
+
+        ResponseEntity<String> loggedOut = logout(tokens.refreshToken());
+
+        assertThat(loggedOut.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(refresh(tokens.refreshToken()).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    // L-10: a refresh token is exchanged once. Seeing it again means two parties hold it,
+    // so the whole session ends — the thief's tokens and the user's alike.
+    @Test
+    void should_end_the_session_when_a_spent_refresh_token_is_replayed() {
+        TokensResponse tokens = registerAndLogin(EMAIL, FULL_NAME, PREFIX, PHONE, PIN);
+        TokensResponse renewed = refresh(tokens.refreshToken()).getBody();
+        Assertions.assertNotNull(renewed);
+
+        ResponseEntity<TokensResponse> replay = refresh(tokens.refreshToken());
+
+        assertThat(replay.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(refresh(renewed.refreshToken()).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    void should_accept_logging_out_twice() {
+        TokensResponse tokens = registerAndLogin(EMAIL, FULL_NAME, PREFIX, PHONE, PIN);
+        logout(tokens.refreshToken());
+
+        assertThat(logout(tokens.refreshToken()).getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+    }
+
+    @Test
+    void should_refuse_to_log_out_with_an_access_token() {
+        TokensResponse tokens = registerAndLogin(EMAIL, FULL_NAME, PREFIX, PHONE, PIN);
+
+        assertThat(logout(tokens.accessToken()).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
     @Test

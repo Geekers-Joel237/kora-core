@@ -18,10 +18,15 @@ public class AuthExceptionHandler {
 
 
     @ExceptionHandler({InvalidOtpException.class, OtpExpiredException.class,
-            PinValidationException.class, InvalidRefreshTokenException.class,
+            PinValidationException.class, InvalidTokenException.class,
             JwtException.class})
     ProblemDetail onUnauthorized(RuntimeException ex) {
         return ProblemDetails.of(HttpStatus.UNAUTHORIZED, ex.getMessage());
+    }
+
+    @ExceptionHandler(UserNotActiveException.class)
+    ProblemDetail onUserNotActive(UserNotActiveException ex) {
+        return ProblemDetails.of(HttpStatus.FORBIDDEN, ex.getMessage());
     }
 
     @ExceptionHandler(CustomerNotFoundException.class)

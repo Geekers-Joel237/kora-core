@@ -3,10 +3,10 @@ package com.geekersjoel237.koracore.payment.application.usecases;
 import com.geekersjoel237.koracore.payment.application.command.ReversePaymentCommand;
 import com.geekersjoel237.koracore.payment.ports.in.ReversePaymentCommandHandler;
 import com.geekersjoel237.koracore.payment.application.result.PaymentResult;
-import com.geekersjoel237.koracore.payment.domain.model.BalanceCache;
 import com.geekersjoel237.koracore.payment.domain.enums.TriggerSource;
 import com.geekersjoel237.koracore.payment.domain.exception.AccountNotFoundException;
 import com.geekersjoel237.koracore.payment.domain.exception.InvalidStateTransitionException;
+import com.geekersjoel237.koracore.payment.domain.exception.PaymentTimeoutProviderException;
 import com.geekersjoel237.koracore.payment.domain.model.Account;
 import com.geekersjoel237.koracore.payment.domain.model.AuthorizationRecord;
 import com.geekersjoel237.koracore.payment.domain.model.Transaction;
@@ -14,6 +14,7 @@ import com.geekersjoel237.koracore.payment.domain.model.TrxStateHistoric;
 import com.geekersjoel237.koracore.payment.domain.model.state.TransactionState;
 import com.geekersjoel237.koracore.payment.ports.out.repository.AccountRepository;
 import com.geekersjoel237.koracore.payment.ports.out.repository.AuthorizationRecordRepository;
+import com.geekersjoel237.koracore.payment.ports.out.repository.FundsHoldRepository;
 import com.geekersjoel237.koracore.payment.ports.out.repository.LedgerRepository;
 import com.geekersjoel237.koracore.payment.ports.out.provider.PaymentProviderPort;
 import com.geekersjoel237.koracore.payment.ports.out.repository.TransactionRepository;
@@ -34,12 +35,14 @@ public final class ReversePaymentService implements ReversePaymentCommandHandler
     private final PaymentProviderPort provider;
     private final LedgerRepository ledgerRepository;
     private final AuthorizationRecordRepository authorizationRecordRepository;
+    private final FundsHoldRepository holdRepository;
 
     public ReversePaymentService(TransactionBoundary boundary, RetryPolicy retry,
                                  AccountRepository accountRepository, TransactionRepository transactionRepository,
                                  TrxHistoricStatesRepository trxHistoricStatesRepository, PaymentProviderPort provider,
                                  LedgerRepository ledgerRepository,
-                                 AuthorizationRecordRepository authorizationRecordRepository) {
+                                 AuthorizationRecordRepository authorizationRecordRepository,
+                                 FundsHoldRepository holdRepository) {
         this.boundary = boundary;
         this.retry = retry;
         this.accountRepository = accountRepository;
@@ -48,6 +51,7 @@ public final class ReversePaymentService implements ReversePaymentCommandHandler
         this.provider = provider;
         this.ledgerRepository = ledgerRepository;
         this.authorizationRecordRepository = authorizationRecordRepository;
+        this.holdRepository = holdRepository;
     }
 
     private static boolean isPosted(TransactionState state) {
@@ -67,7 +71,11 @@ public final class ReversePaymentService implements ReversePaymentCommandHandler
         if (plan.holdToRelease() == null)
             return retry.execute(() -> boundary.execute(() -> compensate(cmd)));
 
-        provider.reverse(plan.holdToRelease(), plan.amount(), cmd.correlationId());
+        try {
+            provider.reverse(plan.holdToRelease(), plan.amount(), cmd.correlationId());
+        } catch (PaymentTimeoutProviderException e) {
+            return retry.execute(() -> boundary.execute(() -> recordReversalUnknown(cmd)));
+        }
         return retry.execute(() -> boundary.execute(() -> recordRelease(cmd)));
     }
 
@@ -91,9 +99,22 @@ public final class ReversePaymentService implements ReversePaymentCommandHandler
         AuthorizationRecord record = activeAuthorization(cmd.transactionId());
         record.cancel();
         authorizationRecordRepository.save(record);
+        holdRepository.findActiveByTransactionId(cmd.transactionId()).ifPresent(hold -> {
+            ledgerRepository.findFirst().release(hold, lockedAccount(tx.snapshot().fromAccountId()));
+            holdRepository.save(hold);
+        });
 
         tx.reverse();
         recordTransition(cmd, tx, TransactionState.AUTHORIZED);
+        transactionRepository.save(tx);
+        return PaymentResult.of(tx);
+    }
+
+    private PaymentResult recordReversalUnknown(ReversePaymentCommand cmd) {
+        Transaction tx = reload(cmd.transactionId());
+        TransactionState from = tx.snapshot().state();
+        tx.markUnknown();
+        recordTransition(cmd, tx, from);
         transactionRepository.save(tx);
         return PaymentResult.of(tx);
     }
@@ -104,11 +125,12 @@ public final class ReversePaymentService implements ReversePaymentCommandHandler
         if (!isPosted(state))
             throw new InvalidStateTransitionException(state, TransactionState.REVERSED);
 
+        Account destination = lockedAccount(tx.snapshot().toAccountId());
         Account source = account(tx.snapshot().fromAccountId());
-        Account destination = account(tx.snapshot().toAccountId());
 
-        ledgerRepository.findFirst().reverse(tx);
-        reverseBalanceUpdate(source, destination, tx.snapshot().amount());
+        ledgerRepository.findFirst().reverse(tx, source, destination);
+        accountRepository.save(source);
+        accountRepository.save(destination);
 
         tx.reverse();
         recordTransition(cmd, tx, state);
@@ -136,13 +158,15 @@ public final class ReversePaymentService implements ReversePaymentCommandHandler
 
     private void recordTransition(ReversePaymentCommand cmd, Transaction tx, TransactionState from) {
         trxHistoricStatesRepository.save(TrxStateHistoric.of(
-                tx.snapshot().transactionId(), from, TransactionState.REVERSED,
+                tx.snapshot().transactionId(), from, tx.snapshot().state(),
                 TriggerSource.OPERATOR_ACTION, cmd.correlationId(), null,
                 cmd.actorId(), cmd.reason()));
     }
 
-    private void reverseBalanceUpdate(Account from, Account to, Amount amount) {
-        BalanceCache.reverse(from, to, amount).forEach(accountRepository::save);
+    private Account lockedAccount(Id accountId) {
+        return accountRepository.findByIdForUpdate(accountId)
+                .orElseThrow(() -> new AccountNotFoundException(
+                        "Account not found: " + accountId.value()));
     }
 
     private record Plan(String holdToRelease, Amount amount) {

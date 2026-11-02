@@ -82,14 +82,16 @@ and `Otp` do not exist here.
 |---|---|
 | `Transaction` | Aggregate root of a money movement; owns ledger entries, state, history |
 | `LedgerEntry` | One ledger entry, `DEBIT` or `CREDIT`; append-only. Table `ledger_entries` |
-| `Ledger` | Domain service creating transactions (`initiate`, `writeEntries`, `reverse`) |
-| `Account` | Balance holder; `CUSTOMER_ACCOUNT` or `FLOAT_ACCOUNT` |
+| `Ledger` | Owns everything a transaction does to money: `initiate`, `hold`, `post`, `capture`, `release`, `reverse`. Writes the entries and moves the accounts in the same call |
+| `Account` | A view on a customer's funds: ledger balance (the cache), reserved amount, `available()`. Knows no transaction. `CUSTOMER_ACCOUNT` or `FLOAT_ACCOUNT` |
 | `TrxStateHistoric` | Immutable audit row emitted on every state transition |
 | `AuthorizationRecord` | Provider authorization with TTL, used when capture fails |
+| `FundsHold` | Funds set aside on a customer wallet while a debit awaits the provider (ADR-008): `ACTIVE`, then `CONSUMED` with the ledger entries or `RELEASED` on a known failure. Table `funds_holds`. Not a ledger entry. Placed, captured and released by the `Ledger`; an `Account` is loaded with the sum of its `ACTIVE` holds as its reserved amount, never stored |
 | `Customer`, `User` | Identity and credentials |
 | `Amount` | `record(BigDecimal value, String currency)` — the money type; `Balance` wraps one and returns new instances from `credit()` / `debit()` |
 | `Id`, `PhoneNumber`, `Pin` | Kernel value objects; `Id` is the business identifier. `PhoneNumber` is `(prefix, number)` and is the wallet identifier |
 | `OtpCode`, `OtpPurpose` | Auth value objects. `OtpCode` is both the issued and the submitted code — the store owns the lifetime |
+| `Tokens`, `AccessToken`, `RefreshToken` | Opaque credentials handed to and from `TokenIssuer`. What a token is made of — its use, its signing key, its `jti` — is the JWT adapter's business; the domain and the use cases never look inside |
 | `AccountType` | Payment value object |
 | `CustomerStatus` | What a customer sees of the 12 states: `PENDING`, `COMPLETED` (from capture on), `FAILED`, `REFUNDED`. Not persisted |
 | `PaymentMethod` | Enum `CARD`, `ORANGE_MONEY` (`OM`), `MOBILE_MONEY` (`MOMO`), `WALLET` |
@@ -116,15 +118,22 @@ Every aggregate exposes `snapshot()` returning an inner record, plus a static
 | Invariant | Enforced today |
 |---|---|
 | `SUM(DEBIT) == SUM(CREDIT)` per transaction and currency | Domain: `Transaction.verifyDoubleEntry()` runs after every `recordDoubleEntry()`. No DB constraint. Asserted in `FinancialInvariantsDbTest` and `MoneyIntegrityE2ETest` |
-| Ledger entries are append-only; a correction is a compensating entry | `Ledger.reverse()` writes a mirrored pair; `JpaTransactionRepository.save()` only appends. No DB trigger |
+| Ledger entries are append-only; a correction is a compensating entry | `Ledger.reverse()` writes a mirrored pair; `JpaTransactionRepository.save()` only appends. The database refuses any `UPDATE` or `DELETE` on `ledger_entries` and `trx_state_historics` — a soft delete included — through the triggers of `V202610171900__make_ledger_append_only.sql`, and `ck_ledger_entries_amount` refuses a negative amount. The join column of `TransactionEntity.entries` is read-only, so Hibernate never re-points an entry. Asserted in `AppendOnlyLedgerDbTest` |
 | Ledger entries are the source of truth for balance | Domain + ADR-001. `accounts.balance_amount` is a denormalized read cache updated in the same transaction as the ledger write; on divergence, `LedgerEntry` rows win. It is **not** derived on read |
-| Float account is unbounded | `Account.debit()` is a no-op for `FLOAT_ACCOUNT`, so its `balance_amount` stays 0; audit it through `ledger_entries` |
+| Float account is unbounded | `Account.debit()` and `Account.credit()` are no-ops for `FLOAT_ACCOUNT`, and it cannot be reserved, so its `balance_amount` stays 0; audit it through `ledger_entries` |
 | Money is `BigDecimal`, never `double` or `float` | `Amount.value` is `BigDecimal`; all money columns are `NUMERIC(19,4)` |
 | Currency is mandatory; cross-currency arithmetic forbidden | `Amount` compact constructor rejects a blank currency; `add` / `subtract` / `isGreaterThan*` throw `CurrencyMismatchException` |
-| No illegal state transition | Each `*State` class validates its own successors and throws `InvalidStateTransitionException`. Legal edges: INITIALIZED to AUTHORIZED, FAILED, AUTHORIZATION_FAILED; AUTHORIZED to CAPTURED, FAILED, AUTHORIZATION_FAILED, CAPTURE_FAILED, REVERSED; CAPTURED to SETTLEMENT_PENDING, CAPTURE_FAILED, REVERSED; SETTLEMENT_PENDING to SETTLED, SETTLEMENT_FAILED, REVERSED; SETTLED to COMPLETED, REVERSED; COMPLETED to REVERSED; UNKNOWN to AUTHORIZED, CAPTURED |
+| No illegal state transition | Each `*State` class validates its own successors and throws `InvalidStateTransitionException`. Legal edges: INITIALIZED to AUTHORIZED, FAILED, AUTHORIZATION_FAILED, UNKNOWN; AUTHORIZED to CAPTURED, FAILED, AUTHORIZATION_FAILED, CAPTURE_FAILED, REVERSED, UNKNOWN; CAPTURED to SETTLEMENT_PENDING, CAPTURE_FAILED, REVERSED; SETTLEMENT_PENDING to SETTLED, SETTLEMENT_FAILED, REVERSED; SETTLED to COMPLETED, REVERSED; COMPLETED to REVERSED. UNKNOWN leads nowhere yet: its exits come with reconciliation |
 | No provider network call inside a DB transaction | `CashInService`, `CashOutService` and `ReversePaymentService` split into TX-1 (~10 ms) / provider I/O (~1 400 ms, zero connections held) / TX-2 (~20 ms). Per ADR-004, a class-level `@Transactional` produced p95 60 000 ms and a 73.93 % error rate at 25 req/s through HikariCP pool exhaustion |
 | A rollback happens by throwing | `BusinessException` — or any unchecked throwable — inside `TransactionBoundary.execute` discards the writes; returning normally commits. The port hands out no transaction status, so throwing is the only way for a use case to abort. Pinned in `SpringTransactionBoundaryTest` against a recording transaction manager |
 | Retry wraps the boundary, never the reverse | `ConcurrentUpdateException` surfaces at commit, so the transaction is already dead. Retry is scoped to the phase that is safe to replay — TX-2, after the provider answered (ADR-007) |
+| An access token and a refresh token are never interchangeable | `JwtTokenIssuer` signs each use with its own key — `kora.security.jwt.access-secret` and `refresh-secret`, which `SecurityProperties` refuses to start with equal — and checks a `typ` claim on top. Each is refused at the other's door with 401. Asserted in `JwtTokenIssuerTest` and `AuthE2ETest` |
+| A refresh token is honoured only while the server remembers it | Every refresh token is a row in `refresh_tokens`, keyed by its `jti`. `POST /auth/logout` revokes its whole family — every token descended from the same login |
+| No debit spends funds an in-flight debit holds | `Account.debit` and `Account.reserve` refuse anything beyond `available()`, the ledger balance minus the reserved amount. The cash-out places its `FundsHold` (`Ledger.hold`) in TX-1 under the wallet lock (`findByCustomerIdForUpdate`); a transfer locks the payer, a reversal locks the account it debits (`findByIdForUpdate`). Asserted end to end in `ConcurrentDebitE2ETest` (L-1) |
+| A hold is resolved with its outcome, never by time | `CONSUMED` in TX-2 by `Ledger.capture`, which writes the entries and debits the reserved amount in the same call; `RELEASED` in the transaction that records a provider failure, or when a reversal releases the provider's hold. Nothing expires a hold; one left `ACTIVE` by a crash stays until resolved |
+| A refresh token is exchanged once; a replay ends its session | `RefreshTokenStore.consume` marks the token used in one conditional `UPDATE`, so of two exchanges exactly one wins. A second exchange revokes the family through `revokeFamilyOfReplayed` — the only `@Transactional` in `src/main`, `REQUIRES_NEW`, so the revocation survives the 401 that rolls the caller back. Asserted end to end in `AuthE2ETest` |
+| The application connects as a role that cannot change the schema | `docker/postgres/initdb/10-kora-roles.sh` creates `kora_migration`, owner of the schema, which runs Flyway, and `kora_app`, which serves traffic. `V202610171921__grant_application_role.sql` gives `kora_app` `SELECT`, `INSERT`, `UPDATE`, `DELETE` on every table, present and future, except `flyway_schema_history`, and no `UPDATE` or `DELETE` on `ledger_entries` and `trx_state_historics`. Not the owner, it can neither `CREATE`, `ALTER`, `DROP` nor `TRUNCATE`, nor disable the append-only triggers. Every test connects as `kora_app` through `KoraPostgres`; asserted in `ApplicationDatabaseRoleTest` |
+| A provider timeout is not a refusal | `PaymentTimeoutProviderException`, a subclass of `PaymentProviderException`, is caught before it at every provider call and moves the transaction to `UNKNOWN` (`markUnknown()`): from `INITIALIZED` on `authorize`; from `AUTHORIZED` on `capture`, after the `AuthorizationRecord` keeps the provider reference; from `AUTHORIZED` on `reverse`. A cash-out hold stays `ACTIVE`. Any other provider error keeps its failed state, and reaches HTTP as 502. Asserted in `PaymentUseCaseTest` and `ProviderFailureE2ETest` |
 | An enumerated column holds only values the domain defines | Eleven `CHECK` constraints, `ck_<table>_<column>`, added by `V202609071725__constrain_enum_columns.sql` over `users.role`, `users.status`, `accounts.resource_type`, `transactions.state` / `type` / `payment_method`, `ledger_entries.type`, `trx_state_historics.old_state` / `new_state` / `triggered_by`, `authorization_records.status`. `EnumColumnConstraintsDbTest` in `auth` and in `payment` reads `pg_get_constraintdef` and asserts the constraint's literals **equal** the Java values, so a constant added on either side alone fails the build. Native `CREATE TYPE … AS ENUM` was rejected: no `DROP VALUE` exists, and it would put `@JdbcTypeCode(NAMED_ENUM)` in ten entities. The `currency` columns are deliberately out — currency is not a closed set here |
 
 ## 7. Review rules
@@ -147,7 +156,7 @@ Assertions to apply to a diff. Each one is decidable by reading the diff alone.
    `Amount` methods bypasses the currency check and is a defect.
 8. A state change written as a direct field assignment instead of going through
    the named methods on `Transaction` (`authorize()`, `capture()`, `settle()`,
-   `markCompleted()`, `reverse()`, `fail*()`) is a defect.
+   `markCompleted()`, `reverse()`, `markUnknown()`, `fail*()`) is a defect.
 9. Any `UPDATE` or `DELETE` on `ledger_entries` or `trx_state_historics`, and any
    `clear()` or `remove()` on the entries collection of `Transaction` or
    `TransactionEntity`, is a defect.
@@ -174,40 +183,53 @@ Assertions to apply to a diff. Each one is decidable by reading the diff alone.
     `@SpringBootTest` under `unit/` or an HTTP client under `integration/`.
 18. A constant added to or removed from a persisted enum — `Role`, `UserStatus`,
     `ResourceType`, `TransactionType`, `PaymentMethod`, `LedgerEntryType`,
-    `TriggerSource`, `AuthorizationStatus` — or a singleton added to or removed from
+    `TriggerSource`, `AuthorizationStatus`, `HoldStatus` — or a singleton added to or removed from
     `TransactionState`, without a migration in the same diff dropping and re-adding
     the matching `ck_<table>_<column>` constraint, is a defect.
 19. A new enumerated column whose migration carries no `ck_<table>_<column>`
     constraint, and no matching equality assertion in the module's
     `EnumColumnConstraintsDbTest`, is a defect.
+20. Token protocol vocabulary — a token's use or type, its `jti`, a signing key,
+    `refresh_tokens` — named outside `auth/adapters/out/security/` and
+    `auth/adapters/in/security/` is a defect. Swapping the JWT adapter for an OAuth2
+    server must not touch the domain, the use cases or `TokenIssuer`.
+21. `@Transactional` in `src/main` anywhere but
+    `RefreshTokenStore.revokeFamilyOfReplayed` is a defect. A use case's transaction
+    goes through `TransactionBoundary`.
+22. A migration that grants `${app_role}` a right beyond `SELECT`, `INSERT`, `UPDATE`,
+    `DELETE`, or a new append-only table without a `REVOKE UPDATE, DELETE` from it, is a
+    defect. So is code in `src/main` connecting with the migration credentials outside
+    the `perf` profile.
 
 ## 8. Testing strategy
 
-58 test classes under `src/test/java`. The tree states the pyramid level first, and
+67 test classes under `src/test/java`. The tree states the pyramid level first, and
 `TestPyramidTest` checks that the statement is true.
 
 ```
 src/test/java/com/geekersjoel237/koracore/
 └── <module>/            auth · payment · shared
-    ├── unit/            domain · application · doubles · (shared: adapters, ports, architecture)
-    ├── integration/     persistence · query
+    ├── unit/            domain · application · doubles · (auth: config) · (shared: adapters, ports, architecture)
+    ├── integration/     persistence · query · (auth: security)
     └── e2e/
 ```
 
 Within a level, files are grouped by type, then by concern — `payment/unit/domain/`
-splits into `account`, `ledger`, `transaction`, `authorization`.
+splits into `account`, `ledger`, `transaction`, `authorization`, `hold`.
 
 - **Unit** — plain JUnit 5, no Spring context. Ports faked by the in-memory out
   adapters in `<module>/unit/doubles/`. No `@SpringBootTest`, no container, asserted.
 - **Integration** — extends `AbstractRepositoryTest`: `@SpringBootTest` +
   `@Transactional` + `@ActiveProfiles("test")` + `@Import(TestMailConfig.class)`, with
-  a static `PostgreSQLContainer<>("postgres:16-alpine")` wired via
-  `@DynamicPropertySource`. No HTTP, asserted. `@DataJpaTest` and
+  a static `PostgreSQLContainer<>("postgres:16-alpine")` started by `KoraPostgres`, which
+  runs the production role script and wires the datasource as `kora_app` and Flyway as
+  `kora_migration` via `@DynamicPropertySource`. A test that must act as the owner — the
+  append-only trigger, an injected failure, the e2e `TRUNCATE` — asks `KoraPostgres` for
+  that connection. No HTTP, asserted. `@DataJpaTest` and
   `@AutoConfigureTestDatabase` are gone in Spring Boot 4 — do not reintroduce them.
 - **E2E** — extends `AbstractE2ETest`: `@SpringBootTest(RANDOM_PORT)` over real HTTP
   with `RestTemplate`; isolation by `TRUNCATE` in `@BeforeEach`, not by rollback.
-  `KoraCoreApplicationTests` is the only class using `@Testcontainers` +
-  `@ServiceConnection`.
+  `KoraCoreApplicationTests` starts its own container through `KoraPostgres` too.
 
 Flyway owns the schema in tests exactly as in production.
 
@@ -223,39 +245,70 @@ Deliberate and tracked. Do not raise them on a PR.
 - No idempotency store: a client retry can create duplicate `INITIALIZED`
   transactions. Roadmap Step 4 — deliberately not folded into the command bus.
 - No recovery for a crash between TX-1 and TX-2, and no TX-2 retry after provider
-  success; `AuthorizationRecord` exists only to make these auditable (ADR-004 G-1 to G-4).
+  success (ADR-004 G-1 to G-4, L-3). Accepted: the transaction stays `INITIALIZED`, and a
+  cash-out's funds hold stays `ACTIVE` until resolved by hand. Recovery comes with the
+  cash-out saga and its compensations once the flow is event-driven (roadmap Step 5);
+  reconciliation (Step 6) catches what is left.
+- A provider success whose TX-2 fails leaves no internal trace: the transaction stays
+  `INITIALIZED`, the provider reference is lost, and `AuthorizationRecord` — created in
+  TX-2 — rolls back with it (L-2). Accepted: the reconciliation engine of roadmap Step 6
+  catches it after the fact as `MISSING_INTERNAL`. Reproduced by
+  `ProviderSuccessLostE2ETest`, disabled.
+- A transaction left `UNKNOWN` by a provider timeout stays there: `UnknownState` refuses
+  every transition until reconciliation (roadmap Step 6) defines how it is resolved, and a
+  cash-out hold stays `ACTIVE` meanwhile.
 - `MobileMoneyProviderAdapter` is a latency-simulating stub, not an HTTP client,
   and has no circuit breaker.
 - `InMemoryExpiringStore` holds OTP codes in one JVM's heap. Single-instance only;
   Redis replaces it by changing one `@Bean` line in `AuthUseCaseConfiguration`.
 - `SETTLEMENT_PENDING` to `SETTLED` is not automated; the reconciliation engine is
   roadmap Step 6.
-- The double-entry and append-only invariants have no database-level constraint.
-  Enumerated columns do, since `V202609071725__constrain_enum_columns.sql`; the
-  balance and ledger invariants stay in the domain.
+- The double-entry invariant has no database-level constraint; it stays in the domain.
+  Append-only and non-negative amounts are enforced by the database since
+  `V202610171900__make_ledger_append_only.sql`, enumerated columns since
+  `V202609071725__constrain_enum_columns.sql`. The owner role can still `TRUNCATE` them;
+  the application role cannot.
+- Nothing compares `accounts.balance_amount` with the ledger sum, and the float account's
+  position is visible only through `ledger_entries` (L-7). Deferred: a scheduled,
+  detection-only check comes with the balance snapshots of roadmap Step 6.
 - A deterministic lock order for crossing transfers is not implemented; a deadlock
   surfaces as `ConcurrentUpdateException` and is retried.
 - `auth -> payment` and `payment -> auth` couplings remain, listed and asserted in
   `ModuleBoundariesTest`. Closing them needs a published `OpenWalletUseCase` and a
   wallet lookup by phone number.
+- Access tokens are not stored: after a logout, one stays valid until it expires, at
+  most 15 minutes. Checking them per request would put a database read on every call.
+- Expired `refresh_tokens` rows are never purged.
+- Two concurrent exchanges of the same refresh token count as a replay and end the
+  session. The mobile client sends one refresh at a time (`mobile/docs/06-architecture.md`).
 
 ## 10. Key files
 
 - `ROADMAP.md` — 10-step evolution plan, authoritative numbering
 - `HELP.md` — engineering standards, DDD/SOLID rules, project conventions
 - `CONTRIBUTING.md` — configuration assignment and migration naming, both test-enforced
-- `docs/kora-core-state-of-view-v2.md` — engineering retrospective, Steps 2 and 3.
-  `docs/kora-core-state-of-view.md` is the Step 1 snapshot, kept unedited; v2 lists
-  what it says that no longer holds
+- `docs/kora-core-state-of-view-v3.md` — review at `d28a6be`: what holds, what does
+  not, ranked limits L-1 to L-15. Kept as written; a closed limit gets a dated note.
+  `docs/kora-core-state-of-view-v2.md` is the Steps 2 and 3 retrospective and
+  `docs/kora-core-state-of-view.md` the Step 1 snapshot, both kept unedited
 - `docs/adr/` — ADR-001 immutable ledger and balance cache · ADR-002 payment lifecycle
   and locking · ADR-003 single-call payment API · ADR-004 micro-transaction model ·
   ADR-005 load-test calibration · ADR-006 compose topology ·
-  ADR-007 hexagonal before modular
+  ADR-007 hexagonal before modular · ADR-008 funds holds
 - `src/main/resources/db/migration/` — `V202605270702__initial_schema.sql` creates the
   whole schema; `V202609051542__rename_ledger_vocabulary.sql` renames `operations` to
   `ledger_entries` and `from_id`/`to_id` to `from_account_id`/`to_account_id`;
   `V202609071725__constrain_enum_columns.sql` closes every enumerated column with a
   `CHECK`, and its header records why not a native `ENUM` type;
   `V202610131159__allow_unknown_transaction_state.sql` re-adds the three state
-  constraints with `UNKNOWN`
+  constraints with `UNKNOWN`; `V202610161900__create_refresh_tokens.sql` creates the
+  JWT adapter's own table, one row per refresh token issued, with its family, its use
+  and its revocation; `V202610171530__create_funds_holds.sql` creates the funds holds of
+  ADR-008, with `ck_funds_holds_status` and at most one active hold per transaction;
+  `V202610171900__make_ledger_append_only.sql` refuses `UPDATE` and `DELETE` on
+  `ledger_entries` and `trx_state_historics`, and negative ledger amounts;
+  `V202610171921__grant_application_role.sql` grants the application role its DML rights,
+  the role names coming from Flyway placeholders. `docker/postgres/initdb/10-kora-roles.sh`
+  creates both roles on a fresh volume, and transfers ownership when run by hand on an
+  existing one
 - `perf/PERF.md`, `perf/SIMULATION.md` — load-test procedure

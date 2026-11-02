@@ -139,7 +139,7 @@ Un contournement, un drapeau, une section du contrat. Cette table est le pendant
 | §6.2 | Case « J'ai vérifié ce numéro » à la place du nom du destinataire | `beneficiaryLookup` | indéterminé |
 | §6.3 | Profil reconstruit depuis les claims + saisie locale | `userProfile` | indéterminé |
 | §6.4 | Sondage borné 5 s × 12 | `realtimeEvents` | étape 5+ |
-| §6.5 | Déconnexion purement locale | `logout` | indéterminé |
+| §6.5 | Déconnexion purement locale | `logout` | **levée le 2026-10-16** — `POST /auth/logout` |
 | §6.7 | Rejeu de la page d'origine (par curseur) pour suivre une opération en cours | `transactionById` | indéterminé |
 | §4 | Liste d'opérateurs figée côté client | `velocityLimits` | étape 8 |
 
@@ -230,6 +230,8 @@ Tenu à jour à chaque synchronisation. Une ligne par livraison backend ayant un
 | 2026-08-06 | `afd4f78` — Flyway V1 | Aucun | Contrat initial transcrit |
 | 2026-08-06 | — revue du contrat contre le code | 8 corrections | Formats d'identifiants, masquage, `404` destinataire, `500` non mappé, statut `VERIFIED`, absence d'échelle sur `Amount`, plafond `size`, filtre d'état unique |
 | 2026-10-13 | `develop` — transfert en deux champs, historique en vue client | **Cassant** : corps du transfert, forme complète de l'historique | `toPhonePrefix` + `toPhoneNumber` ; historique `status` / `kind` / montant signé / curseur ; détail ouvert depuis le cache ; sondage par référence ; regroupement des états aligné sur `CustomerStatus` (terminée dès la capture) ; §6.8 levé, drapeau `multiStateFilter` supprimé ; frise d'états et durées inter-états retirées (FR-43, VR-03) ; destinataires récents en une chaîne ignorés |
+| 2026-10-16 | `feature/KC-xx-l10-token-hardening` — jetons durcis (L-10) | **Cassant** : jeton de rafraîchissement à usage unique ; reconnexion forcée au déploiement (jetons émis avant refusés) | Remplacer le jeton de rafraîchissement **dès** la réponse de `/auth/refresh` ; garder un seul rafraîchissement en vol (un rejeu clôt la session) ; traiter `403` au rafraîchissement comme compte suspendu ; brancher `POST /auth/logout` puis passer le drapeau `logout` à `true` ; §6.5 levé ; observation n° 2 corrigée |
+| 2026-10-17 | `feature/KC-xx-l10-token-hardening` — réservation des fonds au retrait (L-1, ADR-008) | Sémantique : `amount` de `GET /payments/balance` devient le solde **disponible** ; nouveau champ `ledgerAmount` (solde comptable) | Afficher `amount` tel quel ; un retrait ou un transfert pendant qu’un retrait est en cours peut recevoir `422` alors que le solde comptable paraît suffisant |
 | | | | |
 
 ### Anomalies backend à remonter
@@ -239,7 +241,7 @@ Relevées lors de la revue du 2026-08-06. Ce sont des observations, pas des bloc
 | # | Observation | Gravité |
 |---|---|---|
 | 1 | `PaymentProviderException` n'est mappée par aucun `@ExceptionHandler` → `500` au corps non conforme à RFC 7807 | moyenne |
-| 2 | `/auth/refresh` ne distingue pas jeton d'accès et jeton de rafraîchissement | faible |
+| 2 | ~~`/auth/refresh` ne distingue pas jeton d'accès et jeton de rafraîchissement~~ — corrigé le 2026-10-16 | faible |
 | 3 | `User.create` attribue `VERIFIED` d'emblée ; `UserStatus.PENDING` n'est jamais utilisé | faible |
 | 4 | `Amount` n'impose aucune échelle — `100.5 XAF` serait accepté | moyenne |
 | 5 | `paymentMethod` n'est pas validé — toute chaîne est acceptée | faible |

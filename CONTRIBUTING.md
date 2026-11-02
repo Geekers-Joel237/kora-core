@@ -109,14 +109,16 @@ cp .env.example .env
 Docker Compose can consume. It is versioned; `.env` is not, and must never be
 committed.
 
-Then generate your own JWT signing key and put it in `.env`:
+Then generate your own JWT signing keys — one per token use, two separate runs —
+and put them in `.env` as `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET`:
 
 ```bash
 openssl rand -base64 48
 ```
 
-> **Security note**: `JWT_SECRET` must be at least 32 characters — HMAC-SHA256
-> rejects anything shorter, and `SecurityProperties` refuses to start on it.
+> **Security note**: each key must be at least 32 characters — HMAC-SHA256
+> rejects anything shorter — and the two must differ. `SecurityProperties`
+> refuses to start on either violation.
 > The placeholder shipped in `.env.example` is deliberately non-functional.
 > Never commit a real secret; use a secrets manager outside local development.
 
@@ -307,9 +309,9 @@ is `always` in dev and `never` in prod, so no single value could be correct for 
 |---|---|---|
 | `POSTGRES_DB` `DB_HOST` `DB_PORT` | Compose + `application.yaml` | all |
 | `POSTGRES_USER` `POSTGRES_PASSWORD` | Compose only — superuser, initialises a fresh volume | — |
-| `POSTGRES_MIGRATION_USER` `POSTGRES_MIGRATION_PASSWORD` | `application.yaml` → `spring.flyway.*` | all |
-| `POSTGRES_APP_USER` `POSTGRES_APP_PASSWORD` | `application.yaml` → `spring.datasource.*` | all |
-| `JWT_SECRET` | `application.yaml` | all |
+| `POSTGRES_MIGRATION_USER` `POSTGRES_MIGRATION_PASSWORD` | Compose (role script) + `application.yaml` → `spring.flyway.*` | all |
+| `POSTGRES_APP_USER` `POSTGRES_APP_PASSWORD` | Compose (role script) + `application.yaml` → `spring.datasource.*` and the `app_role` Flyway placeholder | all |
+| `JWT_ACCESS_SECRET` `JWT_REFRESH_SECRET` | `application.yaml` | all |
 | `SERVER_PORT` | `application.yaml` | all |
 | `MAIL_HOST` `MAIL_SMTP_PORT` | Compose + `application.yaml` | all |
 | `MAIL_UI_PORT` | Compose | — |
@@ -378,12 +380,12 @@ Description:
 
 Binding to target com.geekersjoel237.koracore.application.config.SecurityProperties failed:
 
-    Property: kora.security.jwt.secret
-    Value: "${JWT_SECRET}"
+    Property: kora.security.jwt.access-secret
+    Value: "${JWT_ACCESS_SECRET}"
     Reason: must be at least 32 characters for HMAC-SHA256
 ```
 
-Read `Value` carefully: Spring binds the unresolved text `${JWT_SECRET}` rather
+Read `Value` carefully: Spring binds the unresolved text `${JWT_ACCESS_SECRET}` rather
 than failing on the placeholder itself. A bare `${VAR}` is therefore *not* enough
 on a `@ConfigurationProperties` target — the `@Size` constraint on
 `SecurityProperties` is what turns a 14-character literal into a refusal to start
@@ -888,6 +890,38 @@ docker compose down -v && docker compose up -d postgres
 Testcontainers-backed tests need neither: each run starts an empty database and
 replays every migration.
 
+### Database roles
+
+The application never connects as the superuser. `docker/postgres/initdb/10-kora-roles.sh`
+creates two roles from `.env` and makes the first one owner of the schema:
+
+| Role | Used by | Rights |
+|---|---|---|
+| `POSTGRES_MIGRATION_USER` (`kora_migration`) | Flyway, the perf `/test/reset` | owner: DDL, `TRUNCATE` |
+| `POSTGRES_APP_USER` (`kora_app`) | the application | `SELECT` `INSERT` `UPDATE` `DELETE`, no `UPDATE` or `DELETE` on `ledger_entries` and `trx_state_historics` |
+
+The DML rights come from `V202610171921__grant_application_role.sql`, which also
+covers every table created afterwards. A new append-only table revokes `UPDATE` and
+`DELETE` from `${app_role}` in its own migration.
+
+Postgres runs the script on a **fresh volume only**. A volume created before it
+keeps the superuser as owner of every table. Recreate it if it holds nothing worth
+keeping:
+
+```bash
+docker compose down -v && docker compose up -d postgres
+```
+
+Otherwise run the script by hand. It creates the missing roles and transfers the
+schema, its tables and its functions to the migration role; running it twice
+changes nothing:
+
+```bash
+docker compose exec postgres sh /docker-entrypoint-initdb.d/10-kora-roles.sh
+```
+
+The next start then applies the grants migration as the new owner.
+
 ---
 
 ## 10. Architecture decisions
@@ -961,10 +995,11 @@ curl http://localhost:8081/actuator/health | python -m json.tool
 | `db` | PostgreSQL not running | `docker compose up -d` |
 | `mail` | MailDev not running | `docker compose up -d` |
 
-### `jwt.secret` too short
+### JWT key too short, or both keys equal
 
-Spring will reject startup if `kora.security.jwt.secret` is shorter than 32 characters.
-Update the value in `.env` and restart.
+Spring will reject startup if `kora.security.jwt.access-secret` or
+`kora.security.jwt.refresh-secret` is shorter than 32 characters, or if the two are
+equal. Update the values in `.env` and restart.
 
 ### Testcontainers fails to start
 

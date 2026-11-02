@@ -9,13 +9,7 @@ import java.time.Instant;
 import com.geekersjoel237.koracore.shared.adapters.out.persistence.entities.BaseEntity;
 
 @Entity
-@Table(name = "ledger_entries",
-        indexes = {
-                @Index(name = "idx_ledger_entries_transaction_id", columnList = "transaction_id"),
-                @Index(name = "idx_ledger_entries_account_id", columnList = "account_id"),
-                @Index(name = "idx_ledger_entries_type", columnList = "type")
-        }
-)
+@Table(name = "ledger_entries")
 @Getter
 @Setter
 @ToString(callSuper = true)

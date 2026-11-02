@@ -1,7 +1,6 @@
 package com.geekersjoel237.koracore.payment.domain.model;
 
 import com.geekersjoel237.koracore.payment.domain.enums.PaymentMethod;
-import com.geekersjoel237.koracore.payment.domain.enums.ResourceType;
 import com.geekersjoel237.koracore.payment.domain.enums.TransactionType;
 import com.geekersjoel237.koracore.payment.domain.exception.InsufficientFundsException;
 import com.geekersjoel237.koracore.payment.domain.exception.InvalidAccountException;
@@ -30,12 +29,21 @@ public class Ledger {
             throw new IllegalArgumentException("Amount must be positive");
     }
 
-    private static void requireSufficientFunds(Account account, Amount amount) {
-        if (!account.snapshot().balance().solde().isGreaterThanOrEqual(amount))
-            throw new InsufficientFundsException(
-                    "Insufficient funds: balance is "
-                    + account.snapshot().balance().solde().value()
-                    + ", required " + amount.value());
+    private static void requireAvailable(Account account, Amount amount) {
+        if (!account.isFloat() && !account.available().isGreaterThanOrEqual(amount))
+            throw new InsufficientFundsException("Insufficient funds: available is "
+                    + account.available().value() + ", required " + amount.value());
+    }
+
+    private static void requireParty(Account account, Id expected, Transaction tx) {
+        if (!account.snapshot().accountId().equals(expected))
+            throw new IllegalArgumentException("Account " + account.snapshot().accountId().value()
+                    + " is not a party to transaction " + tx.snapshot().transactionId().value());
+    }
+
+    private static void requireParties(Transaction tx, Account source, Account destination) {
+        requireParty(source, tx.snapshot().fromAccountId(), tx);
+        requireParty(destination, tx.snapshot().toAccountId(), tx);
     }
 
     public Transaction initiate(Account fromAccount, Account toAccount,
@@ -44,10 +52,7 @@ public class Ledger {
         requireActive(fromAccount, "Source account is not active");
         requireActive(toAccount, "Destination account is not active");
         requirePositive(amount);
-
-        if (fromAccount.snapshot().accountType().resourceType() != ResourceType.FLOAT_ACCOUNT) {
-            requireSufficientFunds(fromAccount, amount);
-        }
+        requireAvailable(fromAccount, amount);
         return Transaction.create(
                 Id.generate(),
                 fromAccount.snapshot().accountId(),
@@ -55,16 +60,47 @@ public class Ledger {
                 type, paymentMethod, amount);
     }
 
-    public void writeEntries(Transaction tx, Account fromAccount,
-                             Account toAccount, Amount amount) {
-        tx.recordDoubleEntry(amount,
-                fromAccount.snapshot().accountId(),
-                toAccount.snapshot().accountId());
+    public FundsHold hold(Transaction tx, Account source) {
+        requireParty(source, tx.snapshot().fromAccountId(), tx);
+        Amount amount = tx.snapshot().amount();
+        source.reserve(amount);
+        return FundsHold.place(tx.snapshot().transactionId(), source.snapshot().accountId(), amount);
     }
 
-    public Transaction reverse(Transaction tx) {
+    public void post(Transaction tx, Account source, Account destination) {
+        requireParties(tx, source, destination);
         Amount amount = tx.snapshot().amount();
-        tx.recordDoubleEntry(amount, tx.snapshot().toAccountId(), tx.snapshot().fromAccountId());
+        source.debit(amount);
+        destination.credit(amount);
+        tx.recordDoubleEntry(amount, source.snapshot().accountId(), destination.snapshot().accountId());
+    }
+
+    public void capture(Transaction tx, FundsHold hold, Account source, Account destination) {
+        requireParties(tx, source, destination);
+        if (!hold.snapshot().transactionId().equals(tx.snapshot().transactionId()))
+            throw new IllegalArgumentException("Hold " + hold.snapshot().id().value()
+                    + " does not belong to transaction " + tx.snapshot().transactionId().value());
+        Amount amount = tx.snapshot().amount();
+        hold.consume();
+        source.debitReserved(amount);
+        destination.credit(amount);
+        tx.recordDoubleEntry(amount, source.snapshot().accountId(), destination.snapshot().accountId());
+    }
+
+    public void release(FundsHold hold, Account source) {
+        if (!hold.snapshot().accountId().equals(source.snapshot().accountId()))
+            throw new IllegalArgumentException("Hold " + hold.snapshot().id().value()
+                    + " is not on account " + source.snapshot().accountId().value());
+        hold.release();
+        source.release(hold.snapshot().amount());
+    }
+
+    public Transaction reverse(Transaction tx, Account source, Account destination) {
+        requireParties(tx, source, destination);
+        Amount amount = tx.snapshot().amount();
+        destination.debit(amount);
+        source.credit(amount);
+        tx.recordDoubleEntry(amount, destination.snapshot().accountId(), source.snapshot().accountId());
         return tx;
     }
 

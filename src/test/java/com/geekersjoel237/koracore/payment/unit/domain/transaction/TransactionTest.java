@@ -129,6 +129,15 @@ class TransactionTest {
     }
 
     @Test
+    void should_mark_an_authorized_transaction_unknown_and_record_the_transition() {
+        Transaction tx = createTestTransaction();
+        tx.authorize();
+        assertDoesNotThrow(tx::markUnknown);
+        assertEquals(TransactionState.UNKNOWN, tx.snapshot().state());
+        assertEquals(TransactionState.UNKNOWN.name(), tx.history().getLast().snapshot().newState());
+    }
+
+    @Test
     void should_record_historic_state_on_each_transition() {
         Transaction tx = createTestTransaction();
         tx.authorize();

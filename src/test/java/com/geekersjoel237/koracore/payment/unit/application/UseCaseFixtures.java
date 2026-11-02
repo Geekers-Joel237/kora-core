@@ -22,6 +22,8 @@ import com.geekersjoel237.koracore.payment.ports.out.repository.AuthorizationRec
 import com.geekersjoel237.koracore.auth.ports.out.security.CustomerPinEncoder;
 import com.geekersjoel237.koracore.auth.ports.out.repository.CustomerRepository;
 import com.geekersjoel237.koracore.payment.ports.out.repository.LedgerRepository;
+import com.geekersjoel237.koracore.payment.ports.out.repository.FundsHoldRepository;
+import com.geekersjoel237.koracore.payment.unit.doubles.InMemoryFundsHoldRepository;
 import com.geekersjoel237.koracore.payment.ports.out.provider.PaymentProviderPort;
 import com.geekersjoel237.koracore.payment.ports.out.repository.TransactionRepository;
 import com.geekersjoel237.koracore.payment.ports.out.repository.TrxHistoricStatesRepository;
@@ -50,6 +52,7 @@ public final class UseCaseFixtures {
                                  TrxHistoricStatesRepository history,
                                  LedgerRepository ledgers,
                                  AuthorizationRecordRepository authorizations,
+                                 FundsHoldRepository holds,
                                  CustomerPinEncoder pinEncoder) {
         PinVerifier pinVerifier = new CustomerPinVerifier(customers, pinEncoder);
         RetryPolicy retry = IMMEDIATE_RETRY;
@@ -58,11 +61,11 @@ public final class UseCaseFixtures {
                 new CashInService(boundary, retry, pinVerifier, accounts, customers,
                         transactions, history, provider, ledgers, authorizations),
                 new CashOutService(boundary, retry, pinVerifier, accounts, customers,
-                        transactions, history, provider, ledgers, authorizations),
+                        transactions, history, provider, ledgers, authorizations, holds),
                 new TransferService(boundary, retry, pinVerifier, accounts, customers,
                         transactions, history, ledgers),
                 new ReversePaymentService(boundary, retry, accounts, transactions,
-                        history, provider, ledgers, authorizations),
+                        history, provider, ledgers, authorizations, holds),
                 new BalanceService(new InMemoryReadAccountRepository(accounts)),
                 new ExpireAuthorizationsService(boundary, transactions, history, authorizations));
     }
@@ -77,6 +80,6 @@ public final class UseCaseFixtures {
                                        AuthorizationRecordRepository authorizations,
                                        CustomerPinEncoder pinEncoder) {
         return build(boundary, accounts, customers, provider, transactions,
-                history, ledgers, authorizations, pinEncoder).cashIn();
+                history, ledgers, authorizations, new InMemoryFundsHoldRepository(), pinEncoder).cashIn();
     }
 }

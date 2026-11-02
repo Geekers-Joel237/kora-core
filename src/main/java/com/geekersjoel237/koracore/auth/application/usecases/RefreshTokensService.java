@@ -26,13 +26,14 @@ public final class RefreshTokensService implements RefreshTokensCommandHandler {
 
     @Override
     public Tokens execute(RefreshTokensCommand cmd) {
-        Id userId = tokenIssuer.subjectOf(cmd.refreshToken());
+        Id userId = tokenIssuer.holderOf(cmd.refreshToken());
 
         return boundary.execute(() -> {
             User user = userRepository.findById(userId)
                     .orElseThrow(() -> new CustomerNotFoundException(
                             "User not found: " + userId.value()));
-            return tokenIssuer.issue(user);
+            user.requireActive();
+            return tokenIssuer.renew(cmd.refreshToken(), user);
         });
     }
 }

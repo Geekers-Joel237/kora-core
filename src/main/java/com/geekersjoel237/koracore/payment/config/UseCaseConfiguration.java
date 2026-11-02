@@ -19,6 +19,7 @@ import com.geekersjoel237.koracore.payment.ports.out.query.ReadAccountRepository
 import com.geekersjoel237.koracore.payment.ports.out.query.ReadTransactionRepository;
 import com.geekersjoel237.koracore.payment.ports.out.repository.AccountRepository;
 import com.geekersjoel237.koracore.payment.ports.out.repository.AuthorizationRecordRepository;
+import com.geekersjoel237.koracore.payment.ports.out.repository.FundsHoldRepository;
 import com.geekersjoel237.koracore.auth.ports.out.repository.CustomerRepository;
 import com.geekersjoel237.koracore.payment.ports.out.repository.LedgerRepository;
 import com.geekersjoel237.koracore.payment.ports.out.provider.PaymentProviderPort;
@@ -56,9 +57,10 @@ public class UseCaseConfiguration {
                                                 AccountRepository accounts, CustomerRepository customers,
                                                 TransactionRepository transactions, TrxHistoricStatesRepository history,
                                                 PaymentProviderPort provider, LedgerRepository ledgers,
-                                                AuthorizationRecordRepository authorizations) {
+                                                AuthorizationRecordRepository authorizations,
+                                                FundsHoldRepository holds) {
         return new CashOutService(boundary, retry, pinVerifier, accounts, customers,
-                transactions, history, provider, ledgers, authorizations);
+                transactions, history, provider, ledgers, authorizations, holds);
     }
 
     @Bean
@@ -75,9 +77,10 @@ public class UseCaseConfiguration {
                                                AccountRepository accounts, TransactionRepository transactions,
                                                TrxHistoricStatesRepository history, PaymentProviderPort provider,
                                                LedgerRepository ledgers,
-                                               AuthorizationRecordRepository authorizations) {
+                                               AuthorizationRecordRepository authorizations,
+                                               FundsHoldRepository holds) {
         return new ReversePaymentService(boundary, retry, accounts, transactions,
-                history, provider, ledgers, authorizations);
+                history, provider, ledgers, authorizations, holds);
     }
 
     @Bean

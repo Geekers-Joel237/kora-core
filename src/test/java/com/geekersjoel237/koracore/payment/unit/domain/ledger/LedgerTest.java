@@ -1,6 +1,8 @@
 package com.geekersjoel237.koracore.payment.unit.domain.ledger;
 
+import com.geekersjoel237.koracore.payment.domain.enums.HoldStatus;
 import com.geekersjoel237.koracore.payment.domain.model.Account;
+import com.geekersjoel237.koracore.payment.domain.model.FundsHold;
 import com.geekersjoel237.koracore.payment.domain.model.Ledger;
 import com.geekersjoel237.koracore.payment.domain.model.Transaction;
 import com.geekersjoel237.koracore.payment.domain.enums.LedgerEntryType;
@@ -44,6 +46,10 @@ class LedgerTest {
         accountB        = Account.createCustomerAccount(Id.generate(), new Id("cust-B"));
     }
 
+    private static Amount xaf(long value) {
+        return Amount.of(BigDecimal.valueOf(value), "XAF");
+    }
+
     private Id idOf(Account account) {
         return account.snapshot().accountId();
     }
@@ -67,9 +73,24 @@ class LedgerTest {
                 .compareTo(sumByType(tx, LedgerEntryType.CREDIT).value()) == 0;
     }
 
+    private static void assertAmount(long expected, Amount actual) {
+        assertEquals(0, actual.value().compareTo(BigDecimal.valueOf(expected)));
+    }
+
     private Transaction initiateTransfer() {
         return ledger.initiate(accountA, accountB,
                 TransactionType.P2P_TRANSFER, PaymentMethod.WALLET, HUNDRED);
+    }
+
+    private Transaction postedTransfer() {
+        Transaction tx = initiateTransfer();
+        ledger.post(tx, accountA, accountB);
+        return tx;
+    }
+
+    private Transaction initiateCashOut() {
+        return ledger.initiate(accountA, floatAccount,
+                TransactionType.CASH_OUT, PaymentMethod.MOBILE_MONEY, HUNDRED);
     }
 
     @Test
@@ -130,23 +151,27 @@ class LedgerTest {
     void should_throw_when_amount_is_zero() {
         assertThrows(IllegalArgumentException.class,
                 () -> ledger.initiate(accountA, accountB,
-                        TransactionType.P2P_TRANSFER, PaymentMethod.WALLET,
-                        Amount.of(BigDecimal.ZERO, "XAF")));
+                        TransactionType.P2P_TRANSFER, PaymentMethod.WALLET, xaf(0)));
     }
 
     @Test
     void should_throw_when_source_customer_account_has_insufficient_funds() {
         assertThrows(InsufficientFundsException.class,
                 () -> ledger.initiate(accountA, accountB,
-                        TransactionType.P2P_TRANSFER, PaymentMethod.WALLET,
-                        Amount.of(BigDecimal.valueOf(201), "XAF")));
+                        TransactionType.P2P_TRANSFER, PaymentMethod.WALLET, xaf(201)));
     }
 
     @Test
     void should_allow_initiate_with_the_exact_balance() {
         assertDoesNotThrow(() -> ledger.initiate(accountA, accountB,
-                TransactionType.P2P_TRANSFER, PaymentMethod.WALLET,
-                Amount.of(BigDecimal.valueOf(200), "XAF")));
+                TransactionType.P2P_TRANSFER, PaymentMethod.WALLET, xaf(200)));
+    }
+
+    @Test
+    void should_refuse_to_initiate_against_reserved_funds() {
+        accountA.reserve(xaf(150));
+
+        assertThrows(InsufficientFundsException.class, this::initiateTransfer);
     }
 
     /**
@@ -157,14 +182,11 @@ class LedgerTest {
     @Test
     void should_not_check_funds_when_the_source_is_the_float_account() {
         assertDoesNotThrow(() -> ledger.initiate(floatAccount, customerAccount,
-                TransactionType.CASH_IN, PaymentMethod.MOBILE_MONEY,
-                Amount.of(BigDecimal.valueOf(1_000_000), "XAF")));
+                TransactionType.CASH_IN, PaymentMethod.MOBILE_MONEY, xaf(1_000_000)));
     }
 
     @Test
     void should_throw_currency_mismatch_when_amount_currency_differs_from_the_balance() {
-        // accountA holds XAF; the funds check compares two Amounts and refuses
-        // to compare across currencies.
         assertThrows(CurrencyMismatchException.class,
                 () -> ledger.initiate(accountA, accountB,
                         TransactionType.P2P_TRANSFER, PaymentMethod.WALLET,
@@ -186,64 +208,160 @@ class LedgerTest {
     }
 
     @Test
-    void should_produce_exactly_two_operations_on_write_entries() {
-        Transaction tx = initiateTransfer();
-        ledger.writeEntries(tx, accountA, accountB, HUNDRED);
-        assertEquals(2, tx.entries().size());
+    void should_record_exactly_two_entries_on_post() {
+        assertEquals(2, postedTransfer().entries().size());
     }
 
     @Test
-    void should_debit_the_source_and_credit_the_destination() {
-        Transaction tx = initiateTransfer();
-        ledger.writeEntries(tx, accountA, accountB, HUNDRED);
+    void should_debit_the_source_and_credit_the_destination_on_post() {
+        Transaction tx = postedTransfer();
 
         assertEquals(List.of(idOf(accountA)), accountsOf(tx, LedgerEntryType.DEBIT));
         assertEquals(List.of(idOf(accountB)), accountsOf(tx, LedgerEntryType.CREDIT));
+        assertAmount(100, accountA.snapshot().balance().solde());
+        assertAmount(100, accountB.snapshot().balance().solde());
     }
 
     @Test
-    void should_maintain_double_entry_on_write_entries() {
+    void should_maintain_double_entry_on_post() {
+        assertTrue(isDoubleEntryBalanced(postedTransfer()));
+    }
+
+    @Test
+    void should_refuse_to_post_against_reserved_funds() {
         Transaction tx = initiateTransfer();
-        ledger.writeEntries(tx, accountA, accountB, HUNDRED);
+        accountA.reserve(xaf(150));
+
+        assertThrows(InsufficientFundsException.class, () -> ledger.post(tx, accountA, accountB));
+        assertTrue(tx.entries().isEmpty());
+    }
+
+    @Test
+    void should_refuse_to_post_between_accounts_that_are_not_the_parties() {
+        Transaction tx = initiateTransfer();
+
+        assertThrows(IllegalArgumentException.class, () -> ledger.post(tx, accountB, accountA));
+    }
+
+    @Test
+    void should_hold_the_amount_on_the_source() {
+        Transaction tx = initiateCashOut();
+
+        FundsHold hold = ledger.hold(tx, accountA);
+
+        assertEquals(HoldStatus.ACTIVE, hold.snapshot().status());
+        assertEquals(tx.snapshot().transactionId(), hold.snapshot().transactionId());
+        assertEquals(idOf(accountA), hold.snapshot().accountId());
+        assertAmount(100, accountA.available());
+        assertAmount(200, accountA.snapshot().balance().solde());
+        assertTrue(tx.entries().isEmpty());
+    }
+
+    @Test
+    void should_refuse_a_hold_the_available_balance_cannot_cover() {
+        Transaction tx = initiateCashOut();
+        accountA.reserve(xaf(150));
+
+        assertThrows(InsufficientFundsException.class, () -> ledger.hold(tx, accountA));
+    }
+
+    @Test
+    void should_refuse_a_hold_on_an_account_that_is_not_the_source() {
+        Transaction tx = initiateCashOut();
+
+        assertThrows(IllegalArgumentException.class, () -> ledger.hold(tx, accountB));
+    }
+
+    @Test
+    void should_capture_a_hold_into_entries_and_a_debit() {
+        Transaction tx = initiateCashOut();
+        FundsHold hold = ledger.hold(tx, accountA);
+
+        ledger.capture(tx, hold, accountA, floatAccount);
+
+        assertEquals(HoldStatus.CONSUMED, hold.snapshot().status());
+        assertAmount(100, accountA.snapshot().balance().solde());
+        assertAmount(0, accountA.snapshot().reserved());
+        assertAmount(100, accountA.available());
+        assertEquals(2, tx.entries().size());
         assertTrue(isDoubleEntryBalanced(tx));
     }
 
     @Test
+    void should_refuse_to_capture_a_hold_of_another_transaction() {
+        Transaction tx = initiateCashOut();
+        FundsHold foreign = ledger.hold(initiateCashOut(), accountA);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> ledger.capture(tx, foreign, accountA, floatAccount));
+    }
+
+    @Test
+    void should_release_a_hold_back_to_the_available_balance() {
+        Transaction tx = initiateCashOut();
+        FundsHold hold = ledger.hold(tx, accountA);
+
+        ledger.release(hold, accountA);
+
+        assertEquals(HoldStatus.RELEASED, hold.snapshot().status());
+        assertAmount(200, accountA.available());
+        assertAmount(200, accountA.snapshot().balance().solde());
+        assertTrue(tx.entries().isEmpty());
+    }
+
+    @Test
     void should_write_the_mirrored_pair_on_reverse() {
-        Transaction tx = initiateTransfer();
-        ledger.writeEntries(tx, accountA, accountB, HUNDRED);
-        ledger.reverse(tx);
+        Transaction tx = postedTransfer();
+        ledger.reverse(tx, accountA, accountB);
 
         assertEquals(List.of(idOf(accountA), idOf(accountB)), accountsOf(tx, LedgerEntryType.DEBIT));
         assertEquals(List.of(idOf(accountB), idOf(accountA)), accountsOf(tx, LedgerEntryType.CREDIT));
     }
 
     @Test
+    void should_restore_both_balances_on_reverse() {
+        Transaction tx = postedTransfer();
+        ledger.reverse(tx, accountA, accountB);
+
+        assertAmount(200, accountA.snapshot().balance().solde());
+        assertAmount(0, accountB.snapshot().balance().solde());
+    }
+
+    @Test
     void should_append_the_compensating_pair_without_removing_the_originals() {
-        Transaction tx = initiateTransfer();
-        ledger.writeEntries(tx, accountA, accountB, HUNDRED);
-        ledger.reverse(tx);
+        Transaction tx = postedTransfer();
+        ledger.reverse(tx, accountA, accountB);
         assertEquals(4, tx.entries().size());
     }
 
     @Test
     void should_keep_double_entry_balanced_after_reverse() {
-        Transaction tx = initiateTransfer();
-        ledger.writeEntries(tx, accountA, accountB, HUNDRED);
-        ledger.reverse(tx);
+        Transaction tx = postedTransfer();
+        ledger.reverse(tx, accountA, accountB);
         assertTrue(isDoubleEntryBalanced(tx));
     }
 
     @Test
     void should_reverse_the_transaction_amount() {
-        Transaction tx = initiateTransfer();
-        ledger.writeEntries(tx, accountA, accountB, HUNDRED);
-        ledger.reverse(tx);
+        Transaction tx = postedTransfer();
+        ledger.reverse(tx, accountA, accountB);
 
-        // 100 written, 100 compensated → 200 on each side.
-        assertEquals(0, sumByType(tx, LedgerEntryType.DEBIT).value()
-                .compareTo(BigDecimal.valueOf(200)));
-        assertEquals(0, sumByType(tx, LedgerEntryType.CREDIT).value()
-                .compareTo(BigDecimal.valueOf(200)));
+        assertAmount(200, sumByType(tx, LedgerEntryType.DEBIT));
+        assertAmount(200, sumByType(tx, LedgerEntryType.CREDIT));
+    }
+
+    @Test
+    void should_refuse_a_reversal_that_would_spend_reserved_funds() {
+        Transaction tx = postedTransfer();
+        accountB.reserve(xaf(50));
+
+        assertThrows(InsufficientFundsException.class, () -> ledger.reverse(tx, accountA, accountB));
+    }
+
+    @Test
+    void should_refuse_to_reverse_between_accounts_that_are_not_the_parties() {
+        Transaction tx = postedTransfer();
+
+        assertThrows(IllegalArgumentException.class, () -> ledger.reverse(tx, accountB, accountA));
     }
 }

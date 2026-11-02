@@ -3,6 +3,7 @@ package com.geekersjoel237.koracore.auth.unit.domain;
 import com.geekersjoel237.koracore.auth.domain.model.User;
 import com.geekersjoel237.koracore.auth.domain.enums.Role;
 import com.geekersjoel237.koracore.auth.domain.enums.UserStatus;
+import com.geekersjoel237.koracore.auth.domain.exception.UserNotActiveException;
 import com.geekersjoel237.koracore.shared.domain.vo.Id;
 import org.junit.jupiter.api.Test;
 
@@ -63,6 +64,19 @@ class UserTest {
         User user = User.create(VALID_ID, FULL_NAME, EMAIL, ROLE);
         user.suspend();
         assertTrue(user.isSuspended());
+    }
+
+    @Test
+    void should_let_an_active_user_through_require_active() {
+        User user = User.create(VALID_ID, FULL_NAME, EMAIL, ROLE);
+        assertDoesNotThrow(user::requireActive);
+    }
+
+    @Test
+    void should_stop_a_suspended_user_at_require_active() {
+        User user = User.create(VALID_ID, FULL_NAME, EMAIL, ROLE);
+        user.suspend();
+        assertThrows(UserNotActiveException.class, user::requireActive);
     }
 
     @Test

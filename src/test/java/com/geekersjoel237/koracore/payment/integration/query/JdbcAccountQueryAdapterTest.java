@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -40,6 +41,22 @@ class JdbcAccountQueryAdapterTest extends AbstractRepositoryTest {
         assertThat(balance.accountId()).isEqualTo(walletId.value());
         assertThat(balance.accountNumber()).isEqualTo("ACC-" + walletId.value());
         assertThat(balance.balance()).isEqualTo(new Amount(new BigDecimal("12500.0000"), "XAF"));
+    }
+
+    @Test
+    void should_report_the_ledger_balance_minus_active_holds_as_available() {
+        given.wallet(walletId.value(), customer.value(), "12500.0000");
+        given.transaction("tx-held", walletId.value(), walletId.value(), "CASH_OUT", "INITIALIZED",
+                "5000", Instant.now());
+        given.transaction("tx-done", walletId.value(), walletId.value(), "CASH_OUT", "COMPLETED",
+                "2000", Instant.now());
+        given.hold(walletId.value(), "tx-held", "5000", "ACTIVE");
+        given.hold(walletId.value(), "tx-done", "2000", "CONSUMED");
+
+        BalanceResult balance = adapter.findBalance(customer).orElseThrow();
+
+        assertThat(balance.balance()).isEqualTo(new Amount(new BigDecimal("12500.0000"), "XAF"));
+        assertThat(balance.available()).isEqualTo(new Amount(new BigDecimal("7500.0000"), "XAF"));
     }
 
     @Test

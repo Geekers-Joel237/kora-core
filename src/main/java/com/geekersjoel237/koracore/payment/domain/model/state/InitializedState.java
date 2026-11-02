@@ -8,7 +8,8 @@ class InitializedState implements TransactionState {
     public TransactionState transitionTo(TransactionState next) {
         if (next instanceof AuthorizedState
                 || next instanceof FailedState
-                || next instanceof AuthorizationFailedState) return next;
+                || next instanceof AuthorizationFailedState
+                || next instanceof UnknownState) return next;
         throw new InvalidStateTransitionException(this, next);
     }
 

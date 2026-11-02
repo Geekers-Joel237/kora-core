@@ -119,7 +119,7 @@ class TransactionRepositoryTest extends AbstractRepositoryTest {
         historicRepository.save(initialEntry);
 
         List<TrxStateHistoric> history =
-                historicRepository.findByTransactionId(tx.snapshot().transactionId());
+                txRepository.findById(tx.snapshot().transactionId()).orElseThrow().history();
 
         assertThat(history).hasSize(1);
         assertThat(history.getFirst().oldState()).isNull();
@@ -145,7 +145,7 @@ class TransactionRepositoryTest extends AbstractRepositoryTest {
         historicRepository.save(tx.history().getLast());
 
         List<TrxStateHistoric> history =
-                historicRepository.findByTransactionId(tx.snapshot().transactionId());
+                txRepository.findById(tx.snapshot().transactionId()).orElseThrow().history();
 
         assertThat(history).hasSize(3);
         assertThat(history.get(0).newState()).isEqualTo(TransactionState.INITIALIZED);

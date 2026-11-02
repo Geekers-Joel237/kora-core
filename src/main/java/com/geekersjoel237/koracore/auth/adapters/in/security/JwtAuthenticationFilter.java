@@ -1,10 +1,6 @@
 package com.geekersjoel237.koracore.auth.adapters.in.security;
 
-import com.geekersjoel237.koracore.auth.config.SecurityProperties;
-import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.JwtException;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.security.Keys;
+import com.geekersjoel237.koracore.auth.adapters.out.security.JwtTokenIssuer;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -18,9 +14,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-import javax.crypto.SecretKey;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @Component
@@ -28,10 +22,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
 
-    private final String jwtSecret;
+    private final JwtTokenIssuer tokens;
 
-    public JwtAuthenticationFilter(SecurityProperties securityProperties) {
-        this.jwtSecret = securityProperties.jwt().secret();
+    public JwtAuthenticationFilter(JwtTokenIssuer tokens) {
+        this.tokens = tokens;
     }
 
     @Override
@@ -40,29 +34,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                     @NonNull FilterChain filterChain) throws ServletException, IOException {
         String header = request.getHeader("Authorization");
         if (header != null && header.startsWith("Bearer ")) {
-            String token = header.substring(7);
-            try {
-                SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
-                Claims claims = Jwts.parser()
-                        .verifyWith(key)
-                        .build()
-                        .parseSignedClaims(token)
-                        .getPayload();
-
-                String userId = claims.getSubject();
+            tokens.authenticate(header.substring(7)).ifPresentOrElse(bearer -> {
+                String userId = bearer.userId().value();
                 request.setAttribute("customerId", userId);
 
-                String role = claims.get("role", String.class);
-                var authorities = (role != null)
-                        ? List.of(new SimpleGrantedAuthority("ROLE_" + role))
-                        : List.<SimpleGrantedAuthority>of();
+                var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + bearer.role().name()));
                 var auth = new UsernamePasswordAuthenticationToken(userId, null, authorities);
                 SecurityContextHolder.getContext().setAuthentication(auth);
-
-            } catch (JwtException e) {
-                log.warn("[JWT] Token validation failed — customerId will not be set: {}", e.getMessage());
+            }, () -> {
+                log.warn("[JWT] Token validation failed — customerId will not be set");
                 SecurityContextHolder.clearContext();
-            }
+            });
         }
         filterChain.doFilter(request, response);
     }

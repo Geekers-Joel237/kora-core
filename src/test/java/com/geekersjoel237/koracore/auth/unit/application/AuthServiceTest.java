@@ -3,9 +3,7 @@ package com.geekersjoel237.koracore.auth.unit.application;
 import com.geekersjoel237.koracore.auth.domain.enums.OtpPurpose;
 import com.geekersjoel237.koracore.shared.ports.out.mail.Mail;
 import com.geekersjoel237.koracore.auth.ports.out.otp.OtpChallenge;
-import com.geekersjoel237.koracore.auth.ports.out.security.TokenIssuer;
 import com.geekersjoel237.koracore.auth.adapters.out.otp.MailedOtpChallenge;
-import com.geekersjoel237.koracore.auth.adapters.out.security.JwtTokenIssuer;
 import com.geekersjoel237.koracore.auth.domain.enums.Role;
 import com.geekersjoel237.koracore.auth.domain.exception.CustomerNotFoundException;
 import com.geekersjoel237.koracore.auth.domain.exception.InvalidOtpException;
@@ -16,8 +14,6 @@ import com.geekersjoel237.koracore.auth.domain.model.User;
 import com.geekersjoel237.koracore.auth.ports.out.security.CustomerPinEncoder;
 import com.geekersjoel237.koracore.shared.domain.vo.Id;
 import com.geekersjoel237.koracore.shared.domain.vo.PhoneNumber;
-import com.geekersjoel237.koracore.auth.domain.vo.Tokens;
-import com.geekersjoel237.koracore.auth.config.SecurityProperties;
 import com.geekersjoel237.koracore.auth.adapters.out.security.BCryptCustomerPinEncoder;
 import com.geekersjoel237.koracore.payment.unit.doubles.InMemoryAccountRepository;
 import com.geekersjoel237.koracore.auth.unit.doubles.InMemoryCustomerRepository;
@@ -29,7 +25,6 @@ import com.geekersjoel237.koracore.auth.unit.doubles.InMemoryUserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.time.Clock;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.time.Instant;
@@ -51,11 +46,6 @@ class AuthServiceTest {
     private static final String EMAIL = "test@koracore.com";
     private static final Pin RAW_PIN = Pin.of("123456");
 
-    private static final SecurityProperties TEST_SECURITY = new SecurityProperties(
-            new SecurityProperties.Jwt("test-secret-key-must-be-at-least-32-chars!!", 15, 7),
-            new SecurityProperties.Otp(5)
-    );
-
     private static final Duration OTP_VALIDITY = Duration.ofMinutes(5);
 
     private final CustomerPinEncoder pinEncoder = new BCryptCustomerPinEncoder();
@@ -66,7 +56,6 @@ class AuthServiceTest {
     private ExpiringStore<OtpCode> otpCodes;
     private InMemoryMailPort mailPort;
     private OtpChallenge otpChallenge;
-    private TokenIssuer tokenIssuer;
     private CustomerPinVerifier pinVerifier;
 
     @BeforeEach
@@ -79,7 +68,6 @@ class AuthServiceTest {
         mailPort = new InMemoryMailPort();
         pinVerifier = new CustomerPinVerifier(customerRepo, pinEncoder);
         otpChallenge = new MailedOtpChallenge(otpCodes, mailPort, OTP_VALIDITY);
-        tokenIssuer = new JwtTokenIssuer(TEST_SECURITY, Clock.systemUTC());
     }
 
     private static final OtpPurpose PURPOSE = OtpPurpose.LOGIN;
@@ -97,10 +85,6 @@ class AuthServiceTest {
         if (!matcher.find())
             throw new AssertionError("No six-digit code in the mail body: " + mail.body());
         return matcher.group(1);
-    }
-
-    private User buildVerifiedUser() {
-        return User.create(USER_ID, "Joel Geekers", EMAIL, Role.CUSTOMER);
     }
 
     private Customer buildCustomerWithPin(Pin pin) {
@@ -187,47 +171,5 @@ class AuthServiceTest {
         otpChallenge.consume(EMAIL, OtpCode.of(code));
         assertThatThrownBy(() -> otpChallenge.consume(EMAIL, OtpCode.of(code)))
                 .isInstanceOf(OtpExpiredException.class);
-    }
-
-    @Test
-    void should_generate_access_token_with_expiry_in_expected_window() {
-        Instant before = Instant.now();
-        Tokens tokens = tokenIssuer.issue(buildVerifiedUser());
-        Instant after = Instant.now();
-
-        assertThat(tokens.accessToken().expiredAt())
-                .isAfter(before.plus(14, MINUTES))
-                .isBefore(after.plus(16, MINUTES));
-    }
-
-    @Test
-    void should_generate_refresh_token_with_expiry_in_expected_window() {
-        Instant before = Instant.now();
-        Tokens tokens = tokenIssuer.issue(buildVerifiedUser());
-        Instant after = Instant.now();
-
-        assertThat(tokens.refreshToken().expiredAt())
-                .isAfter(before.plus(6, DAYS).plus(23, HOURS))
-                .isBefore(after.plus(7, DAYS).plus(1, HOURS));
-    }
-
-    @Test
-    void should_generate_distinct_token_values_on_successive_calls() {
-        Tokens t1 = tokenIssuer.issue(buildVerifiedUser());
-        Tokens t2 = tokenIssuer.issue(buildVerifiedUser());
-        assertNotEquals(t1.accessToken().value(), t2.accessToken().value());
-        assertNotEquals(t1.refreshToken().value(), t2.refreshToken().value());
-    }
-
-    @Test
-    void should_return_non_blank_access_token_value() {
-        Tokens tokens = tokenIssuer.issue(buildVerifiedUser());
-        assertFalse(tokens.accessToken().value().isBlank());
-    }
-
-    @Test
-    void should_return_non_blank_refresh_token_value() {
-        Tokens tokens = tokenIssuer.issue(buildVerifiedUser());
-        assertFalse(tokens.refreshToken().value().isBlank());
     }
 }

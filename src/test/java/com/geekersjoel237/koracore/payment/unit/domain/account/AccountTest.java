@@ -3,6 +3,7 @@ package com.geekersjoel237.koracore.payment.unit.domain.account;
 import com.geekersjoel237.koracore.payment.domain.model.Account;
 import com.geekersjoel237.koracore.payment.domain.enums.ResourceType;
 import com.geekersjoel237.koracore.payment.domain.exception.InsufficientFundsException;
+import com.geekersjoel237.koracore.payment.domain.exception.InvalidAccountException;
 import com.geekersjoel237.koracore.shared.domain.vo.Amount;
 import com.geekersjoel237.koracore.shared.domain.vo.Id;
 import org.junit.jupiter.api.Test;
@@ -157,5 +158,105 @@ class AccountTest {
         account.block();
         Account rebuilt = Account.createFromSnapshot(account.snapshot());
         assertTrue(rebuilt.snapshot().isBlocked());
+    }
+
+    private static Amount xaf(long value) {
+        return Amount.of(BigDecimal.valueOf(value), "XAF");
+    }
+
+    private static Account walletWith(long balance) {
+        Account wallet = Account.createCustomerAccount(Id.generate(), CUSTOMER_ID);
+        wallet.credit(xaf(balance));
+        return wallet;
+    }
+
+    private static void assertAmount(long expected, Amount actual) {
+        assertEquals(0, actual.value().compareTo(BigDecimal.valueOf(expected)));
+    }
+
+    @Test
+    void should_make_the_whole_balance_available_when_nothing_is_reserved() {
+        assertAmount(1000, walletWith(1000).available());
+    }
+
+    @Test
+    void should_take_a_reservation_out_of_the_available_balance_only() {
+        Account wallet = walletWith(1000);
+
+        wallet.reserve(xaf(300));
+
+        assertAmount(700, wallet.available());
+        assertAmount(1000, wallet.snapshot().balance().solde());
+    }
+
+    @Test
+    void should_refuse_to_reserve_more_than_is_available() {
+        Account wallet = walletWith(1000);
+        wallet.reserve(xaf(800));
+
+        assertThrows(InsufficientFundsException.class, () -> wallet.reserve(xaf(300)));
+    }
+
+    @Test
+    void should_refuse_a_debit_that_would_spend_reserved_funds() {
+        Account wallet = walletWith(1000);
+        wallet.reserve(xaf(800));
+
+        assertThrows(InsufficientFundsException.class, () -> wallet.debit(xaf(300)));
+    }
+
+    @Test
+    void should_give_a_released_reservation_back_to_the_available_balance() {
+        Account wallet = walletWith(1000);
+        wallet.reserve(xaf(300));
+
+        wallet.release(xaf(300));
+
+        assertAmount(1000, wallet.available());
+    }
+
+    @Test
+    void should_turn_a_reservation_into_a_debit_without_moving_the_available_balance() {
+        Account wallet = walletWith(1000);
+        wallet.reserve(xaf(300));
+
+        wallet.debitReserved(xaf(300));
+
+        assertAmount(700, wallet.snapshot().balance().solde());
+        assertAmount(0, wallet.snapshot().reserved());
+        assertAmount(700, wallet.available());
+    }
+
+    @Test
+    void should_refuse_to_settle_more_than_is_reserved() {
+        Account wallet = walletWith(1000);
+        wallet.reserve(xaf(300));
+
+        assertThrows(IllegalStateException.class, () -> wallet.release(xaf(400)));
+        assertThrows(IllegalStateException.class, () -> wallet.debitReserved(xaf(400)));
+    }
+
+    @Test
+    void should_refuse_a_reservation_on_the_float_account() {
+        Account floatAccount = Account.createFloatAccount(Id.generate(), PROVIDER_ID);
+
+        assertThrows(InvalidAccountException.class, () -> floatAccount.reserve(xaf(100)));
+    }
+
+    @Test
+    void should_not_track_balance_for_float_account_credit() {
+        Account floatAccount = Account.createFloatAccount(Id.generate(), PROVIDER_ID);
+
+        floatAccount.credit(xaf(500));
+
+        assertAmount(0, floatAccount.snapshot().balance().solde());
+    }
+
+    @Test
+    void should_keep_the_reserved_amount_through_a_snapshot() {
+        Account wallet = walletWith(1000);
+        wallet.reserve(xaf(300));
+
+        assertAmount(700, Account.createFromSnapshot(wallet.snapshot()).available());
     }
 }
