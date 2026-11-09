@@ -2,3 +2,6 @@
 *.sh text eol=lf
 *.bat text eol=crlf
 *.jar binary
+
+# The React Native client lives in mobile/; keep it out of the repository language stats
+mobile/** linguist-detectable=false
