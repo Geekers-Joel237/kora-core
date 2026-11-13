@@ -624,7 +624,20 @@ is the standard response format for all errors.
 
 KORA Core uses [Conventional Commits](https://www.conventionalcommits.org/).
 
-Format: `<type>(<scope>): <description>`
+Format:
+
+```
+<type>(<scope>): <description>
+
+<optional body: why, not what>
+
+Refs: KC-<n>
+```
+
+Every commit names its backlog item in a `Refs:` footer (`docs/agile/product-backlog.md`).
+A breaking change to an HTTP contract carries `BREAKING CHANGE:` in the footer, which the
+release reads to bump the version. The `[#module] feature:` form used until November 2026
+is retired.
 
 ### Types
 
@@ -643,7 +656,8 @@ Format: `<type>(<scope>): <description>`
 
 Use the domain concept affected:
 
-`ledger`, `payment`, `auth`, `reconciliation`, `risk`, `provider`, `perf`, `infra`
+`ledger`, `payment`, `auth`, `shared`, `mobile`, `reconciliation`, `risk`, `provider`,
+`perf`, `infra`, `ci`, `release`, `agile`
 
 ### Examples
 
@@ -658,11 +672,13 @@ perf(payment): reduce DB round-trips on cashIn with batch insert
 
 ### Branch naming
 
+Git Flow prefixes only, with the backlog ID — see §8.2. The type of the work belongs to
+the commits, not to the branch.
+
 ```
-feat/payment-optimistic-locking
-fix/jwt-secret-alignment
-test/cash-out-e2e
-refactor/provider-orchestration
+feature/KC-23-supply-chain-scan
+hotfix/KC-31-reversal-ignores-result
+release/v0.4
 ```
 
 ## 8.2 Branch strategy
@@ -681,9 +697,12 @@ hotfix/*      Production fixes — branched from main, merged to main AND develo
 **`feature/*`**
 - Branch from: `develop`
 - Merge into: `develop` only
-- Naming: `feature/<scope>-<short-description>`
-  → `feature/payment-optimistic-locking`
-  → `feature/ledger-snapshot-support`
+- Carries one backlog item and merges within the sprint. A feature split over several
+  items is never kept on a long-lived branch: each item merges behind a release toggle
+  (`docs/agile/definition-of-done.md` D-30)
+- Naming: `feature/KC-<n>-<short-description>`
+  → `feature/KC-35-idempotency-store`
+  → `feature/KC-20-ci-pipeline`
 
 **`release/*`**
 - Branch from: `develop` when the milestone is feature-complete
@@ -697,8 +716,8 @@ hotfix/*      Production fixes — branched from main, merged to main AND develo
 **`hotfix/*`**
 - Branch from: `main`
 - Merge into: `main` AND `develop`
-- Naming: `hotfix/<short-description>`
-  → `hotfix/jwt-secret-alignment`
+- Naming: `hotfix/KC-<n>-<short-description>`
+  → `hotfix/KC-31-reversal-ignores-result`
 - Reserved for production incidents only — not for features disguised as fixes
 
 **`develop`**
@@ -711,9 +730,24 @@ hotfix/*      Production fixes — branched from main, merged to main AND develo
 - Every merge is tagged with a semantic version: `v0.1.0`, `v1.0.0`
 - Represents the current production-deployable state of the system
 
+### Two products, two release lines
+
+The API and the mobile app live in this repository but release independently, each from
+its own CI workflow (`docs/agile/README.md` §8):
+
+| | API | Mobile |
+|---|---|---|
+| Release branch | `release/api-v<major>.<minor>` | `release/mobile-v<major>.<minor>` |
+| Tag | `api/vX.Y.Z` | `mobile/vX.Y.Z` |
+| Version source | `build.gradle` | `mobile/package.json` |
+
+The API never breaks a released app: a contract change is additive, or versioned, and
+merges before the app that uses it.
+
 ### Semantic versioning
 
-`vMAJOR.MINOR.PATCH`
+`vMAJOR.MINOR.PATCH`, per product. The table below is the API's; the app bumps MINOR for
+a new user-facing capability and PATCH for a fix.
 
 | Bump | When |
 |---|---|

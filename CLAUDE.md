@@ -286,7 +286,12 @@ Deliberate and tracked. Do not raise them on a PR.
 
 - `ROADMAP.md` — 10-step evolution plan, authoritative numbering
 - `HELP.md` — engineering standards, DDD/SOLID rules, project conventions
-- `CONTRIBUTING.md` — configuration assignment and migration naming, both test-enforced
+- `CONTRIBUTING.md` — configuration assignment and migration naming, both test-enforced;
+  Git Flow branches and Conventional Commits, each bound to a `KC-<n>` backlog item
+- `docs/agile/` — delivery operating model: product backlog, sprints, Definition of Ready
+  and of Done, maker-checker with three keys. The refinement panel lives in
+  `.claude/agents/` (`refinement-*`, `qa-acceptance`); the ceremonies are the skills
+  `/refine`, `/accept`, `/sprint-planning`, `/sprint-review`, `/sprint-retro`, `/dod-check`
 - `docs/kora-core-state-of-view-v3.md` — review at `d28a6be`: what holds, what does
   not, ranked limits L-1 to L-15. Kept as written; a closed limit gets a dated note.
   `docs/kora-core-state-of-view-v2.md` is the Steps 2 and 3 retrospective and
