@@ -1,7 +1,6 @@
 package com.geekersjoel237.koracore.payment.adapters.out.persistence.entities;
 
 import com.geekersjoel237.koracore.payment.domain.enums.ResourceType;
-import com.geekersjoel237.koracore.payment.domain.model.Account;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -57,9 +56,9 @@ public class AccountEntity extends VersionedEntity {
     @Column(name = "is_blocked", nullable = false)
     private boolean isBlocked;
 
-    public void update(Account.Snapshot snapshot) {
-        this.setBalanceAmount(snapshot.balance().solde().value());
-        this.setBalanceCurrency(snapshot.balance().solde().currency());
-        this.setBlocked(snapshot.isBlocked());
+    public void update(BigDecimal balanceAmount, String balanceCurrency, boolean blocked) {
+        this.balanceAmount = balanceAmount;
+        this.balanceCurrency = balanceCurrency;
+        this.isBlocked = blocked;
     }
 }

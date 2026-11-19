@@ -1,12 +1,12 @@
 package com.geekersjoel237.koracore.payment.adapters.out.persistence;
 
+import com.geekersjoel237.koracore.payment.adapters.out.persistence.entities.AuthorizationRecordEntity;
+import com.geekersjoel237.koracore.payment.adapters.out.persistence.mapping.AuthorizationRecordPersistenceMapper;
+import com.geekersjoel237.koracore.payment.adapters.out.persistence.repository.SpringDataAuthorizationRecordRepository;
 import com.geekersjoel237.koracore.payment.domain.model.AuthorizationRecord;
 import com.geekersjoel237.koracore.payment.domain.model.AuthorizationRecord.AuthorizationStatus;
 import com.geekersjoel237.koracore.payment.ports.out.repository.AuthorizationRecordRepository;
-import com.geekersjoel237.koracore.shared.domain.vo.Amount;
 import com.geekersjoel237.koracore.shared.domain.vo.Id;
-import com.geekersjoel237.koracore.payment.adapters.out.persistence.entities.AuthorizationRecordEntity;
-import com.geekersjoel237.koracore.payment.adapters.out.persistence.repository.SpringDataAuthorizationRecordRepository;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
@@ -17,24 +17,22 @@ import java.util.Optional;
 public class JpaAuthorizationRecordRepository implements AuthorizationRecordRepository {
 
     private final SpringDataAuthorizationRecordRepository jpaRepository;
+    private final AuthorizationRecordPersistenceMapper mapper;
 
-    public JpaAuthorizationRecordRepository(SpringDataAuthorizationRecordRepository jpaRepository) {
+    public JpaAuthorizationRecordRepository(SpringDataAuthorizationRecordRepository jpaRepository,
+                                            AuthorizationRecordPersistenceMapper mapper) {
         this.jpaRepository = jpaRepository;
+        this.mapper = mapper;
     }
 
     @Override
     public void save(AuthorizationRecord record) {
-        AuthorizationRecord.Snapshot snap = record.snapshot();
-        String id = snap.id().value();
-
-        AuthorizationRecordEntity entity = jpaRepository.findById(id).orElse(null);
+        AuthorizationRecord.Snapshot snapshot = record.snapshot();
+        AuthorizationRecordEntity entity = jpaRepository.findById(snapshot.id().value()).orElse(null);
         if (entity == null) {
-            entity = toEntity(record);
+            entity = mapper.toEntity(snapshot);
         } else {
-            // Update the managed entity in place so its @Version is preserved.
-            // Merging a newly-built detached entity (version=null) into a managed one
-            // (version=N) causes Hibernate 6 to throw StaleObjectStateException immediately.
-            entity.setStatus(snap.status().name());
+            entity.update(snapshot.status().name());
         }
         jpaRepository.save(entity);
     }
@@ -55,30 +53,7 @@ public class JpaAuthorizationRecordRepository implements AuthorizationRecordRepo
                 .toList();
     }
 
-    private AuthorizationRecordEntity toEntity(AuthorizationRecord record) {
-        AuthorizationRecord.Snapshot snap = record.snapshot();
-        var entity = AuthorizationRecordEntity.builder()
-                .transactionId(snap.transactionId().value())
-                .providerReference(snap.providerReference())
-                .authorizedAmount(snap.authorizedAmount().value())
-                .currency(snap.authorizedAmount().currency())
-                .authorizedAt(snap.authorizedAt())
-                .expiresAt(snap.expiresAt())
-                .status(snap.status().name())
-                .build();
-        entity.setId(snap.id().value());
-        return entity;
-    }
-
     private AuthorizationRecord toDomain(AuthorizationRecordEntity entity) {
-        return AuthorizationRecord.createFromSnapshot(new AuthorizationRecord.Snapshot(
-                new Id(entity.getId()),
-                new Id(entity.getTransactionId()),
-                entity.getProviderReference(),
-                new Amount(entity.getAuthorizedAmount(), entity.getCurrency()),
-                entity.getAuthorizedAt(),
-                entity.getExpiresAt(),
-                AuthorizationStatus.valueOf(entity.getStatus())
-        ));
+        return AuthorizationRecord.createFromSnapshot(mapper.toSnapshot(entity));
     }
 }
