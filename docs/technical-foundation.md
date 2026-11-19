@@ -139,8 +139,11 @@ and a `mobile/**`-only PR shows this check green, not pending.
 - [ ] Tags `api/v*` and `mobile/v*` protected from deletion and moves.
 - [ ] The applied ruleset exported as JSON under `.github/rulesets/` and updated in the same
       PR as any settings change, so drift shows in history.
-- [ ] Merge queue on `develop` — *to verify*: GitHub offers it to organisation-owned
-      repositories; if the repository is user-owned, record the gap.
+- [ ] **Require branches to be up to date before merging.** The repository is user-owned,
+      and GitHub offers the merge queue to organisation-owned repositories only. Without a
+      queue, this rule is what guarantees that the checks ran against the exact result of
+      the merge, not against a stale base. Recorded gap: no batching of concurrent PRs —
+      acceptable with one maintainer; revisit if the repository moves to an organisation.
 
 *Done when* a direct push, a force-push and a deletion on `develop` and `main` are refused for
 the admin too, and an unsigned commit cannot merge.
