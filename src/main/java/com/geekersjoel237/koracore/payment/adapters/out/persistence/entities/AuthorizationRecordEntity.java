@@ -42,4 +42,8 @@ public class AuthorizationRecordEntity extends VersionedEntity {
 
     @Column(name = "status", nullable = false, length = 32)
     private String status;
+
+    public void update(String status) {
+        this.status = status;
+    }
 }

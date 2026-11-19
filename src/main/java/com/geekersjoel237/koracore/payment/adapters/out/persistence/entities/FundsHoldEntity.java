@@ -39,4 +39,9 @@ public class FundsHoldEntity extends VersionedEntity {
 
     @Column(name = "resolved_at")
     private Instant resolvedAt;
+
+    public void update(HoldStatus status, Instant resolvedAt) {
+        this.status = status;
+        this.resolvedAt = resolvedAt;
+    }
 }

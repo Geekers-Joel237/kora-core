@@ -58,4 +58,8 @@ public class TransactionEntity extends VersionedEntity {
     @JoinColumn(name = "transaction_id", insertable = false, updatable = false)
     @Builder.Default
     private List<LedgerEntryEntity> entries = new ArrayList<>();
+
+    public void update(String state) {
+        this.state = state;
+    }
 }
