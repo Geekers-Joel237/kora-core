@@ -49,7 +49,7 @@ observability stack and alerts (KC-45).
 
 | ID | Title | Epic | Product | Type | BV | TC | RR | Size | WSJF | Status |
 |---|---|---|---|---|---|---|---|---|---|---|
-| KC-24 | Git Flow guardrails: commit lint (Conventional Commits + `Refs: KC-<n>`), branch-name check, PR template with DoD checklist and the three keys, protection on `develop` and `main` | EPIC-DOD | both | enabler | 3 | 13 | 13 | 2 | 14.5 | New |
+| KC-24 | Git Flow guardrails: commit lint (Conventional Commits + `Refs: KC-<n>`), branch-name check, PR template with DoD checklist and the three keys, protection on `develop` and `main` — [refinement](refinements/KC-24.md) | EPIC-DOD | both | enabler | 3 | 13 | 13 | 4 | 7.3 | Refining (7 PO questions, split open) |
 | KC-20 | API CI: `.github/workflows/api-ci.yml`, path-filtered (everything but `mobile/**`), build with Testcontainers on every PR and on `develop` / `main` | EPIC-DOD | API | enabler | 5 | 13 | 20 | 3 | 12.7 | New |
 | KC-46 | Mobile CI: `.github/workflows/mobile-ci.yml`, path-filtered on `mobile/**`, `npm run verify` and `npm run audit`, independent of the API CI | EPIC-DOD | mobile | enabler | 3 | 8 | 13 | 2 | 12.0 | New |
 | KC-29 | Upgrade Spring Boot 4.0.3 → 4.0.8 (jackson-databind 2.20.2 CVEs) — KC-23 fails without it | EPIC-DOD | API | bug | 5 | 8 | 13 | 2 | 13.0 | New |
@@ -90,6 +90,9 @@ Next free ID: **KC-52**.
 ### Notes
 
 - KC-24, KC-20 and KC-46 come first: without them nothing else in the DoD is enforceable.
+- KC-20 and KC-46 (from the KC-24 refinement): a path-filtered workflow made a required
+  check stays "Expected" on a PR outside its paths and blocks the merge; each must always
+  report, with the path filter inside the job.
 - KC-21 sits above higher-WSJF items because D-9 to D-11 are the baseline every later PR
   is measured against; delaying it lets coverage drift before the floor is recorded.
 - KC-47 sits high for the same reason: until it lands, QA acceptance runs by hand.

@@ -678,7 +678,8 @@ the commits, not to the branch.
 ```
 feature/KC-23-supply-chain-scan
 hotfix/KC-31-reversal-ignores-result
-release/v0.4
+release/api-v0.4
+release/mobile-v0.2
 ```
 
 ## 8.2 Branch strategy
@@ -707,9 +708,10 @@ hotfix/*      Production fixes — branched from main, merged to main AND develo
 **`release/*`**
 - Branch from: `develop` when the milestone is feature-complete
 - Merge into: `main` AND `develop`
-- Naming: `release/v<major>.<minor>`
-  → `release/v0.1` (Step 0 complete)
-  → `release/v1.0` (Step 1 complete)
+- Naming: `release/api-v<major>.<minor>` or `release/mobile-v<major>.<minor>`, one
+  release line per product (see *Two products, two release lines* below)
+  → `release/api-v0.4`
+  → `release/mobile-v0.2`
 - Only bugfixes, documentation, and version bumps are allowed on this branch
 - No new features
 
@@ -727,7 +729,8 @@ hotfix/*      Production fixes — branched from main, merged to main AND develo
 
 **`main`**
 - Protected — no direct commits, merges only
-- Every merge is tagged with a semantic version: `v0.1.0`, `v1.0.0`
+- Every release merge is tagged with the product and its semantic version: `api/v0.4.0`,
+  `mobile/v0.2.0`
 - Represents the current production-deployable state of the system
 
 ### Two products, two release lines
@@ -755,10 +758,10 @@ a new user-facing capability and PATCH for a fix.
 | `MINOR` | New roadmap step completed (Step 0 → Step 1) |
 | `PATCH` | Bugfix or hotfix |
 
-Step 0 complete → `v0.1.0`  
-Step 1 complete → `v0.2.0`  
-Hotfix on Step 1 → `v0.2.1`  
-Microservice extraction (Step 7) → `v1.0.0`
+Step 0 complete → `api/v0.1.0`  
+Step 1 complete → `api/v0.2.0`  
+Hotfix on Step 1 → `api/v0.2.1`  
+Microservice extraction (Step 7) → `api/v1.0.0`
 
 ---
 
