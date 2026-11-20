@@ -1,9 +1,9 @@
 package com.geekersjoel237.koracore.payment.unit.application;
 
-import com.geekersjoel237.koracore.payment.application.command.CashInCommand;
-import com.geekersjoel237.koracore.payment.application.command.CashOutCommand;
-import com.geekersjoel237.koracore.payment.application.command.ReversePaymentCommand;
-import com.geekersjoel237.koracore.payment.application.command.TransferCommand;
+import com.geekersjoel237.koracore.payment.application.command.cashIn.CashInCommand;
+import com.geekersjoel237.koracore.payment.application.command.cashOut.CashOutCommand;
+import com.geekersjoel237.koracore.payment.application.command.reversePayment.ReversePaymentCommand;
+import com.geekersjoel237.koracore.payment.application.command.transfer.TransferCommand;
 import com.geekersjoel237.koracore.payment.domain.enums.PaymentMethod;
 import com.geekersjoel237.koracore.payment.domain.enums.LedgerEntryType;
 import com.geekersjoel237.koracore.payment.domain.enums.ProviderOperationType;
@@ -47,7 +47,7 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.List;
 import com.geekersjoel237.koracore.shared.domain.vo.Pin;
-import com.geekersjoel237.koracore.payment.application.result.PaymentResult;
+import com.geekersjoel237.koracore.payment.application.command.cashOut.CashOutResult;
 import com.geekersjoel237.koracore.payment.application.query.balance.BalanceResult;
 import com.geekersjoel237.koracore.payment.ports.in.CashInCommandHandler;
 import com.geekersjoel237.koracore.payment.ports.in.CashOutCommandHandler;
@@ -116,8 +116,8 @@ class PaymentUseCaseTest {
         return PhoneNumber.of("+237", "600000001");
     }
 
-    private Transaction persisted(PaymentResult result) {
-        return transactionRepo.findById(new Id(result.transactionId())).orElseThrow();
+    private Transaction persisted(String transactionId) {
+        return transactionRepo.findById(new Id(transactionId)).orElseThrow();
     }
 
     private static PhoneNumber phoneNumberB() {
@@ -205,14 +205,14 @@ class PaymentUseCaseTest {
     @Test
     void should_complete_cash_in_when_provider_succeeds() {
         CashInCommand cmd = new CashInCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD);
-        PaymentResult result = cashIn.execute(cmd);
+        var result = cashIn.execute(cmd);
 
         assertEquals(COMPLETED.name(), result.state());
-        assertEquals(2, persisted(result).snapshot().entries().size());
+        assertEquals(2, persisted(result.transactionId()).snapshot().entries().size());
         assertEquals(1, transactionRepo.count());
 
         List<TrxStateHistoric> history =
-                persisted(result).history();
+                persisted(result.transactionId()).history();
         assertEquals(6, history.size());
         assertNull(                                history.get(0).snapshot().oldState());
         assertEquals("INITIALIZED",               history.get(0).snapshot().newState());
@@ -238,13 +238,13 @@ class PaymentUseCaseTest {
     void should_fail_cash_in_and_keep_balance_unchanged_when_provider_fails() {
         provider.setBehavior(FAIL);
         CashInCommand cmd = new CashInCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD);
-        PaymentResult result = cashIn.execute(cmd);
+        var result = cashIn.execute(cmd);
 
         assertEquals(AUTHORIZATION_FAILED.name(), result.state());
-        assertEquals(0, persisted(result).snapshot().entries().size());
+        assertEquals(0, persisted(result.transactionId()).snapshot().entries().size());
 
         List<TrxStateHistoric> history =
-                persisted(result).history();
+                persisted(result.transactionId()).history();
         assertEquals(2, history.size());
         assertNull(history.get(0).snapshot().oldState());
         assertEquals("INITIALIZED",          history.get(0).snapshot().newState());
@@ -294,7 +294,7 @@ class PaymentUseCaseTest {
     void should_complete_cash_out_when_provider_succeeds() {
         cashIn.execute(new CashInCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
 
-        PaymentResult result = cashOut.execute(
+        var result = cashOut.execute(
                 new CashOutCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_5K, PAYMENT_METHOD));
 
         assertEquals(COMPLETED.name(), result.state());
@@ -309,7 +309,7 @@ class PaymentUseCaseTest {
         cashIn.execute(new CashInCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
         provider.setBehavior(FAIL);
 
-        PaymentResult result = cashOut.execute(
+        var result = cashOut.execute(
                 new CashOutCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_5K, PAYMENT_METHOD));
 
         assertEquals(AUTHORIZATION_FAILED.name(), result.state());
@@ -341,7 +341,7 @@ class PaymentUseCaseTest {
         cashIn.execute(new CashInCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
         provider.reset();
 
-        PaymentResult result = transfer.execute(new TransferCommand(Id.generate(), 
+        var result = transfer.execute(new TransferCommand(Id.generate(), 
                 CUST_ID_A, RAW_PIN, AMOUNT_5K, phoneNumberB()));
 
         assertEquals(COMPLETED.name(), result.state());
@@ -380,13 +380,13 @@ class PaymentUseCaseTest {
         preloadCustomerB();
         cashIn.execute(new CashInCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
 
-        PaymentResult result = transfer.execute(new TransferCommand(Id.generate(), 
+        var result = transfer.execute(new TransferCommand(Id.generate(), 
                 CUST_ID_A, RAW_PIN, AMOUNT_5K, phoneNumberB()));
 
         assertEquals(COMPLETED.name(), result.state());
 
         List<TrxStateHistoric> history =
-                persisted(result).history();
+                persisted(result.transactionId()).history();
         assertEquals(6, history.size());
         assertNull(                         history.get(0).snapshot().oldState());
         assertEquals("INITIALIZED",         history.get(0).snapshot().newState());
@@ -476,7 +476,7 @@ class PaymentUseCaseTest {
 
         @Test
         void should_debit_customer_and_restore_zero_balance_when_cash_in_reversed() {
-            PaymentResult result = cashIn.execute(
+            var result = cashIn.execute(
                     new CashInCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
 
             Account before = accountRepo.findByCustomerId(CUST_ID_A).orElseThrow();
@@ -492,7 +492,7 @@ class PaymentUseCaseTest {
         @Test
         void should_credit_customer_and_restore_original_balance_when_cash_out_reversed() {
             cashIn.execute(new CashInCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
-            PaymentResult cashOutResult = cashOut.execute(
+            var cashOutResult = cashOut.execute(
                     new CashOutCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_5K, PAYMENT_METHOD));
 
             Account midway = accountRepo.findByCustomerId(CUST_ID_A).orElseThrow();
@@ -509,7 +509,7 @@ class PaymentUseCaseTest {
         void should_credit_sender_and_debit_receiver_when_p2p_reversed() {
             preloadCustomerB();
             cashIn.execute(new CashInCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
-            PaymentResult transferResult = transfer.execute(new TransferCommand(Id.generate(), 
+            var transferResult = transfer.execute(new TransferCommand(Id.generate(), 
                     CUST_ID_A, RAW_PIN, AMOUNT_5K, phoneNumberB()));
 
             reversePayment.execute(new ReversePaymentCommand(
@@ -525,7 +525,7 @@ class PaymentUseCaseTest {
 
         @Test
         void double_entry_invariant_holds_across_cash_in_and_reversal() {
-            PaymentResult result = cashIn.execute(
+            var result = cashIn.execute(
                     new CashInCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
 
             reversePayment.execute(new ReversePaymentCommand(
@@ -536,7 +536,7 @@ class PaymentUseCaseTest {
 
         @Test
         void should_throw_invalid_state_transition_when_reversing_already_reversed_transaction() {
-            PaymentResult result = cashIn.execute(
+            var result = cashIn.execute(
                     new CashInCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
 
             reversePayment.execute(new ReversePaymentCommand(
@@ -566,7 +566,7 @@ class PaymentUseCaseTest {
             holdRepo.save(FundsHold.place(Id.generate(), walletA(), amount));
         }
 
-        private PaymentResult cashOut(Amount amount) {
+        private CashOutResult cashOut(Amount amount) {
             return cashOut.execute(new CashOutCommand(Id.generate(), CUST_ID_A, RAW_PIN, amount, PAYMENT_METHOD));
         }
 
@@ -577,7 +577,7 @@ class PaymentUseCaseTest {
 
         @Test
         void a_completed_cash_out_leaves_no_active_hold() {
-            PaymentResult result = cashOut(AMOUNT_5K);
+            var result = cashOut(AMOUNT_5K);
 
             assertEquals(COMPLETED.name(), result.state());
             assertTrue(AMOUNT_ZERO.equals(heldOnWalletA()));
@@ -587,7 +587,7 @@ class PaymentUseCaseTest {
         void a_cash_out_refused_at_authorization_releases_its_hold() {
             provider.setBehavior(FAIL);
 
-            PaymentResult result = cashOut(AMOUNT_5K);
+            var result = cashOut(AMOUNT_5K);
 
             assertEquals(AUTHORIZATION_FAILED.name(), result.state());
             assertTrue(AMOUNT_ZERO.equals(heldOnWalletA()));
@@ -632,7 +632,7 @@ class PaymentUseCaseTest {
 
         @Test
         void a_reversal_cannot_take_back_funds_held_by_an_in_flight_debit() {
-            PaymentResult deposit = cashIn.execute(
+            var deposit = cashIn.execute(
                     new CashInCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
             holdOnWalletA(Amount.of(BigDecimal.valueOf(15_000), "XAF"));
 
@@ -680,11 +680,11 @@ class PaymentUseCaseTest {
         void a_cash_in_whose_authorization_times_out_is_unknown() {
             provider.setBehavior(TIMEOUT_ON_AUTHORIZE);
 
-            PaymentResult result = cashIn.execute(
+            var result = cashIn.execute(
                     new CashInCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_5K, PAYMENT_METHOD));
 
             assertEquals(UNKNOWN.name(), result.state());
-            assertEquals(UNKNOWN, persisted(result).snapshot().state());
+            assertEquals(UNKNOWN, persisted(result.transactionId()).snapshot().state());
             assertTrue(AMOUNT_10K.equals(balanceOfWalletA()));
         }
 
@@ -692,11 +692,11 @@ class PaymentUseCaseTest {
         void a_cash_out_whose_authorization_times_out_is_unknown_and_keeps_its_hold() {
             provider.setBehavior(TIMEOUT_ON_AUTHORIZE);
 
-            PaymentResult result = cashOut.execute(
+            var result = cashOut.execute(
                     new CashOutCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_5K, PAYMENT_METHOD));
 
             assertEquals(UNKNOWN.name(), result.state());
-            assertEquals(UNKNOWN, persisted(result).snapshot().state());
+            assertEquals(UNKNOWN, persisted(result.transactionId()).snapshot().state());
             assertTrue(AMOUNT_10K.equals(balanceOfWalletA()));
             assertTrue(AMOUNT_5K.equals(heldOnWalletA()));
         }
@@ -705,11 +705,11 @@ class PaymentUseCaseTest {
         void a_cash_in_whose_capture_times_out_is_unknown_and_keeps_the_provider_reference() {
             provider.setBehavior(TIMEOUT_ON_CAPTURE);
 
-            PaymentResult result = cashIn.execute(
+            var result = cashIn.execute(
                     new CashInCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_5K, PAYMENT_METHOD));
 
             assertEquals(UNKNOWN.name(), result.state());
-            assertEquals(UNKNOWN, persisted(result).snapshot().state());
+            assertEquals(UNKNOWN, persisted(result.transactionId()).snapshot().state());
             assertTrue(AMOUNT_10K.equals(balanceOfWalletA()));
             assertEquals(provider.lastAuthorizationReference(),
                     activeAuthorization(new Id(result.transactionId())).snapshot().providerReference());
@@ -719,11 +719,11 @@ class PaymentUseCaseTest {
         void a_cash_out_whose_capture_times_out_is_unknown_keeps_its_hold_and_the_provider_reference() {
             provider.setBehavior(TIMEOUT_ON_CAPTURE);
 
-            PaymentResult result = cashOut.execute(
+            var result = cashOut.execute(
                     new CashOutCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_5K, PAYMENT_METHOD));
 
             assertEquals(UNKNOWN.name(), result.state());
-            assertEquals(UNKNOWN, persisted(result).snapshot().state());
+            assertEquals(UNKNOWN, persisted(result.transactionId()).snapshot().state());
             assertTrue(AMOUNT_10K.equals(balanceOfWalletA()));
             assertTrue(AMOUNT_5K.equals(heldOnWalletA()));
             assertEquals(provider.lastAuthorizationReference(),
@@ -735,7 +735,7 @@ class PaymentUseCaseTest {
             Id transactionId = authorizedCashOut(AMOUNT_5K);
             provider.setBehavior(TIMEOUT_ON_REVERSE);
 
-            PaymentResult result = reversePayment.execute(new ReversePaymentCommand(
+            var result = reversePayment.execute(new ReversePaymentCommand(
                     transactionId, new Id("op-001"), "OPERATOR", "customer dispute", Id.generate()));
 
             assertEquals(UNKNOWN.name(), result.state());

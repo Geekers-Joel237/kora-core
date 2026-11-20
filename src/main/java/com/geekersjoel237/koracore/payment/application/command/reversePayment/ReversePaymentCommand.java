@@ -1,7 +1,7 @@
-package com.geekersjoel237.koracore.payment.application.command;
+package com.geekersjoel237.koracore.payment.application.command.reversePayment;
 
 import com.geekersjoel237.koracore.shared.application.cqrs.Command;
-import com.geekersjoel237.koracore.payment.application.result.PaymentResult;
+import com.geekersjoel237.koracore.payment.application.command.reversePayment.ReversePaymentResult;
 import com.geekersjoel237.koracore.shared.domain.vo.Id;
 
 public record ReversePaymentCommand(
@@ -9,5 +9,5 @@ public record ReversePaymentCommand(
         Id actorId,
         String actorRole,
         String reason,
-        Id correlationId) implements Command<PaymentResult> {
+        Id correlationId) implements Command<ReversePaymentResult> {
 }

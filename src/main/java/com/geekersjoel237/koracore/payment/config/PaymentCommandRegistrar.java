@@ -1,10 +1,10 @@
 package com.geekersjoel237.koracore.payment.config;
 
-import com.geekersjoel237.koracore.payment.application.command.CashInCommand;
-import com.geekersjoel237.koracore.payment.application.command.ExpireAuthorizationsCommand;
-import com.geekersjoel237.koracore.payment.application.command.CashOutCommand;
-import com.geekersjoel237.koracore.payment.application.command.ReversePaymentCommand;
-import com.geekersjoel237.koracore.payment.application.command.TransferCommand;
+import com.geekersjoel237.koracore.payment.application.command.cashIn.CashInCommand;
+import com.geekersjoel237.koracore.payment.application.command.expireAuthorizations.ExpireAuthorizationsCommand;
+import com.geekersjoel237.koracore.payment.application.command.cashOut.CashOutCommand;
+import com.geekersjoel237.koracore.payment.application.command.reversePayment.ReversePaymentCommand;
+import com.geekersjoel237.koracore.payment.application.command.transfer.TransferCommand;
 import com.geekersjoel237.koracore.payment.ports.in.CashInCommandHandler;
 import com.geekersjoel237.koracore.payment.ports.in.ExpireAuthorizationsCommandHandler;
 import com.geekersjoel237.koracore.payment.ports.in.CashOutCommandHandler;

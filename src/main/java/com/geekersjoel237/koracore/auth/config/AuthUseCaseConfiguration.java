@@ -2,11 +2,11 @@ package com.geekersjoel237.koracore.auth.config;
 
 import com.geekersjoel237.koracore.auth.adapters.out.otp.MailedOtpChallenge;
 import com.geekersjoel237.koracore.auth.adapters.out.security.CustomerPinVerifier;
-import com.geekersjoel237.koracore.auth.application.usecases.LoginService;
-import com.geekersjoel237.koracore.auth.application.usecases.LogoutService;
-import com.geekersjoel237.koracore.auth.application.usecases.RefreshTokensService;
-import com.geekersjoel237.koracore.auth.application.usecases.RegisterService;
-import com.geekersjoel237.koracore.auth.application.usecases.VerifyOtpService;
+import com.geekersjoel237.koracore.auth.application.command.login.LoginService;
+import com.geekersjoel237.koracore.auth.application.command.logout.LogoutService;
+import com.geekersjoel237.koracore.auth.application.command.refreshTokens.RefreshTokensService;
+import com.geekersjoel237.koracore.auth.application.command.register.RegisterService;
+import com.geekersjoel237.koracore.auth.application.command.verifyOtp.VerifyOtpService;
 import com.geekersjoel237.koracore.auth.ports.in.LoginCommandHandler;
 import com.geekersjoel237.koracore.auth.ports.in.LogoutCommandHandler;
 import com.geekersjoel237.koracore.auth.ports.in.RefreshTokensCommandHandler;

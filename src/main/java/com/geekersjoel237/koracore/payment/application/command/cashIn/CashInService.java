@@ -1,10 +1,10 @@
-package com.geekersjoel237.koracore.payment.application.usecases;
+package com.geekersjoel237.koracore.payment.application.command.cashIn;
 
 import com.geekersjoel237.koracore.auth.domain.exception.CustomerNotFoundException;
 import com.geekersjoel237.koracore.auth.domain.model.Customer;
 import com.geekersjoel237.koracore.auth.ports.out.repository.CustomerRepository;
-import com.geekersjoel237.koracore.payment.application.command.CashInCommand;
-import com.geekersjoel237.koracore.payment.application.result.PaymentResult;
+import com.geekersjoel237.koracore.payment.application.command.cashIn.CashInCommand;
+import com.geekersjoel237.koracore.payment.application.command.cashIn.CashInResult;
 import com.geekersjoel237.koracore.payment.domain.SystemConstants;
 import com.geekersjoel237.koracore.payment.domain.enums.ProviderOperationType;
 import com.geekersjoel237.koracore.payment.domain.enums.TransactionType;
@@ -60,7 +60,7 @@ public final class CashInService implements CashInCommandHandler {
     }
 
     @Override
-    public PaymentResult execute(CashInCommand cmd) {
+    public CashInResult execute(CashInCommand cmd) {
         Id correlationId = cmd.correlationId();
 
         pinVerifier.verify(cmd.customerId(), cmd.pin());
@@ -111,7 +111,7 @@ public final class CashInService implements CashInCommandHandler {
         return new Initiated(tx.snapshot().transactionId(), customer.snapshot().phoneNumber());
     }
 
-    private PaymentResult settle(Id transactionId, AuthorizationResult authorization, CashInCommand cmd) {
+    private CashInResult settle(Id transactionId, AuthorizationResult authorization, CashInCommand cmd) {
         Transaction tx = reload(transactionId);
         Account wallet = accountRepository.findByCustomerIdForUpdate(cmd.customerId())
                 .orElseThrow(() -> new AccountNotFoundException(
@@ -135,18 +135,18 @@ public final class CashInService implements CashInCommandHandler {
 
         flushHistorySince(tx);
         transactionRepository.save(tx);
-        return PaymentResult.of(tx);
+        return CashInResult.of(tx);
     }
 
-    private PaymentResult recordAuthorizationUnknown(Id transactionId) {
+    private CashInResult recordAuthorizationUnknown(Id transactionId) {
         Transaction tx = reload(transactionId);
         tx.markUnknown();
         flushHistorySince(tx);
         transactionRepository.save(tx);
-        return PaymentResult.of(tx);
+        return CashInResult.of(tx);
     }
 
-    private PaymentResult recordCaptureUnknown(Id transactionId, AuthorizationResult authorization, CashInCommand cmd) {
+    private CashInResult recordCaptureUnknown(Id transactionId, AuthorizationResult authorization, CashInCommand cmd) {
         Transaction tx = reload(transactionId);
         authorizationRecordRepository.save(AuthorizationRecord.create(
                 transactionId, authorization.providerReference(), cmd.amount(), AUTHORIZATION_TTL));
@@ -154,18 +154,18 @@ public final class CashInService implements CashInCommandHandler {
         tx.markUnknown();
         flushHistorySince(tx);
         transactionRepository.save(tx);
-        return PaymentResult.of(tx);
+        return CashInResult.of(tx);
     }
 
-    private PaymentResult failAuthorization(Id transactionId) {
+    private CashInResult failAuthorization(Id transactionId) {
         Transaction tx = reload(transactionId);
         tx.failAuthorization();
         flushHistorySince(tx);
         transactionRepository.save(tx);
-        return PaymentResult.of(tx);
+        return CashInResult.of(tx);
     }
 
-    private PaymentResult failCapture(Id transactionId, AuthorizationResult authorization, CashInCommand cmd) {
+    private CashInResult failCapture(Id transactionId, AuthorizationResult authorization, CashInCommand cmd) {
         Transaction tx = reload(transactionId);
 
         AuthorizationRecord record = AuthorizationRecord.create(
@@ -178,7 +178,7 @@ public final class CashInService implements CashInCommandHandler {
 
         flushHistorySince(tx);
         transactionRepository.save(tx);
-        return PaymentResult.of(tx);
+        return CashInResult.of(tx);
     }
 
     private Transaction reload(Id transactionId) {

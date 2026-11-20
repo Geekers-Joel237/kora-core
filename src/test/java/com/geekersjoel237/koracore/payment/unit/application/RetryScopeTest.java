@@ -1,10 +1,9 @@
 package com.geekersjoel237.koracore.payment.unit.application;
 
-import com.geekersjoel237.koracore.payment.application.command.CashInCommand;
+import com.geekersjoel237.koracore.payment.application.command.cashIn.CashInCommand;
 import com.geekersjoel237.koracore.shared.application.transaction.ConcurrentUpdateException;
 import com.geekersjoel237.koracore.payment.ports.in.CashInCommandHandler;
 import com.geekersjoel237.koracore.shared.ports.out.transaction.TransactionBoundary;
-import com.geekersjoel237.koracore.payment.application.result.PaymentResult;
 import com.geekersjoel237.koracore.payment.domain.SystemConstants;
 import com.geekersjoel237.koracore.payment.domain.enums.PaymentMethod;
 import com.geekersjoel237.koracore.auth.domain.enums.Role;
@@ -64,7 +63,7 @@ class RetryScopeTest {
                 new InMemoryLedgerRepository(Ledger.create(Id.generate())),
                 new InMemoryAuthorizationRecordRepository(), pinEncoder);
 
-        PaymentResult result = cashIn.execute(new CashInCommand(Id.generate(), 
+        var result = cashIn.execute(new CashInCommand(Id.generate(), 
                 CUSTOMER, PIN, Amount.of(BigDecimal.valueOf(10000), "XAF"),
                 PaymentMethod.ORANGE_MONEY));
 

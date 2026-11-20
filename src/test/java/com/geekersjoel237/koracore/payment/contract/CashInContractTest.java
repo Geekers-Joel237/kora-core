@@ -2,8 +2,8 @@ package com.geekersjoel237.koracore.payment.contract;
 
 import com.geekersjoel237.koracore.auth.domain.exception.PinValidationException;
 import com.geekersjoel237.koracore.payment.adapters.in.rest.api.cashIn.CashInAction;
-import com.geekersjoel237.koracore.payment.application.command.CashInCommand;
-import com.geekersjoel237.koracore.payment.application.result.PaymentResult;
+import com.geekersjoel237.koracore.payment.application.command.cashIn.CashInCommand;
+import com.geekersjoel237.koracore.payment.application.command.cashIn.CashInResult;
 import com.geekersjoel237.koracore.payment.domain.enums.PaymentMethod;
 import com.geekersjoel237.koracore.payment.domain.exception.AccountBlockedException;
 import com.geekersjoel237.koracore.payment.domain.exception.AccountNotFoundException;
@@ -139,8 +139,8 @@ class CashInContractTest {
         return post(mvc, "/payments/cash-in", token, body);
     }
 
-    private static PaymentResult result(String state) {
-        return new PaymentResult(
+    private static CashInResult result(String state) {
+        return new CashInResult(
                 "55555555-5555-5555-5555-555555555555",
                 "TRX-20261119-B4E02D3E",
                 state,

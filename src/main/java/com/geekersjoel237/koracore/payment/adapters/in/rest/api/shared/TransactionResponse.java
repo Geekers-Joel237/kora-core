@@ -1,6 +1,10 @@
 package com.geekersjoel237.koracore.payment.adapters.in.rest.api.shared;
 
-import com.geekersjoel237.koracore.payment.application.result.PaymentResult;
+import com.geekersjoel237.koracore.payment.application.command.cashIn.CashInResult;
+import com.geekersjoel237.koracore.payment.application.command.cashOut.CashOutResult;
+import com.geekersjoel237.koracore.payment.application.command.reversePayment.ReversePaymentResult;
+import com.geekersjoel237.koracore.payment.application.command.transfer.TransferResult;
+import com.geekersjoel237.koracore.shared.domain.vo.Amount;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.math.BigDecimal;
@@ -20,13 +24,23 @@ public record TransactionResponse(
         @Schema(requiredMode = REQUIRED, description = "ISO 4217 code")
         String currency
 ) {
-    public static TransactionResponse from(PaymentResult result) {
-        return new TransactionResponse(
-                result.transactionId(),
-                result.transactionNumber(),
-                result.state(),
-                result.amount().value(),
-                result.amount().currency()
-        );
+    public static TransactionResponse from(CashInResult result) {
+        return of(result.transactionId(), result.transactionNumber(), result.state(), result.amount());
+    }
+
+    public static TransactionResponse from(CashOutResult result) {
+        return of(result.transactionId(), result.transactionNumber(), result.state(), result.amount());
+    }
+
+    public static TransactionResponse from(TransferResult result) {
+        return of(result.transactionId(), result.transactionNumber(), result.state(), result.amount());
+    }
+
+    public static TransactionResponse from(ReversePaymentResult result) {
+        return of(result.transactionId(), result.transactionNumber(), result.state(), result.amount());
+    }
+
+    private static TransactionResponse of(String transactionId, String transactionNumber, String state, Amount amount) {
+        return new TransactionResponse(transactionId, transactionNumber, state, amount.value(), amount.currency());
     }
 }

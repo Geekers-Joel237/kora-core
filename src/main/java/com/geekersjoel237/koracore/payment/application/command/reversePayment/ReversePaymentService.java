@@ -1,8 +1,8 @@
-package com.geekersjoel237.koracore.payment.application.usecases;
+package com.geekersjoel237.koracore.payment.application.command.reversePayment;
 
-import com.geekersjoel237.koracore.payment.application.command.ReversePaymentCommand;
+import com.geekersjoel237.koracore.payment.application.command.reversePayment.ReversePaymentCommand;
 import com.geekersjoel237.koracore.payment.ports.in.ReversePaymentCommandHandler;
-import com.geekersjoel237.koracore.payment.application.result.PaymentResult;
+import com.geekersjoel237.koracore.payment.application.command.reversePayment.ReversePaymentResult;
 import com.geekersjoel237.koracore.payment.domain.enums.TriggerSource;
 import com.geekersjoel237.koracore.payment.domain.exception.AccountNotFoundException;
 import com.geekersjoel237.koracore.payment.domain.exception.InvalidStateTransitionException;
@@ -62,7 +62,7 @@ public final class ReversePaymentService implements ReversePaymentCommandHandler
     }
 
     @Override
-    public PaymentResult execute(ReversePaymentCommand cmd) {
+    public ReversePaymentResult execute(ReversePaymentCommand cmd) {
         if (cmd.reason() == null || cmd.reason().isBlank())
             throw new IllegalArgumentException("Reason is required for reversal");
 
@@ -93,7 +93,7 @@ public final class ReversePaymentService implements ReversePaymentCommandHandler
         throw new InvalidStateTransitionException(state, TransactionState.REVERSED);
     }
 
-    private PaymentResult recordRelease(ReversePaymentCommand cmd) {
+    private ReversePaymentResult recordRelease(ReversePaymentCommand cmd) {
         Transaction tx = reload(cmd.transactionId());
 
         AuthorizationRecord record = activeAuthorization(cmd.transactionId());
@@ -107,19 +107,19 @@ public final class ReversePaymentService implements ReversePaymentCommandHandler
         tx.reverse();
         recordTransition(cmd, tx, TransactionState.AUTHORIZED);
         transactionRepository.save(tx);
-        return PaymentResult.of(tx);
+        return ReversePaymentResult.of(tx);
     }
 
-    private PaymentResult recordReversalUnknown(ReversePaymentCommand cmd) {
+    private ReversePaymentResult recordReversalUnknown(ReversePaymentCommand cmd) {
         Transaction tx = reload(cmd.transactionId());
         TransactionState from = tx.snapshot().state();
         tx.markUnknown();
         recordTransition(cmd, tx, from);
         transactionRepository.save(tx);
-        return PaymentResult.of(tx);
+        return ReversePaymentResult.of(tx);
     }
 
-    private PaymentResult compensate(ReversePaymentCommand cmd) {
+    private ReversePaymentResult compensate(ReversePaymentCommand cmd) {
         Transaction tx = reload(cmd.transactionId());
         TransactionState state = tx.snapshot().state();
         if (!isPosted(state))
@@ -135,7 +135,7 @@ public final class ReversePaymentService implements ReversePaymentCommandHandler
         tx.reverse();
         recordTransition(cmd, tx, state);
         transactionRepository.save(tx);
-        return PaymentResult.of(tx);
+        return ReversePaymentResult.of(tx);
     }
 
     private Transaction reload(Id transactionId) {

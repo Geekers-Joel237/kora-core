@@ -1,6 +1,6 @@
-package com.geekersjoel237.koracore.auth.application.usecases;
+package com.geekersjoel237.koracore.auth.application.command.refreshTokens;
 
-import com.geekersjoel237.koracore.auth.application.command.RefreshTokensCommand;
+import com.geekersjoel237.koracore.auth.application.command.refreshTokens.RefreshTokensCommand;
 import com.geekersjoel237.koracore.auth.ports.in.RefreshTokensCommandHandler;
 import com.geekersjoel237.koracore.auth.ports.out.security.TokenIssuer;
 import com.geekersjoel237.koracore.auth.domain.exception.CustomerNotFoundException;

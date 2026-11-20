@@ -1,10 +1,10 @@
-package com.geekersjoel237.koracore.payment.application.usecases;
+package com.geekersjoel237.koracore.payment.application.command.transfer;
 
 import com.geekersjoel237.koracore.auth.domain.exception.CustomerNotFoundException;
 import com.geekersjoel237.koracore.auth.domain.model.Customer;
 import com.geekersjoel237.koracore.auth.ports.out.repository.CustomerRepository;
-import com.geekersjoel237.koracore.payment.application.command.TransferCommand;
-import com.geekersjoel237.koracore.payment.application.result.PaymentResult;
+import com.geekersjoel237.koracore.payment.application.command.transfer.TransferCommand;
+import com.geekersjoel237.koracore.payment.application.command.transfer.TransferResult;
 import com.geekersjoel237.koracore.payment.domain.enums.PaymentMethod;
 import com.geekersjoel237.koracore.payment.domain.enums.TransactionType;
 import com.geekersjoel237.koracore.payment.domain.exception.AccountBlockedException;
@@ -49,13 +49,13 @@ public final class TransferService implements TransferCommandHandler {
     }
 
     @Override
-    public PaymentResult execute(TransferCommand cmd) {
+    public TransferResult execute(TransferCommand cmd) {
         pinVerifier.verify(cmd.customerId(), cmd.pin());
 
         return retry.execute(() -> boundary.execute(() -> move(cmd)));
     }
 
-    private PaymentResult move(TransferCommand cmd) {
+    private TransferResult move(TransferCommand cmd) {
         Account payerAccount = lockPayerWallet(cmd.customerId());
         Account payeeAccount = lockPayeeWallet(cmd.recipient());
 
@@ -77,7 +77,7 @@ public final class TransferService implements TransferCommandHandler {
 
         tx.history().subList(1, tx.history().size()).forEach(trxHistoricStatesRepository::save);
         transactionRepository.save(tx);
-        return PaymentResult.of(tx);
+        return TransferResult.of(tx);
     }
 
     private Account lockPayerWallet(com.geekersjoel237.koracore.shared.domain.vo.Id customerId) {

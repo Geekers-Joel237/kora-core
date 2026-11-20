@@ -7,7 +7,7 @@ import com.geekersjoel237.koracore.payment.application.query.history.Transaction
 import com.geekersjoel237.koracore.payment.application.query.history.TransactionKind;
 import com.geekersjoel237.koracore.payment.application.query.history.TransactionRow;
 import com.geekersjoel237.koracore.payment.application.query.history.TransactionSummary;
-import com.geekersjoel237.koracore.payment.application.usecases.TransactionHistoryService;
+import com.geekersjoel237.koracore.payment.application.query.history.TransactionHistoryService;
 import com.geekersjoel237.koracore.payment.domain.enums.CustomerStatus;
 import com.geekersjoel237.koracore.payment.domain.enums.PaymentMethod;
 import com.geekersjoel237.koracore.payment.domain.enums.TransactionType;

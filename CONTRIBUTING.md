@@ -50,7 +50,7 @@ kora-core/
 │   ├── main/java/com/geekersjoel237/koracore/
 │   │   └── <module>/           # auth · payment · shared
 │   │       ├── domain/         # model, model/state, vo, enums, exception
-│   │       ├── application/    # usecases, command, query, result
+│   │       ├── application/    # command/<intent>, query/<intent>
 │   │       ├── ports/          # in (driving) · out (driven)
 │   │       ├── adapters/       # in (REST, bus) · out (JPA, JDBC, provider, mail)
 │   │       └── config/         # the composition root
@@ -558,7 +558,7 @@ owns what neither may claim — and `shared` may name neither of the other two.
 Then: **which layer?**
 
 - *Does it depend on Spring or any external library?* → `adapters/`
-- *Is it a use case?* → `application/usecases/`
+- *Is it a use case?* → `application/command/<intent>/` or `application/query/<intent>/`, beside its command or query
 - *Is it an interface the use case needs?* → `ports/out/`, or `ports/in` if it is the
   use case's own entry point
 - *Is it a business rule?* → `domain/`

@@ -1,6 +1,6 @@
-package com.geekersjoel237.koracore.payment.application.usecases;
+package com.geekersjoel237.koracore.payment.application.command.expireAuthorizations;
 
-import com.geekersjoel237.koracore.payment.application.command.ExpireAuthorizationsCommand;
+import com.geekersjoel237.koracore.payment.application.command.expireAuthorizations.ExpireAuthorizationsCommand;
 import com.geekersjoel237.koracore.payment.ports.in.ExpireAuthorizationsCommandHandler;
 import com.geekersjoel237.koracore.payment.domain.enums.TriggerSource;
 import com.geekersjoel237.koracore.payment.domain.model.AuthorizationRecord;

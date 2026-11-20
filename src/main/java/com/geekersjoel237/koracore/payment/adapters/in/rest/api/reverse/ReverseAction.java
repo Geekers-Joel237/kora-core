@@ -2,7 +2,7 @@ package com.geekersjoel237.koracore.payment.adapters.in.rest.api.reverse;
 
 import com.geekersjoel237.koracore.payment.adapters.in.rest.api.shared.TransactionResponse;
 import com.geekersjoel237.koracore.payment.adapters.in.rest.mapping.PaymentRequestMapper;
-import com.geekersjoel237.koracore.payment.application.result.PaymentResult;
+import com.geekersjoel237.koracore.payment.application.command.reversePayment.ReversePaymentResult;
 import com.geekersjoel237.koracore.shared.ports.in.CommandBus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
@@ -20,7 +20,7 @@ public class ReverseAction implements ReverseApi {
 
     @Override
     public ResponseEntity<TransactionResponse> reverse(String txId, ReverseRequest request, String correlationId) {
-        PaymentResult result = bus.dispatch(mapper.toCommand(request, txId));
+        ReversePaymentResult result = bus.dispatch(mapper.toCommand(request, txId));
         return ResponseEntity.ok(TransactionResponse.from(result));
     }
 }

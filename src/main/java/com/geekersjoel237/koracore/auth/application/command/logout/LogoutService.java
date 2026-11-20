@@ -1,6 +1,6 @@
-package com.geekersjoel237.koracore.auth.application.usecases;
+package com.geekersjoel237.koracore.auth.application.command.logout;
 
-import com.geekersjoel237.koracore.auth.application.command.LogoutCommand;
+import com.geekersjoel237.koracore.auth.application.command.logout.LogoutCommand;
 import com.geekersjoel237.koracore.auth.ports.in.LogoutCommandHandler;
 import com.geekersjoel237.koracore.auth.ports.out.security.TokenIssuer;
 import com.geekersjoel237.koracore.shared.ports.out.transaction.TransactionBoundary;

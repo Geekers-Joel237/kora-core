@@ -1,7 +1,7 @@
-package com.geekersjoel237.koracore.auth.application.usecases;
+package com.geekersjoel237.koracore.auth.application.command.login;
 
 import com.geekersjoel237.koracore.auth.domain.enums.OtpPurpose;
-import com.geekersjoel237.koracore.auth.application.command.LoginCommand;
+import com.geekersjoel237.koracore.auth.application.command.login.LoginCommand;
 import com.geekersjoel237.koracore.auth.ports.in.LoginCommandHandler;
 import com.geekersjoel237.koracore.auth.ports.out.otp.OtpChallenge;
 import com.geekersjoel237.koracore.auth.domain.exception.CustomerNotFoundException;

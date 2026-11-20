@@ -2,7 +2,7 @@ package com.geekersjoel237.koracore.payment.adapters.in.rest.api.cashIn;
 
 import com.geekersjoel237.koracore.payment.adapters.in.rest.api.shared.TransactionResponse;
 import com.geekersjoel237.koracore.payment.adapters.in.rest.mapping.PaymentRequestMapper;
-import com.geekersjoel237.koracore.payment.application.result.PaymentResult;
+import com.geekersjoel237.koracore.payment.application.command.cashIn.CashInResult;
 import com.geekersjoel237.koracore.shared.ports.in.CommandBus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
@@ -20,7 +20,7 @@ public class CashInAction implements CashInApi {
 
     @Override
     public ResponseEntity<TransactionResponse> cashIn(String customerId, CashInRequest request, String correlationId) {
-        PaymentResult result = bus.dispatch(mapper.toCommand(request, customerId, correlationId));
+        CashInResult result = bus.dispatch(mapper.toCommand(request, customerId, correlationId));
         return ResponseEntity.ok(TransactionResponse.from(result));
     }
 }

@@ -150,12 +150,12 @@ class HexagonalArchitectureTest {
                 .isEqualTo(FRAMEWORK_ALLOW_LIST);
     }
 
-    // Composition roots are exempt by construction: they live in config/, not application/usecases/.
+    // Composition roots are exempt by construction: they live in config/, not in an intent folder.
     @Test
     void no_interactor_depends_on_another_interactor() {
         List<String> chained = interactors()
                 .flatMap(file -> ourImports(file).stream()
-                        .filter(line -> line.contains(".application.usecases."))
+                        .filter(line -> line.matches(".*\\.application\\.(command|query)\\.\\w+\\.\\w+Service;"))
                         .map(line -> relative(file) + "  ->  " + line))
                 .toList();
 
@@ -237,7 +237,8 @@ class HexagonalArchitectureTest {
     }
 
     private Stream<Path> interactors() {
-        return filesUnder("application", "usecases");
+        return filesUnderAny(new String[]{"application", "command"}, new String[]{"application", "query"})
+                .filter(file -> file.getFileName().toString().endsWith("Service.java"));
     }
 
     private Stream<Path> frameworkFreeLayers() {

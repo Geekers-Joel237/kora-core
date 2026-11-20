@@ -1,4 +1,4 @@
-package com.geekersjoel237.koracore.payment.application.usecases;
+package com.geekersjoel237.koracore.payment.application.query.history;
 
 import com.geekersjoel237.koracore.payment.application.query.history.HistoryCriteria;
 import com.geekersjoel237.koracore.payment.application.query.history.HistoryFilter;

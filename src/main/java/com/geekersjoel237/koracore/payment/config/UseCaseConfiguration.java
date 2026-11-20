@@ -9,12 +9,12 @@ import com.geekersjoel237.koracore.payment.ports.in.TransferCommandHandler;
 import com.geekersjoel237.koracore.payment.ports.out.security.PinVerifier;
 import com.geekersjoel237.koracore.shared.ports.out.transaction.TransactionBoundary;
 import com.geekersjoel237.koracore.shared.application.transaction.RetryPolicy;
-import com.geekersjoel237.koracore.payment.application.usecases.CashInService;
-import com.geekersjoel237.koracore.payment.application.usecases.CashOutService;
-import com.geekersjoel237.koracore.payment.application.usecases.ExpireAuthorizationsService;
-import com.geekersjoel237.koracore.payment.application.usecases.BalanceService;
-import com.geekersjoel237.koracore.payment.application.usecases.ReversePaymentService;
-import com.geekersjoel237.koracore.payment.application.usecases.TransferService;
+import com.geekersjoel237.koracore.payment.application.command.cashIn.CashInService;
+import com.geekersjoel237.koracore.payment.application.command.cashOut.CashOutService;
+import com.geekersjoel237.koracore.payment.application.command.expireAuthorizations.ExpireAuthorizationsService;
+import com.geekersjoel237.koracore.payment.application.query.balance.BalanceService;
+import com.geekersjoel237.koracore.payment.application.command.reversePayment.ReversePaymentService;
+import com.geekersjoel237.koracore.payment.application.command.transfer.TransferService;
 import com.geekersjoel237.koracore.payment.ports.out.query.ReadAccountRepository;
 import com.geekersjoel237.koracore.payment.ports.out.query.ReadTransactionRepository;
 import com.geekersjoel237.koracore.payment.ports.out.repository.AccountRepository;
@@ -31,7 +31,7 @@ import org.springframework.context.annotation.Configuration;
 
 import java.time.ZoneId;
 import com.geekersjoel237.koracore.payment.ports.in.TransactionHistoryQueryHandler;
-import com.geekersjoel237.koracore.payment.application.usecases.TransactionHistoryService;
+import com.geekersjoel237.koracore.payment.application.query.history.TransactionHistoryService;
 
 
 @Configuration

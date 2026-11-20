@@ -1,7 +1,7 @@
 package com.geekersjoel237.koracore.auth.unit.application;
 
-import com.geekersjoel237.koracore.auth.application.command.RefreshTokensCommand;
-import com.geekersjoel237.koracore.auth.application.usecases.RefreshTokensService;
+import com.geekersjoel237.koracore.auth.application.command.refreshTokens.RefreshTokensCommand;
+import com.geekersjoel237.koracore.auth.application.command.refreshTokens.RefreshTokensService;
 import com.geekersjoel237.koracore.auth.domain.enums.Role;
 import com.geekersjoel237.koracore.auth.domain.exception.CustomerNotFoundException;
 import com.geekersjoel237.koracore.auth.domain.exception.InvalidTokenException;

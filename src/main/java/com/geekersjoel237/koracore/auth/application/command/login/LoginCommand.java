@@ -1,4 +1,4 @@
-package com.geekersjoel237.koracore.auth.application.command;
+package com.geekersjoel237.koracore.auth.application.command.login;
 
 import com.geekersjoel237.koracore.shared.domain.vo.Pin;
 import com.geekersjoel237.koracore.shared.application.cqrs.Command;

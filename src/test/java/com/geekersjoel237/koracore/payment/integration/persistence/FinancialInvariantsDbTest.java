@@ -1,7 +1,7 @@
 package com.geekersjoel237.koracore.payment.integration.persistence;
 
-import com.geekersjoel237.koracore.payment.application.command.CashInCommand;
-import com.geekersjoel237.koracore.payment.application.command.CashOutCommand;
+import com.geekersjoel237.koracore.payment.application.command.cashIn.CashInCommand;
+import com.geekersjoel237.koracore.payment.application.command.cashOut.CashOutCommand;
 import com.geekersjoel237.koracore.payment.ports.in.CashInCommandHandler;
 import com.geekersjoel237.koracore.payment.ports.in.CashOutCommandHandler;
 import com.geekersjoel237.koracore.payment.domain.enums.PaymentMethod;
@@ -22,7 +22,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 import java.math.BigDecimal;
 import com.geekersjoel237.koracore.shared.domain.vo.Pin;
-import com.geekersjoel237.koracore.payment.application.result.PaymentResult;
 import com.geekersjoel237.koracore.shared.integration.persistence.AbstractRepositoryTest;
 import com.geekersjoel237.koracore.payment.config.DataInitializer;
 
@@ -82,7 +81,7 @@ class FinancialInvariantsDbTest extends AbstractRepositoryTest {
     @Test
     void each_cash_in_transaction_has_exactly_two_operations() {
         SetupResult ctx = setup("inv2@example.com", "07000000102");
-        PaymentResult result = cashInCommandHandler.execute(
+        var result = cashInCommandHandler.execute(
                 new CashInCommand(Id.generate(), ctx.customerId(), Pin.of("1234"), CASH_IN_AMOUNT, PaymentMethod.ORANGE_MONEY));
         em.flush();
 

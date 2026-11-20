@@ -1,7 +1,7 @@
-package com.geekersjoel237.koracore.auth.application.usecases;
+package com.geekersjoel237.koracore.auth.application.command.register;
 
 import com.geekersjoel237.koracore.auth.domain.enums.OtpPurpose;
-import com.geekersjoel237.koracore.auth.application.command.RegisterCommand;
+import com.geekersjoel237.koracore.auth.application.command.register.RegisterCommand;
 import com.geekersjoel237.koracore.auth.ports.in.RegisterCommandHandler;
 import com.geekersjoel237.koracore.auth.ports.out.otp.OtpChallenge;
 import com.geekersjoel237.koracore.auth.domain.enums.Role;

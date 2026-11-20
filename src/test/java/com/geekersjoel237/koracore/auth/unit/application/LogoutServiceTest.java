@@ -1,7 +1,7 @@
 package com.geekersjoel237.koracore.auth.unit.application;
 
-import com.geekersjoel237.koracore.auth.application.command.LogoutCommand;
-import com.geekersjoel237.koracore.auth.application.usecases.LogoutService;
+import com.geekersjoel237.koracore.auth.application.command.logout.LogoutCommand;
+import com.geekersjoel237.koracore.auth.application.command.logout.LogoutService;
 import com.geekersjoel237.koracore.auth.domain.enums.Role;
 import com.geekersjoel237.koracore.auth.domain.exception.InvalidTokenException;
 import com.geekersjoel237.koracore.auth.domain.model.User;

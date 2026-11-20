@@ -2,8 +2,8 @@ package com.geekersjoel237.koracore.payment.contract;
 
 import com.geekersjoel237.koracore.auth.domain.exception.PinValidationException;
 import com.geekersjoel237.koracore.payment.adapters.in.rest.api.cashOut.CashOutAction;
-import com.geekersjoel237.koracore.payment.application.command.CashOutCommand;
-import com.geekersjoel237.koracore.payment.application.result.PaymentResult;
+import com.geekersjoel237.koracore.payment.application.command.cashOut.CashOutCommand;
+import com.geekersjoel237.koracore.payment.application.command.cashOut.CashOutResult;
 import com.geekersjoel237.koracore.payment.domain.enums.PaymentMethod;
 import com.geekersjoel237.koracore.payment.domain.exception.AccountNotFoundException;
 import com.geekersjoel237.koracore.payment.domain.exception.InsufficientFundsException;
@@ -168,8 +168,8 @@ class CashOutContractTest {
         return post(mvc, "/payments/cash-out", token, body);
     }
 
-    private static PaymentResult result(String state) {
-        return new PaymentResult(
+    private static CashOutResult result(String state) {
+        return new CashOutResult(
                 "44444444-4444-4444-4444-444444444444",
                 "TRX-20261119-A3F91C2D",
                 state,

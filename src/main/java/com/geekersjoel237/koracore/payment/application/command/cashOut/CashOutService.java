@@ -1,10 +1,10 @@
-package com.geekersjoel237.koracore.payment.application.usecases;
+package com.geekersjoel237.koracore.payment.application.command.cashOut;
 
 import com.geekersjoel237.koracore.auth.domain.exception.CustomerNotFoundException;
 import com.geekersjoel237.koracore.auth.domain.model.Customer;
 import com.geekersjoel237.koracore.auth.ports.out.repository.CustomerRepository;
-import com.geekersjoel237.koracore.payment.application.command.CashOutCommand;
-import com.geekersjoel237.koracore.payment.application.result.PaymentResult;
+import com.geekersjoel237.koracore.payment.application.command.cashOut.CashOutCommand;
+import com.geekersjoel237.koracore.payment.application.command.cashOut.CashOutResult;
 import com.geekersjoel237.koracore.payment.domain.SystemConstants;
 import com.geekersjoel237.koracore.payment.domain.enums.ProviderOperationType;
 import com.geekersjoel237.koracore.payment.domain.enums.TransactionType;
@@ -62,7 +62,7 @@ public final class CashOutService implements CashOutCommandHandler {
     }
 
     @Override
-    public PaymentResult execute(CashOutCommand cmd) {
+    public CashOutResult execute(CashOutCommand cmd) {
         Id correlationId = cmd.correlationId();
 
         pinVerifier.verify(cmd.customerId(), cmd.pin());
@@ -115,7 +115,7 @@ public final class CashOutService implements CashOutCommandHandler {
         return new Initiated(tx.snapshot().transactionId(), customer.snapshot().phoneNumber());
     }
 
-    private PaymentResult settle(Id transactionId, AuthorizationResult authorization, CashOutCommand cmd) {
+    private CashOutResult settle(Id transactionId, AuthorizationResult authorization, CashOutCommand cmd) {
         Transaction tx = reload(transactionId);
         Account wallet = accountRepository.findByCustomerIdForUpdate(cmd.customerId())
                 .orElseThrow(() -> new AccountNotFoundException(
@@ -144,18 +144,18 @@ public final class CashOutService implements CashOutCommandHandler {
 
         flushHistorySince(tx);
         transactionRepository.save(tx);
-        return PaymentResult.of(tx);
+        return CashOutResult.of(tx);
     }
 
-    private PaymentResult recordAuthorizationUnknown(Id transactionId) {
+    private CashOutResult recordAuthorizationUnknown(Id transactionId) {
         Transaction tx = reload(transactionId);
         tx.markUnknown();
         flushHistorySince(tx);
         transactionRepository.save(tx);
-        return PaymentResult.of(tx);
+        return CashOutResult.of(tx);
     }
 
-    private PaymentResult recordCaptureUnknown(Id transactionId, AuthorizationResult authorization, CashOutCommand cmd) {
+    private CashOutResult recordCaptureUnknown(Id transactionId, AuthorizationResult authorization, CashOutCommand cmd) {
         Transaction tx = reload(transactionId);
         authorizationRecordRepository.save(AuthorizationRecord.create(
                 transactionId, authorization.providerReference(), cmd.amount(), AUTHORIZATION_TTL));
@@ -163,19 +163,19 @@ public final class CashOutService implements CashOutCommandHandler {
         tx.markUnknown();
         flushHistorySince(tx);
         transactionRepository.save(tx);
-        return PaymentResult.of(tx);
+        return CashOutResult.of(tx);
     }
 
-    private PaymentResult failAuthorization(Id transactionId) {
+    private CashOutResult failAuthorization(Id transactionId) {
         Transaction tx = reload(transactionId);
         tx.failAuthorization();
         releaseHold(tx);
         flushHistorySince(tx);
         transactionRepository.save(tx);
-        return PaymentResult.of(tx);
+        return CashOutResult.of(tx);
     }
 
-    private PaymentResult failCapture(Id transactionId, AuthorizationResult authorization, CashOutCommand cmd) {
+    private CashOutResult failCapture(Id transactionId, AuthorizationResult authorization, CashOutCommand cmd) {
         Transaction tx = reload(transactionId);
 
         AuthorizationRecord record = AuthorizationRecord.create(
@@ -189,7 +189,7 @@ public final class CashOutService implements CashOutCommandHandler {
 
         flushHistorySince(tx);
         transactionRepository.save(tx);
-        return PaymentResult.of(tx);
+        return CashOutResult.of(tx);
     }
 
     private void releaseHold(Transaction tx) {

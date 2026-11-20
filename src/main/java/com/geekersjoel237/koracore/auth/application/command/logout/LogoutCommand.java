@@ -1,4 +1,4 @@
-package com.geekersjoel237.koracore.auth.application.command;
+package com.geekersjoel237.koracore.auth.application.command.logout;
 
 import com.geekersjoel237.koracore.auth.domain.vo.RefreshToken;
 import com.geekersjoel237.koracore.shared.application.cqrs.Command;

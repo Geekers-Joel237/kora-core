@@ -61,7 +61,7 @@ application.
 | Layer | Package | May depend on |
 |---|---|---|
 | Domain | `<module>/domain/` — `model`, `model/state`, `vo`, `enums`, `exception` | JDK and `shared/domain` only |
-| Application | `<module>/application/` — `usecases`, `command`, and what the module needs: `query` and `result` in payment, `mail` in auth, `cqrs` and `transaction` in shared | domain + ports |
+| Application | `<module>/application/` — `command/<intent>/` and `query/<intent>/`, nothing else; `cqrs` and `transaction` in shared, the kernel | domain + ports |
 | Ports | `<module>/ports/in`, `<module>/ports/out` | domain + application |
 | Adapters | `<module>/adapters/in/**`, `<module>/adapters/out/**` | everything inward |
 | Config | `<module>/config/` | everything — it is the composition root |
@@ -71,7 +71,24 @@ not a JSON binding. `HexagonalArchitectureTest` collects every import that is ne
 JDK nor ours and asserts the set equals `FRAMEWORK_ALLOW_LIST`, which is empty. Adding
 an entry costs a line there and the sentence that justifies it.
 
-Interactors are plain classes wired by hand in `config/`. Every use case is
+The application layer is organised by business intent, command or query side first
+(CQS today, CQRS later). An intent folder holds everything the intent is:
+
+```
+<module>/application/
+├── command/<intent>/   XCommand · XService · XResult (when the command returns one)
+└── query/<intent>/     XQuery · XService · XResult · the read model it needs
+```
+
+`payment/application/command/cashOut/` holds `CashOutCommand`, `CashOutService` and
+`CashOutResult`; each money command has its own result, even while they are alike. The
+`*Service` is the application service — the use case — and implements the intent's driving
+port in `<module>/ports/in` (`CashOutCommandHandler`). The layout is a convention today;
+Java module rules and ArchUnit will enforce it when the packages become modules (roadmap
+Step 2). `shared/application` is the kernel — CQS contracts and the transaction boundary —
+and is not organised by intent.
+
+Application services are plain classes wired by hand in `config/`. Every use case is
 instantiable in one line, with no container.
 
 MapStruct maps at two boundaries, both in adapters, and nowhere else:
@@ -179,8 +196,8 @@ Assertions to apply to a diff. Each one is decidable by reading the diff alone.
     domain state, arithmetic, or repository access is a defect — it may only build a
     command through its module's `*RequestMapper` (or a query), delegate, and map the
     result. Naming more than one driving port is a defect too.
-12. An interactor in `<module>/application/usecases/` that imports another interactor,
-    or a second driving port, is a defect.
+12. An application service in `<module>/application/{command,query}/<intent>/` that imports
+    another application service, or a second driving port, is a defect.
 13. A command, port, or domain type accepting a raw `String` where a domain type
     exists (`Id`, `Amount`, `PaymentMethod`, `PhoneNumber`, `Pin`) is a
     defect. Conversion happens once, at the web edge: a command is built by the module's

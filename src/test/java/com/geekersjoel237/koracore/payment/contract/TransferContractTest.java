@@ -2,8 +2,8 @@ package com.geekersjoel237.koracore.payment.contract;
 
 import com.geekersjoel237.koracore.auth.domain.exception.PinValidationException;
 import com.geekersjoel237.koracore.payment.adapters.in.rest.api.transfer.TransferAction;
-import com.geekersjoel237.koracore.payment.application.command.TransferCommand;
-import com.geekersjoel237.koracore.payment.application.result.PaymentResult;
+import com.geekersjoel237.koracore.payment.application.command.transfer.TransferCommand;
+import com.geekersjoel237.koracore.payment.application.command.transfer.TransferResult;
 import com.geekersjoel237.koracore.payment.domain.exception.AccountNotFoundException;
 import com.geekersjoel237.koracore.payment.domain.exception.InsufficientFundsException;
 import com.geekersjoel237.koracore.payment.domain.exception.SelfTransferException;
@@ -142,8 +142,8 @@ class TransferContractTest {
         return post(mvc, "/payments/transfer", token, body);
     }
 
-    private static PaymentResult result() {
-        return new PaymentResult(
+    private static TransferResult result() {
+        return new TransferResult(
                 "66666666-6666-6666-6666-666666666666",
                 "TRX-20261119-C5F13E4F",
                 "COMPLETED",

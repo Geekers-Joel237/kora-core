@@ -1,10 +1,10 @@
 package com.geekersjoel237.koracore.payment.unit.application;
 
-import com.geekersjoel237.koracore.payment.application.command.CashInCommand;
+import com.geekersjoel237.koracore.payment.application.command.cashIn.CashInCommand;
 import com.geekersjoel237.koracore.payment.ports.out.security.PinVerifier;
 import com.geekersjoel237.koracore.shared.ports.out.transaction.TransactionBoundary;
 import com.geekersjoel237.koracore.payment.ports.in.CashInCommandHandler;
-import com.geekersjoel237.koracore.payment.application.usecases.CashInService;
+import com.geekersjoel237.koracore.payment.application.command.cashIn.CashInService;
 import com.geekersjoel237.koracore.payment.domain.enums.PaymentMethod;
 import com.geekersjoel237.koracore.auth.domain.exception.PinValidationException;
 import com.geekersjoel237.koracore.payment.domain.model.Ledger;

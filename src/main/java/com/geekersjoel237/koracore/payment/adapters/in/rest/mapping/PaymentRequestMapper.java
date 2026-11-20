@@ -4,10 +4,10 @@ import com.geekersjoel237.koracore.payment.adapters.in.rest.api.cashIn.CashInReq
 import com.geekersjoel237.koracore.payment.adapters.in.rest.api.cashOut.CashOutRequest;
 import com.geekersjoel237.koracore.payment.adapters.in.rest.api.reverse.ReverseRequest;
 import com.geekersjoel237.koracore.payment.adapters.in.rest.api.transfer.TransferRequest;
-import com.geekersjoel237.koracore.payment.application.command.CashInCommand;
-import com.geekersjoel237.koracore.payment.application.command.CashOutCommand;
-import com.geekersjoel237.koracore.payment.application.command.ReversePaymentCommand;
-import com.geekersjoel237.koracore.payment.application.command.TransferCommand;
+import com.geekersjoel237.koracore.payment.application.command.cashIn.CashInCommand;
+import com.geekersjoel237.koracore.payment.application.command.cashOut.CashOutCommand;
+import com.geekersjoel237.koracore.payment.application.command.reversePayment.ReversePaymentCommand;
+import com.geekersjoel237.koracore.payment.application.command.transfer.TransferCommand;
 import com.geekersjoel237.koracore.shared.adapters.in.rest.mapping.RequestMapperConfig;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;

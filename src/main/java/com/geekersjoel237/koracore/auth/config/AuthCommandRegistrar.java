@@ -1,10 +1,10 @@
 package com.geekersjoel237.koracore.auth.config;
 
-import com.geekersjoel237.koracore.auth.application.command.LoginCommand;
-import com.geekersjoel237.koracore.auth.application.command.LogoutCommand;
-import com.geekersjoel237.koracore.auth.application.command.RefreshTokensCommand;
-import com.geekersjoel237.koracore.auth.application.command.RegisterCommand;
-import com.geekersjoel237.koracore.auth.application.command.VerifyOtpCommand;
+import com.geekersjoel237.koracore.auth.application.command.login.LoginCommand;
+import com.geekersjoel237.koracore.auth.application.command.logout.LogoutCommand;
+import com.geekersjoel237.koracore.auth.application.command.refreshTokens.RefreshTokensCommand;
+import com.geekersjoel237.koracore.auth.application.command.register.RegisterCommand;
+import com.geekersjoel237.koracore.auth.application.command.verifyOtp.VerifyOtpCommand;
 import com.geekersjoel237.koracore.auth.ports.in.LoginCommandHandler;
 import com.geekersjoel237.koracore.auth.ports.in.LogoutCommandHandler;
 import com.geekersjoel237.koracore.auth.ports.in.RefreshTokensCommandHandler;

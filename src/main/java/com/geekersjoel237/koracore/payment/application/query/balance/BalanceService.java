@@ -1,4 +1,4 @@
-package com.geekersjoel237.koracore.payment.application.usecases;
+package com.geekersjoel237.koracore.payment.application.query.balance;
 
 import com.geekersjoel237.koracore.payment.application.query.balance.BalanceQuery;
 import com.geekersjoel237.koracore.payment.application.query.balance.BalanceResult;

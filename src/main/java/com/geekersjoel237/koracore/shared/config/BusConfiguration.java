@@ -41,7 +41,7 @@ public class BusConfiguration {
         Set<Class<?>> declared = new HashSet<>();
         for (BeanDefinition definition : scanner.findCandidateComponents(SCAN_ROOT)) {
             String name = definition.getBeanClassName();
-            if (name == null || !name.substring(0, name.lastIndexOf('.')).endsWith(COMMAND_HOME))
+            if (name == null || !intentHomeOf(name).endsWith(COMMAND_HOME))
                 continue;
             try {
                 declared.add(Class.forName(name));
@@ -50,6 +50,11 @@ public class BusConfiguration {
             }
         }
         return declared;
+    }
+
+    private static String intentHomeOf(String className) {
+        String intentPackage = className.substring(0, className.lastIndexOf('.'));
+        return intentPackage.substring(0, intentPackage.lastIndexOf('.'));
     }
 
     @Bean

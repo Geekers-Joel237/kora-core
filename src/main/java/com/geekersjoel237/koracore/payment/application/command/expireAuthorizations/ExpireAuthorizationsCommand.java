@@ -1,4 +1,4 @@
-package com.geekersjoel237.koracore.payment.application.command;
+package com.geekersjoel237.koracore.payment.application.command.expireAuthorizations;
 
 import com.geekersjoel237.koracore.shared.application.cqrs.Command;
 import com.geekersjoel237.koracore.shared.domain.vo.Id;

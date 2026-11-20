@@ -5,11 +5,11 @@ import com.geekersjoel237.koracore.auth.adapters.in.rest.api.logout.LogoutReques
 import com.geekersjoel237.koracore.auth.adapters.in.rest.api.refreshToken.RefreshRequest;
 import com.geekersjoel237.koracore.auth.adapters.in.rest.api.register.RegisterRequest;
 import com.geekersjoel237.koracore.auth.adapters.in.rest.api.verifyOtp.VerifyOtpRequest;
-import com.geekersjoel237.koracore.auth.application.command.LoginCommand;
-import com.geekersjoel237.koracore.auth.application.command.LogoutCommand;
-import com.geekersjoel237.koracore.auth.application.command.RefreshTokensCommand;
-import com.geekersjoel237.koracore.auth.application.command.RegisterCommand;
-import com.geekersjoel237.koracore.auth.application.command.VerifyOtpCommand;
+import com.geekersjoel237.koracore.auth.application.command.login.LoginCommand;
+import com.geekersjoel237.koracore.auth.application.command.logout.LogoutCommand;
+import com.geekersjoel237.koracore.auth.application.command.refreshTokens.RefreshTokensCommand;
+import com.geekersjoel237.koracore.auth.application.command.register.RegisterCommand;
+import com.geekersjoel237.koracore.auth.application.command.verifyOtp.VerifyOtpCommand;
 import com.geekersjoel237.koracore.shared.adapters.in.rest.mapping.RequestMapperConfig;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
