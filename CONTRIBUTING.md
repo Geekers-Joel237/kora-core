@@ -109,18 +109,23 @@ cp .env.example .env
 Docker Compose can consume. It is versioned; `.env` is not, and must never be
 committed.
 
-Then generate your own JWT signing keys — one per token use, two separate runs —
-and put them in `.env` as `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET`:
+Every password and secret in `.env.example` is the command that generates it, in angle
+brackets: `<openssl rand -hex 16>`, `<openssl rand -base64 48>`. Run each command and put
+its output in `.env` — one run per value, so no two values are the same. That includes
+the JWT signing keys, one per token use, as `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET`:
 
 ```bash
-openssl rand -base64 48
+openssl rand -hex 16       # each database and pgAdmin password
+openssl rand -base64 48    # each JWT signing key
 ```
 
 > **Security note**: each key must be at least 32 characters — HMAC-SHA256
 > rejects anything shorter — and the two must differ. `SecurityProperties`
-> refuses to start on either violation.
-> The placeholder shipped in `.env.example` is deliberately non-functional.
-> Never commit a real secret; use a secrets manager outside local development.
+> refuses to start on either violation, so an untouched copy of `.env.example`,
+> whose two keys are the same placeholder, does not start.
+> `ConfigurationHygieneTest` fails the build if an example value is anything but
+> such a placeholder. Never commit a real secret; use a secrets manager outside local
+> development.
 
 ### 3.2 Start the infrastructure services
 
