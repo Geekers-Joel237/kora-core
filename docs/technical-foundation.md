@@ -14,6 +14,11 @@ analysis beyond the architecture tests, no dependency scan. Already in place and
 `MigrationNamingConventionTest`, `ConfigurationHygieneTest`, self-redacting `Pin` /
 `PhoneNumber` / `OtpCode`, secrets without fallback.
 
+Added since, on `feature/api-contract-tests`: a fourth test level, **contract**, on the
+payment journey — 57 tests, no database — with the published
+`api-contract/payments.openapi.json` held to them (§14), and MapStruct at both edges, with
+unmapped fields failing the build.
+
 Coverage baseline measured on 2026-11-13 at `f7cf39d` (JaCoCo through a temporary init script):
 all suites **91.9 % lines / 83.9 % branches**; unit suite alone 52.9 / 62.6, with `domain` at
 93.1 / 83.4 and `auth/application` at **30.0 / 0**.
@@ -282,8 +287,25 @@ the admin too, and an unsigned commit cannot merge.
 
 ### 14. API contract — machine-checked
 
-- [ ] springdoc generates `openapi.json` in the build; the file is **committed** under
-      `api-contract/`, so every contract change is a visible diff.
+A layer of the Definition of Done in its own right: a change to a status, a content type
+or a body field of the API is a reviewed diff, or the build fails.
+
+- [x] **Contract tests on the payment journey** — cash-in, cash-out, transfer, balance,
+      history. The real web layer, security filter chain and exception handlers; the use
+      cases replaced by programmable doubles; tokens from the real issuer. Each case
+      compared, status, content type and body, to a committed file under
+      `src/test/resources/contracts/`; a difference writes `*.received.json` and fails.
+      `TestPyramidTest` knows the level and forbids a database or a server on it.
+- [x] **The published spec is committed**, `api-contract/payments.openapi.json`, and compared
+      to `/v3/api-docs` on every build. Its declared responses must **equal** the ones the
+      contract tests observe — an undeclared status and an untested declared one both fail.
+- [ ] **The operator reversal, end to end**: `POST /admin/payments/{txId}/reverse` under
+      contract and in the published spec, and its correlation id taken from the
+      `X-Correlation-Id` header it declares rather than from the body. Deliberately left for
+      later, as one piece.
+- [ ] Contract tests for `/auth/**`: `auth` is exempt from the contract level today, by
+      decision, in `TestPyramidTest`.
+- [ ] The spec published for the whole API, not only the payment journey.
 - [ ] **oasdiff** in the API pipeline: a breaking change (removed field, narrowed type, new
       required parameter, changed status) fails unless the PR carries the label
       `breaking-change` and a versioned rollout.

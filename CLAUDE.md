@@ -27,8 +27,9 @@ exist. Load tests: `perf/*.js`, run via `perf/*-run.sh`.
 
 ## 3. Stack
 
-Java 21 · Spring Boot 4.0.3 · PostgreSQL + Flyway · springdoc-openapi 3.0.1 · jjwt 0.12.6 · Lombok · JUnit 5 + Testcontainers 1.20.4.
+Java 21 · Spring Boot 4.0.3 · PostgreSQL + Flyway · springdoc-openapi 3.0.1 · jjwt 0.12.6 · Lombok · MapStruct 1.6.3 (+ `lombok-mapstruct-binding`) · JUnit 5 + Testcontainers 1.20.4.
 Starters: webmvc, data-jpa, data-jdbc, security, validation, mail, actuator, flyway.
+Test starters: test, testcontainers, webmvc-test and security-test — the web slice of the contract level.
 
 ## 4. Modules & layers
 
@@ -312,6 +313,10 @@ Deliberate and tracked. Do not raise them on a PR.
 - Expired `refresh_tokens` rows are never purged.
 - Two concurrent exchanges of the same refresh token count as a replay and end the
   session. The mobile client sends one refresh at a time (`mobile/docs/06-architecture.md`).
+- The operator reversal, `POST /admin/payments/{txId}/reverse`, is outside the contract
+  level and outside `api-contract/payments.openapi.json`, and `ReverseAction` takes the
+  correlation id from the request body, ignoring the `X-Correlation-Id` header it declares.
+  Its full journey is revisited as one piece later (`docs/technical-foundation.md` §14).
 
 ## 10. Key files
 
