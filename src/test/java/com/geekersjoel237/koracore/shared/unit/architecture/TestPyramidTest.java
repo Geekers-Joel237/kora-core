@@ -19,7 +19,8 @@ class TestPyramidTest {
             Path.of("src", "test", "java", "com", "geekersjoel237", "koracore");
 
     private static final Set<String> MODULES = Set.of("auth", "payment", "shared");
-    private static final Set<String> LEVELS = Set.of("unit", "integration", "e2e");
+    private static final Set<String> LEVELS = Set.of("unit", "integration", "contract", "e2e");
+    private static final Set<String> MODULES_WITHOUT_CONTRACTS = Set.of("auth");
 
     @Test
     void every_test_declares_a_level() {
@@ -30,7 +31,7 @@ class TestPyramidTest {
                 .toList();
 
         assertThat(misplaced)
-                .describedAs("a test class lives under <module>/{unit,integration,e2e}/…")
+                .describedAs("a test class lives under <module>/{unit,integration,contract,e2e}/…")
                 .isEmpty();
     }
 
@@ -43,7 +44,7 @@ class TestPyramidTest {
                 .toList();
 
         assertThat(strays)
-                .describedAs("only unit, integration and e2e sit directly under a module")
+                .describedAs("only unit, integration, contract and e2e sit directly under a module")
                 .isEmpty();
     }
 
@@ -57,6 +58,19 @@ class TestPyramidTest {
 
         assertThat(offenders)
                 .describedAs("unit tests run with no context, no container, no database")
+                .isEmpty();
+    }
+
+    @Test
+    void nothing_on_the_contract_level_reaches_a_database_or_a_server() {
+        List<String> offenders = filesOnLevel("contract")
+                .filter(file -> mentionsAny(read(file),
+                        "@SpringBootTest", "@DataJpaTest", "@Testcontainers", "PostgreSQLContainer",
+                        "KoraPostgres", "RANDOM_PORT", "DEFINED_PORT", "TestRestTemplate", "@LocalServerPort"))
+                .map(TestPyramidTest::relative)
+                .toList();
+        assertThat(offenders)
+                .describedAs("a contract test stops at the driving ports: web slice only, no database, no server")
                 .isEmpty();
     }
 
@@ -78,9 +92,10 @@ class TestPyramidTest {
     void every_level_of_every_module_is_populated() {
         for (String module : MODULES)
             for (String level : LEVELS)
-                assertThat(javaFilesUnder(TESTS.resolve(module).resolve(level)).findAny())
-                        .describedAs(module + "/" + level + " holds at least one file")
-                        .isPresent();
+                if (!(level.equals("contract") && MODULES_WITHOUT_CONTRACTS.contains(module)))
+                    assertThat(javaFilesUnder(TESTS.resolve(module).resolve(level)).findAny())
+                            .describedAs(module + "/" + level + " holds at least one file")
+                            .isPresent();
     }
 
     private static boolean onSomeLevel(Path file) {

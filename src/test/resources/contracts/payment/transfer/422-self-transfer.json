@@ -1,0 +1,11 @@
+{
+  "operation" : "POST /payments/transfer",
+  "status" : 422,
+  "contentType" : "application/problem+json",
+  "body" : {
+    "detail" : "Cannot transfer to your own wallet",
+    "instance" : "/payments/transfer",
+    "status" : 422,
+    "title" : "Unprocessable Content"
+  }
+}

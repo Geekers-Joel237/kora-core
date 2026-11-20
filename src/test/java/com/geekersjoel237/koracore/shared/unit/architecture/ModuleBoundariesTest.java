@@ -24,7 +24,7 @@ class ModuleBoundariesTest {
     private static final Path ROOT =
             Path.of("src", "main", "java", "com", "geekersjoel237", "koracore");
 
-    // shared/e2e is exempt: the harness drives the whole application over HTTP and names both modules by construction.
+    // shared/e2e and shared/contract are exempt: both harnesses drive the HTTP boundary, which crosses auth's security for every module, so they name both modules by construction.
     private static final List<Path> KERNEL_TEST_ROOTS = List.of(
             Path.of("src", "test", "java", "com", "geekersjoel237", "koracore", "shared", "unit"),
             Path.of("src", "test", "java", "com", "geekersjoel237", "koracore", "shared", "integration"));

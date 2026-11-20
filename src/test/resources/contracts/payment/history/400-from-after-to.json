@@ -1,0 +1,11 @@
+{
+  "operation" : "GET /payments/history",
+  "status" : 400,
+  "contentType" : "application/problem+json",
+  "body" : {
+    "detail" : "'from' (2026-11-19) cannot be after 'to' (2026-11-01)",
+    "instance" : "/payments/history",
+    "status" : 400,
+    "title" : "Bad Request"
+  }
+}

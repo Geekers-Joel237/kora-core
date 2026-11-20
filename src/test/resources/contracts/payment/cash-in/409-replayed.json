@@ -1,0 +1,11 @@
+{
+  "operation" : "POST /payments/cash-in",
+  "status" : 409,
+  "contentType" : "application/problem+json",
+  "body" : {
+    "detail" : "Command already received under correlation id: 33333333-3333-3333-3333-333333333333",
+    "instance" : "/payments/cash-in",
+    "status" : 409,
+    "title" : "Conflict"
+  }
+}

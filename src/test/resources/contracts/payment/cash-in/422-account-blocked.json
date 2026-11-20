@@ -1,0 +1,11 @@
+{
+  "operation" : "POST /payments/cash-in",
+  "status" : 422,
+  "contentType" : "application/problem+json",
+  "body" : {
+    "detail" : "Account is blocked",
+    "instance" : "/payments/cash-in",
+    "status" : 422,
+    "title" : "Unprocessable Content"
+  }
+}

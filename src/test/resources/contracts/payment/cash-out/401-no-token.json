@@ -1,0 +1,9 @@
+{
+  "operation" : "POST /payments/cash-out",
+  "status" : 401,
+  "contentType" : "application/json",
+  "body" : {
+    "status" : 401,
+    "error" : "Unauthorized"
+  }
+}

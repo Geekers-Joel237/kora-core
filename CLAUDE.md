@@ -179,8 +179,9 @@ Assertions to apply to a diff. Each one is decidable by reading the diff alone.
     handler (`AuthExceptionHandler`, `PaymentExceptionHandler`) or in
     `SharedExceptionHandler` is a defect.
 16. New domain behaviour without a Spring-free unit test is a defect.
-17. A test placed outside `<module>/{unit,integration,e2e}/` is a defect, as is a
-    `@SpringBootTest` under `unit/` or an HTTP client under `integration/`.
+17. A test placed outside `<module>/{unit,integration,contract,e2e}/` is a defect, as is a
+    `@SpringBootTest` under `unit/`, an HTTP client under `integration/`, or a database or
+    a server under `contract/`.
 18. A constant added to or removed from a persisted enum — `Role`, `UserStatus`,
     `ResourceType`, `TransactionType`, `PaymentMethod`, `LedgerEntryType`,
     `TriggerSource`, `AuthorizationStatus`, `HoldStatus` — or a singleton added to or removed from
@@ -203,7 +204,7 @@ Assertions to apply to a diff. Each one is decidable by reading the diff alone.
 
 ## 8. Testing strategy
 
-67 test classes under `src/test/java`. The tree states the pyramid level first, and
+75 test classes under `src/test/java`. The tree states the pyramid level first, and
 `TestPyramidTest` checks that the statement is true.
 
 ```
@@ -211,6 +212,7 @@ src/test/java/com/geekersjoel237/koracore/
 └── <module>/            auth · payment · shared
     ├── unit/            domain · application · doubles · (auth: config) · (shared: adapters, ports, architecture)
     ├── integration/     persistence · query · (auth: security)
+    ├── contract/        payment and the shared harness; auth has none yet, by decision
     └── e2e/
 ```
 
@@ -227,6 +229,14 @@ splits into `account`, `ledger`, `transaction`, `authorization`, `hold`.
   append-only trigger, an injected failure, the e2e `TRUNCATE` — asks `KoraPostgres` for
   that connection. No HTTP, asserted. `@DataJpaTest` and
   `@AutoConfigureTestDatabase` are gone in Spring Boot 4 — do not reintroduce them.
+- **Contract** — `@ContractTest(<actions>)` from `shared/contract/`: the HTTP boundary of
+  the payment journey with everything real down to the driving ports — dispatcher, JSON,
+  bean validation, the security filter chain, the exception handlers — and the driving
+  ports replaced by `ProgrammableCommandBus` and the query doubles. Tokens come from the
+  real `JwtTokenIssuer`. No database, no server, asserted. Each case is compared, status,
+  content type and body, to a committed file under `src/test/resources/contracts/`; a
+  difference writes a `*.received.json` beside it and fails. A boundary changes only
+  through a reviewed diff of those files.
 - **E2E** — extends `AbstractE2ETest`: `@SpringBootTest(RANDOM_PORT)` over real HTTP
   with `RestTemplate`; isolation by `TRUNCATE` in `@BeforeEach`, not by rollback.
   `KoraCoreApplicationTests` starts its own container through `KoraPostgres` too.

@@ -1,0 +1,9 @@
+{
+  "operation" : "GET /payments/history",
+  "status" : 200,
+  "contentType" : "application/json",
+  "body" : {
+    "items" : [ ],
+    "nextCursor" : null
+  }
+}

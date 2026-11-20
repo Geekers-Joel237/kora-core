@@ -34,9 +34,8 @@ public class SharedExceptionHandler {
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
-    ProblemDetail onUnreadableMessage(HttpMessageNotReadableException ex) {
-        return ProblemDetails.of(HttpStatus.BAD_REQUEST,
-                "Malformed request body: " + ex.getMostSpecificCause().getMessage());
+    ProblemDetail onUnreadableMessage() {
+        return ProblemDetails.of(HttpStatus.BAD_REQUEST, "Malformed request body");
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

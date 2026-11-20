@@ -1,0 +1,27 @@
+{
+  "operation" : "GET /payments/history",
+  "status" : 200,
+  "contentType" : "application/json",
+  "body" : {
+    "items" : [ {
+      "reference" : "TRX-20261119-F8C46B7C",
+      "kind" : "TRANSFER_SENT",
+      "status" : "PENDING",
+      "amount" : -5000,
+      "currency" : "XAF",
+      "counterpart" : "+237690000001",
+      "channel" : null,
+      "date" : "2026-11-19T14:30:00Z"
+    }, {
+      "reference" : "TRX-20261118-E7B35A6B",
+      "kind" : "DEPOSIT",
+      "status" : "COMPLETED",
+      "amount" : 20000,
+      "currency" : "XAF",
+      "counterpart" : null,
+      "channel" : "MOBILE_MONEY",
+      "date" : "2026-11-18T09:15:00Z"
+    } ],
+    "nextCursor" : "MjAyNi0xMS0xOFQwOToxNTowMFp8ODg4ODg4ODgtODg4OC04ODg4LTg4ODgtODg4ODg4ODg4ODgx"
+  }
+}

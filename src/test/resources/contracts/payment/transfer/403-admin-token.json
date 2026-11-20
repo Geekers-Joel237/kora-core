@@ -1,0 +1,9 @@
+{
+  "operation" : "POST /payments/transfer",
+  "status" : 403,
+  "contentType" : "application/json",
+  "body" : {
+    "status" : 403,
+    "error" : "Forbidden"
+  }
+}

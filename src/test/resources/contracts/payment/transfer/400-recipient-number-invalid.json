@@ -1,0 +1,15 @@
+{
+  "operation" : "POST /payments/transfer",
+  "status" : 400,
+  "contentType" : "application/problem+json",
+  "body" : {
+    "detail" : "Request validation failed",
+    "instance" : "/payments/transfer",
+    "status" : 400,
+    "title" : "Bad Request",
+    "violations" : [ {
+      "message" : "Recipient phone number must contain 8 to 15 digits",
+      "field" : "toPhoneNumber"
+    } ]
+  }
+}
