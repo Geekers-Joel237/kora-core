@@ -57,7 +57,6 @@ export function useSubmitPayment() {
             ? await transfer({
                 rawPin,
                 amount,
-                paymentMethod: 'WALLET',
                 recipient,
                 idempotencyKey,
               })

@@ -105,9 +105,10 @@ Trois faits pour trancher :
 - ✅ Un double appui sur `Confirmer` produit **une seule** requête — *deux `submit` concurrents dans le même `act`, testé*
 - ✅ Le verrou anti-double-soumission est un `useRef`, pas un `useState`
 - ✅ Le retour matériel et le geste de retour sont neutralisés pendant une soumission — *`useBlockBackWhileSubmitting`, testé*
-- ✅ **Aucune reprise automatique sur `POST /payments/*`**, quelle qu'en soit la cause — *testé sur `503`, `500` et coupure réseau*
+- ✅ **Aucune reprise automatique sur `POST /payments/*`**, quelle qu'en soit la cause — *testé sur `503`, `500`, `502` et coupure réseau*
 - ✅ Un `503` conduit à l'écran « issue incertaine » avec `Vérifier l'historique` en action principale
-- ✅ Un `500` de `PaymentProviderException` conduit au **même** écran, malgré son corps non conforme à RFC 7807
+- ✅ Un `5xx` que le contrat ne déclare pas — `500`, `502` de passerelle — conduit au **même** écran, quel que soit son corps — *`errors.test.ts`, `payments.test.tsx`*
+- ✅ Un `502` déclaré (`application/problem+json`, refus du provider) conduit à l'écran d'**échec**, jamais à « issue incertaine » — *`payments.test.tsx`*
 - ✅ Une expiration réseau conduit au même écran
 - ✅ Un transfert vers un numéro inconnu est traité comme un **`404`**, avec son message dédié
 - ✅ Les trois formats d'erreur sont normalisés ; un corps vide ou non-JSON ne fait pas planter la couche HTTP

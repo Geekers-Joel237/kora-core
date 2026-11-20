@@ -84,6 +84,10 @@ function buildUrl(path: string, query?: RequestOptions['query']): string {
 }
 
 /** Le corps peut être vide, du JSON, ou n'importe quoi d'autre — contrat §5.1. */
+function contentTypeOf(response: Response): string | undefined {
+  return response.headers?.get?.('content-type') ?? undefined;
+}
+
 async function readBody(response: Response): Promise<unknown> {
   const text = await response.text().catch(() => '');
   if (!text) return null;
@@ -108,10 +112,12 @@ async function performRefresh(refreshToken: string): Promise<ApiTokensResponse> 
   const body = await readBody(response);
 
   if (!response.ok) {
-    throw normalizeHttpError(response.status, body, {
-      path: '/auth/refresh',
-      isMoneyMovement: false,
-    });
+    throw normalizeHttpError(
+      response.status,
+      body,
+      { path: '/auth/refresh', isMoneyMovement: false },
+      contentTypeOf(response),
+    );
   }
 
   // Un 200 au corps illisible est traité comme un échec de rafraîchissement :
@@ -169,6 +175,7 @@ interface Attempt {
   status: number;
   body: unknown;
   ok: boolean;
+  contentType?: string;
 }
 
 async function executeOnce(
@@ -246,7 +253,13 @@ async function executeOnce(
       ...(options.body !== undefined && { body: JSON.stringify(options.body) }),
       signal: options.signal ?? controller.signal,
     });
-    return settle({ status: response.status, body: await readBody(response), ok: response.ok });
+    const contentType = contentTypeOf(response);
+    return settle({
+      status: response.status,
+      body: await readBody(response),
+      ok: response.ok,
+      ...(contentType !== undefined && { contentType }),
+    });
   } catch (cause) {
     const timedOut = controller.signal.aborted;
     observer?.onResponse(correlationId, {
@@ -316,7 +329,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
       return result.body as T;
     }
 
-    const error = normalizeHttpError(result.status, result.body, context);
+    const error = normalizeHttpError(result.status, result.body, context, result.contentType);
 
     // Un 401 de jeton, et lui seul, déclenche le rafraîchissement. Un 401 de PIN
     // porte un `detail` et ne doit surtout pas passer par ici — contrat §5.2.

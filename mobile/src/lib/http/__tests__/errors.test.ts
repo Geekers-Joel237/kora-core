@@ -51,7 +51,7 @@ describe('normalizeHttpError — les trois formats du contrat §5.1', () => {
     expect(error.isAuthExpired).toBe(true);
   });
 
-  it('format 3 — corps Spring par défaut sur ProviderException non mappée', () => {
+  it('format 3 — corps Spring par défaut sur une exception non mappée', () => {
     const error = normalizeHttpError(
       500,
       { timestamp: '2026-08-06T11:42:13.401+00:00', status: 500, error: 'Internal Server Error' },
@@ -94,6 +94,62 @@ describe('normalizeHttpError — les trois formats du contrat §5.1', () => {
     expect(error.code).toBe('BUSINESS_RULE');
     expect(error.isOutcomeUnknown).toBe(false);
     expect(error.isRetryable).toBe(false);
+  });
+});
+
+describe('réponses classées comme le contrat Swagger les déclare — api-contract/payments.openapi.json', () => {
+  const PROBLEM = 'application/problem+json';
+
+  it('traite un 502 déclaré comme un refus du provider : échec affirmé, jamais incertain', () => {
+    const error = normalizeHttpError(
+      502,
+      { title: 'Bad Gateway', status: 502, detail: 'Provider refused the debit', instance: '/payments/cash-out' },
+      MONEY,
+      PROBLEM,
+    );
+    expect(error.code).toBe('PROVIDER_REFUSED');
+    expect(error.isOutcomeUnknown).toBe(false);
+    expect(error.isRetryable).toBe(false);
+  });
+
+  it('reconnaît le 502 déclaré même avec un paramètre de charset', () => {
+    const error = normalizeHttpError(502, { status: 502, detail: 'refused' }, MONEY, 'application/problem+json; charset=utf-8');
+    expect(error.code).toBe('PROVIDER_REFUSED');
+  });
+
+  it('laisse incertain un 502 de passerelle, que le contrat ne déclare pas', () => {
+    const error = normalizeHttpError(502, '<html>Bad Gateway</html>', MONEY, 'text/html');
+    expect(error.code).toBe('SERVER');
+    expect(error.isOutcomeUnknown).toBe(true);
+  });
+
+  it('laisse incertain un 502 sans type de contenu, même si son corps ressemble à un ProblemDetail', () => {
+    const error = normalizeHttpError(502, { status: 502, detail: 'refused' }, MONEY);
+    expect(error.code).toBe('SERVER');
+    expect(error.isOutcomeUnknown).toBe(true);
+  });
+
+  it('laisse incertain un 503 déclaré : les reprises ont pu s’épuiser après la réponse du provider', () => {
+    const error = normalizeHttpError(503, { status: 503, detail: 'Retries exhausted' }, MONEY, PROBLEM);
+    expect(error.code).toBe('UNAVAILABLE');
+    expect(error.isOutcomeUnknown).toBe(true);
+  });
+
+  it('laisse incertaine toute autre réponse 5xx sur un paiement', () => {
+    expect(normalizeHttpError(504, null, MONEY).isOutcomeUnknown).toBe(true);
+    expect(normalizeHttpError(500, { status: 500 }, MONEY, 'application/json').isOutcomeUnknown).toBe(true);
+  });
+
+  it('lit un 401 en application/problem+json comme un PIN erroné, quel que soit son corps', () => {
+    const error = normalizeHttpError(401, { status: 401, error: 'Unauthorized', detail: 'Invalid PIN' }, MONEY, PROBLEM);
+    expect(error.code).toBe('INVALID_PIN');
+    expect(error.isAuthExpired).toBe(false);
+  });
+
+  it('lit un 401 en application/json comme un jeton expiré', () => {
+    const error = normalizeHttpError(401, { status: 401, error: 'Unauthorized' }, MONEY, 'application/json');
+    expect(error.code).toBe('TOKEN_EXPIRED');
+    expect(error.isAuthExpired).toBe(true);
   });
 });
 

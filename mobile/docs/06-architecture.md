@@ -97,13 +97,13 @@ Le backend produit **trois formats d'erreur distincts** (contrat §5.1) — `Pro
 ```ts
 export type KoraError = {
   status: number;
-  code: KoraErrorCode;         // dérivé du couple (statut, detail)
+  code: KoraErrorCode;         // dérivé du couple (statut, type de contenu) déclaré par le contrat Swagger
   message: string;             // traduit, prêt à l'affichage
   detail?: string;             // brut, pour le support
   violations?: { field: string; message: string }[];
   isRetryable: boolean;
   isAuthExpired: boolean;      // vrai UNIQUEMENT pour un 401 de jeton
-  isOutcomeUnknown: boolean;   // 503, 500, ou absence de réponse sur /payments/*
+  isOutcomeUnknown: boolean;   // 503, 5xx non déclaré, ou absence de réponse sur /payments/* — jamais un 502 déclaré
 };
 ```
 
@@ -112,10 +112,11 @@ export type KoraError = {
 ### 3.3 Le point le plus délicat — discriminer les deux `401`
 
 ```ts
-function isTokenExpiry(status: number, body: unknown): boolean {
+function isTokenExpiry(status: number, body: unknown, contentType?: string): boolean {
   if (status !== 401) return false;
-  // Forme produite par la couche de sécurité Spring : { status, error }
-  // Forme produite par le GlobalExceptionHandler : ProblemDetail avec 'detail'
+  // Le contrat Swagger déclare le 401 du PIN en application/problem+json
+  if (contentType?.split(';')[0]?.trim() === 'application/problem+json') return false;
+  // À défaut : la sécurité émet { status, error }, les handlers métier un ProblemDetail avec 'detail'
   return typeof body === 'object' && body !== null
     && 'error' in body && !('detail' in body);
 }

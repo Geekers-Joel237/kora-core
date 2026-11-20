@@ -213,7 +213,7 @@ Ces contraintes sont celles de l'**état actuel** du backend. Elles ne sont pas 
 | **Aucun endpoint de résolution de bénéficiaire** | Impossible d'afficher le nom du destinataire avant un transfert. Le récapitulatif compense par une confirmation renforcée sur le numéro | indéterminé |
 | **Aucun endpoint de profil** | Le profil est reconstitué depuis les claims du jeton et les données saisies à l'inscription | indéterminé |
 | **Aucun canal temps réel** | Le suivi d'une opération en cours se fait par sondage borné de l'historique | **étape 5+** |
-| Le champ `paymentMethod` est une **chaîne libre** | La liste des opérateurs est définie et figée côté application | **étape 8** |
+| `paymentMethod` est une **valeur fermée** côté backend : `ORANGE_MONEY`, `MOBILE_MONEY`, `CARD`, `WALLET` | L'app ne propose que les opérateurs que le backend accepte. Un nouvel opérateur exige d'abord une valeur backend — contrat §4 | **étape 8** |
 | **Aucun endpoint de déconnexion** | La déconnexion est purement locale : purge du trousseau et du cache | indéterminé |
 | **Aucune limite de vélocité** | Aucun rejet pour plafond dépassé à gérer aujourd'hui — mais l'app doit être prête à en afficher | **étape 8** |
 

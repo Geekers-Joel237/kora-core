@@ -12,9 +12,7 @@
  */
 export const brandColors = {
   ORANGE_MONEY: '#FF7900',
-  MTN_MOMO: '#FFCB05',
-  MOOV_MONEY: '#0066B3',
-  WAVE: '#1DC8FF',
+  MOBILE_MONEY: '#FFCB05',
 } as const;
 
 export type BrandId = keyof typeof brandColors;

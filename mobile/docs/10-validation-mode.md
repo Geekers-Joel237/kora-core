@@ -232,7 +232,7 @@ Ce que l'application doit permettre de vérifier sur le backend, par ordre de va
 | 13 | `from` postérieur à `to` | La gestion des plages incohérentes |
 | 14 | `size=1000` | Le rejet effectif au-delà de 100 → `400` |
 | 15 | Provider en mode `SLOW` puis coupure client | Le comportement combiné |
-| 16 | Provider en mode `FAILURE` | **`PaymentProviderException` non mappée → `500` au corps non conforme** |
+| 16 | Provider en mode `FAILURE` | **`502` en `application/problem+json` → écran d'échec**, pas « issue incertaine » |
 | 17 | Transfert vers un numéro inexistant | Confirme que c'est un `404`, pas un `422` |
 | 18 | Montant `100.5` en `XAF`, injecté depuis le mode validation | **Confirme l'absence de contrôle d'échelle sur `Amount`** |
 | 19 | Jeton d'**accès** envoyé à `/auth/refresh` | **Doit désormais être refusé** — `401` depuis le 2026-10-16 (L-10) ; s'il est accepté, c'est une régression |

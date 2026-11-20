@@ -154,6 +154,57 @@ describe('destinataires récents', () => {
   });
 });
 
+function armWithdrawal() {
+  const store = usePaymentFlow.getState();
+  store.begin('withdraw', 'XAF');
+  store.setAmount(5000);
+  store.setMethod('MOBILE_MONEY');
+  store.armIdempotency();
+}
+
+function respond(status: number, body: unknown, contentType: string) {
+  return {
+    status,
+    ok: false,
+    headers: { get: (name: string) => (name.toLowerCase() === 'content-type' ? contentType : null) },
+    text: async () => (typeof body === 'string' ? body : JSON.stringify(body)),
+  };
+}
+
+describe('retrait refusé par le provider — 502 du contrat Swagger', () => {
+  it('classe un 502 déclaré en ÉCHEC affirmé, avec le message du refus', async () => {
+    fetchMock.mockImplementation(async () =>
+      respond(
+        502,
+        { title: 'Bad Gateway', status: 502, detail: 'Provider refused the debit', instance: '/payments/cash-out' },
+        'application/problem+json',
+      ),
+    );
+
+    armWithdrawal();
+    const { result } = await renderHook(() => useSubmitPayment(), { wrapper });
+    await act(async () => {
+      await result.current.submit('1234');
+    });
+
+    expect(usePaymentFlow.getState().outcome).toBe('failed');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('classe un 502 de passerelle, non déclaré, en ISSUE INCERTAINE', async () => {
+    fetchMock.mockImplementation(async () => respond(502, '<html>Bad Gateway</html>', 'text/html'));
+
+    armWithdrawal();
+    const { result } = await renderHook(() => useSubmitPayment(), { wrapper });
+    await act(async () => {
+      await result.current.submit('1234');
+    });
+
+    expect(usePaymentFlow.getState().outcome).toBe('uncertain');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('classement des issues — docs §4.6', () => {
   it('présente un état antérieur à la capture comme EN COURS, jamais comme un succès', async () => {
     fetchMock.mockImplementation(async () => ok({ ...RECEIPT, state: 'AUTHORIZED' }));
@@ -347,6 +398,20 @@ describe('fonctions de classement', () => {
         isOutcomeUnknown: true,
       }),
     ).toBe('uncertain');
+  });
+
+  it('traduit un refus du provider sans afficher le detail technique du serveur', () => {
+    expect(
+      paymentErrorMessage({
+        status: 502,
+        code: 'PROVIDER_REFUSED',
+        message: 'Provider refused the debit',
+        detail: 'Provider refused the debit',
+        isRetryable: false,
+        isAuthExpired: false,
+        isOutcomeUnknown: false,
+      }),
+    ).toBe('L’opérateur a refusé l’opération. Votre solde Kora n’a pas changé.');
   });
 });
 

@@ -331,11 +331,13 @@ Traductions imposées. **Le statut fait partie de la clé de correspondance** �
 
 La correspondance est une **table de données** indexée par `(statut, motif)`, jamais une cascade de `if` — l'étape 8 y ajoutera les rejets de vélocité. Un couple inconnu affiche le `detail` du `ProblemDetail` tel quel, pas un message générique.
 
-#### Issue incertaine — `503`, `500`, ou expiration réseau
+#### Issue incertaine — `503`, `5xx` non déclaré, ou expiration réseau
 
 Le cas le plus délicat, et celui qui distingue une application financière sérieuse.
 
-Trois déclencheurs, un seul écran : `503` (`TransientPaymentException`), `500` (`PaymentProviderException` non mappée, corps non conforme), et l'absence de réponse. Dans les trois cas, l'app **ignore si l'argent a bougé**.
+Trois déclencheurs, un seul écran : `503` (reprises épuisées), toute réponse `5xx` que le contrat Swagger ne déclare pas (un `500`, un `502` de passerelle hors `application/problem+json`), et l'absence de réponse. Dans les trois cas, l'app **ignore si l'argent a bougé**.
+
+Un `502` en `application/problem+json` n'en fait **pas** partie : le contrat le déclare comme un refus du provider. L'opération a échoué et rien n'a bougé ; il conduit à l'écran d'échec, avec le message `errors.PROVIDER_REFUSED`.
 
 | Aspect | Spécification |
 |---|---|

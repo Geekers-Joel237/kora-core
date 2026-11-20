@@ -30,20 +30,20 @@ export function kindLabel(kind: string): string {
 /**
  * Opérateurs Mobile Money — contrat §4.
  *
- * `paymentMethod` est une chaîne libre côté backend : la liste est figée ici,
- * et n'est jamais rendue configurable par l'utilisateur. **Ces libellés ne sont
- * pas traduits** : « Orange Money » est un nom de marque, pas du texte.
+ * `paymentMethod` est une valeur fermée, validée par le backend : un `id` hors
+ * de sa liste reçoit un `400`. Chaque `id` ici est donc une valeur que le
+ * backend accepte, jamais l'inverse. La liste n'est jamais rendue configurable
+ * par l'utilisateur. **Ces libellés ne sont pas traduits** : « Orange Money »
+ * est un nom de marque, pas du texte.
  */
 export const PAYMENT_METHODS = [
   { id: 'ORANGE_MONEY', label: 'Orange Money', brand: brandColors.ORANGE_MONEY },
-  { id: 'MTN_MOMO', label: 'MTN MoMo', brand: brandColors.MTN_MOMO },
-  { id: 'MOOV_MONEY', label: 'Moov Money', brand: brandColors.MOOV_MONEY },
-  { id: 'WAVE', label: 'Wave', brand: brandColors.WAVE },
+  { id: 'MOBILE_MONEY', label: 'MTN MoMo', brand: brandColors.MOBILE_MONEY },
 ] as const;
 
 export type PaymentMethodId = (typeof PAYMENT_METHODS)[number]['id'];
 
-/** `WALLET` apparaît en lecture pour les P2P ; l'app ne l'envoie jamais. */
+/** `WALLET` est une valeur backend que l'app ne propose ni n'envoie. */
 export function paymentMethodLabel(id: string): string {
   if (id === 'WALLET') return 'Kora';
   return PAYMENT_METHODS.find((method) => method.id === id)?.label ?? id;

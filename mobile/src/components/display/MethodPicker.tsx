@@ -15,9 +15,8 @@ const BADGE = 40;
 /**
  * Sélection de l'opérateur Mobile Money.
  *
- * La liste est **figée côté application** : `paymentMethod` est une chaîne
- * libre non validée par le backend (contrat §4). La rendre configurable par
- * l'utilisateur permettrait d'envoyer n'importe quoi.
+ * La liste est **figée côté application** et ne contient que des valeurs que le
+ * backend accepte : toute autre valeur y reçoit un `400` (contrat §4).
  *
  * Les couleurs de marque n'apparaissent que dans la pastille de 40 dp —
  * design system §2.6. Elles ne teintent jamais un fond ni un texte.
