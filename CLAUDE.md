@@ -73,6 +73,18 @@ an entry costs a line there and the sentence that justifies it.
 Interactors are plain classes wired by hand in `config/`. Every use case is
 instantiable in one line, with no container.
 
+MapStruct maps at two boundaries, both in adapters, and nowhere else:
+
+| Boundary | Mappers | Config | Fails the build on |
+|---|---|---|---|
+| In: request → command | `<module>/adapters/in/rest/mapping/*RequestMapper` | `RequestMapperConfig` | an unmapped command component **or** an unused request field |
+| Out: snapshot ↔ entity | `<module>/adapters/out/persistence/mapping/*PersistenceMapper` | `PersistenceMapperConfig` | an unmapped entity or snapshot property; Lombok builders are disabled so the inherited `id` is mapped |
+
+Conversions to value objects (`Id`, the correlation id, `Pin`, `OtpCode`, `RefreshToken`,
+`PaymentMethod`) are named methods in `RequestConversions` and the modules'
+`*RequestConversions`. An update of a managed entity is a named method on the entity
+taking plain values, never a mapper. Responses are built by hand in `*Response.from(...)`.
+
 ## 5. Domain vocabulary
 
 Use these names. `Order`, `PaymentPart`, `Money`, `ProviderReference`, `IdempotencyKey`
@@ -164,13 +176,16 @@ Assertions to apply to a diff. Each one is decidable by reading the diff alone.
     in the same transaction is a defect.
 11. An `*Action` class in `<module>/adapters/in/rest/api/**` containing branching on
     domain state, arithmetic, or repository access is a defect — it may only build a
-    command or query, delegate, and map the result. Naming more than one driving port
-    is a defect too.
+    command through its module's `*RequestMapper` (or a query), delegate, and map the
+    result. Naming more than one driving port is a defect too.
 12. An interactor in `<module>/application/usecases/` that imports another interactor,
     or a second driving port, is a defect.
 13. A command, port, or domain type accepting a raw `String` where a domain type
     exists (`Id`, `Amount`, `PaymentMethod`, `PhoneNumber`, `Pin`) is a
-    defect. Conversion happens once, in `Request.toCommand()` at the web layer.
+    defect. Conversion happens once, at the web edge: a command is built by the module's
+    MapStruct `*RequestMapper` (`<module>/adapters/in/rest/mapping/`), never by the
+    request record, which carries only its shape and its validation. The history query
+    is still built by `HistoryRequest.toQuery()`, whose parsing errors are contracted.
 14. A new or altered table column without a new
     `V<yyyyMMddHHmm>__snake_case.sql` under `src/main/resources/db/migration/`
     is a defect. `ddl-auto` must stay `validate` in `application.yaml` and

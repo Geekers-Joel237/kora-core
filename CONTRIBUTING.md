@@ -574,8 +574,9 @@ a grep: adding a foreign type costs a line there and the sentence that justifies
   Never return mutable domain objects from repositories.
 - Use **Value Objects** for every primitive that means something: `Amount`, `Balance`,
   `Id`, `PhoneNumber`, `Pin`, `OtpCode`. Never a raw `BigDecimal`, `String`
-  or `Long` for financial or identifying data. Conversion happens once, in
-  `Request.toCommand()` at the web edge.
+  or `Long` for financial or identifying data. Conversion happens once, at the web
+  edge, in the module's MapStruct `*RequestMapper` (`<module>/adapters/in/rest/mapping/`):
+  a request record holds only its fields and their validation.
 - Use **state classes** for transaction lifecycle transitions; each validates its own
   successors. Never expose `setState()` on a domain entity.
 - **Double-entry invariant**: every `Transaction` must have `SUM(DEBIT) == SUM(CREDIT)`

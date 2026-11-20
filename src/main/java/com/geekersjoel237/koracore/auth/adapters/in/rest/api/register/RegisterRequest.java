@@ -1,12 +1,9 @@
 package com.geekersjoel237.koracore.auth.adapters.in.rest.api.register;
 
-import com.geekersjoel237.koracore.auth.application.command.RegisterCommand;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
-import com.geekersjoel237.koracore.shared.domain.vo.Pin;
-import com.geekersjoel237.koracore.shared.domain.vo.Id;
 
 public record RegisterRequest(
         @NotBlank(message = "Full name is required")
@@ -28,7 +25,4 @@ public record RegisterRequest(
         @Size(min = 4, max = 8, message = "PIN must be between 4 and 8 characters")
         String rawPin
 ) {
-    public RegisterCommand toCommand(Id correlationId) {
-        return new RegisterCommand(correlationId, fullName, email, phonePrefix, phoneNumber, Pin.of(rawPin));
-    }
 }

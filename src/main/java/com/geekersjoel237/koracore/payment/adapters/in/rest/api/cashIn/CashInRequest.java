@@ -1,9 +1,5 @@
 package com.geekersjoel237.koracore.payment.adapters.in.rest.api.cashIn;
 
-import com.geekersjoel237.koracore.payment.application.command.CashInCommand;
-import com.geekersjoel237.koracore.payment.domain.enums.PaymentMethod;
-import com.geekersjoel237.koracore.shared.domain.vo.Amount;
-import com.geekersjoel237.koracore.shared.domain.vo.Id;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
@@ -12,7 +8,6 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
-import com.geekersjoel237.koracore.shared.domain.vo.Pin;
 
 import static com.geekersjoel237.koracore.shared.adapters.in.rest.ApiSchemas.AMOUNT;
 
@@ -35,8 +30,4 @@ public record CashInRequest(
         @NotBlank(message = "Payment method is required")
         String paymentMethod
 ) {
-    public CashInCommand toCommand(Id customerId, Id correlationId) {
-        return new CashInCommand(correlationId, customerId, Pin.of(rawPin), new Amount(amount, currency),
-                PaymentMethod.fromValue(paymentMethod));
-    }
 }
