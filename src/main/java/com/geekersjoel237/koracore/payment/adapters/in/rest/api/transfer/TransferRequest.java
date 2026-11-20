@@ -4,6 +4,7 @@ import com.geekersjoel237.koracore.payment.application.command.TransferCommand;
 import com.geekersjoel237.koracore.shared.domain.vo.Amount;
 import com.geekersjoel237.koracore.shared.domain.vo.Id;
 import com.geekersjoel237.koracore.shared.domain.vo.PhoneNumber;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
@@ -14,10 +15,13 @@ import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import com.geekersjoel237.koracore.shared.domain.vo.Pin;
 
+import static com.geekersjoel237.koracore.shared.adapters.in.rest.ApiSchemas.AMOUNT;
+
 public record TransferRequest(
         @NotBlank(message = "PIN is required")
         String rawPin,
 
+        @Schema(description = AMOUNT, multipleOf = 1)
         @NotNull(message = "Amount is required")
         @DecimalMin(value = "1", message = "Amount must be at least 1 XAF")
         @Digits(integer = 15, fraction = 0,

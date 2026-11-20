@@ -235,8 +235,10 @@ splits into `account`, `ledger`, `transaction`, `authorization`, `hold`.
   ports replaced by `ProgrammableCommandBus` and the query doubles. Tokens come from the
   real `JwtTokenIssuer`. No database, no server, asserted. Each case is compared, status,
   content type and body, to a committed file under `src/test/resources/contracts/`; a
-  difference writes a `*.received.json` beside it and fails. A boundary changes only
-  through a reviewed diff of those files.
+  difference writes a `*.received.json` beside it and fails. `PaymentOpenApiContractTest`
+  compares `/v3/api-docs` to `api-contract/payments.openapi.json` and asserts that the
+  responses it declares are exactly the ones the contracts observe. A boundary changes
+  only through a reviewed diff of those files.
 - **E2E** — extends `AbstractE2ETest`: `@SpringBootTest(RANDOM_PORT)` over real HTTP
   with `RestTemplate`; isolation by `TRUNCATE` in `@BeforeEach`, not by rollback.
   `KoraCoreApplicationTests` starts its own container through `KoraPostgres` too.
@@ -288,6 +290,10 @@ Deliberate and tracked. Do not raise them on a PR.
   wallet lookup by phone number.
 - Access tokens are not stored: after a logout, one stays valid until it expires, at
   most 15 minutes. Checking them per request would put a database read on every call.
+- Amounts cross the API as whole major units (`multipleOf: 1` in `api-contract/payments.openapi.json`,
+  `@Digits(fraction = 0)` on requests): XAF, the only currency, has no minor unit. Moving to integer
+  minor units with the ISO 4217 exponent is planned; it changes every amount field and is a
+  versioned API change, never an in-place one.
 - Expired `refresh_tokens` rows are never purged.
 - Two concurrent exchanges of the same refresh token count as a replay and end the
   session. The mobile client sends one refresh at a time (`mobile/docs/06-architecture.md`).
