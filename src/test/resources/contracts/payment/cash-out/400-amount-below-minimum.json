@@ -1,0 +1,15 @@
+{
+  "operation" : "POST /payments/cash-out",
+  "status" : 400,
+  "contentType" : "application/problem+json",
+  "body" : {
+    "detail" : "Request validation failed",
+    "instance" : "/payments/cash-out",
+    "status" : 400,
+    "title" : "Bad Request",
+    "violations" : [ {
+      "message" : "Amount must be at least 1 XAF",
+      "field" : "amount"
+    } ]
+  }
+}

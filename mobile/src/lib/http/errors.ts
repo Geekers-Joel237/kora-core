@@ -1,8 +1,25 @@
 /**
  * Normalisation des erreurs — contrat §5.1 et §5.2, architecture §3.2.
  *
- * Le backend produit **trois formats d'erreur distincts**, plus le cas du corps
- * vide ou non-JSON. Tous convergent ici vers un `KoraError` unique.
+ * Chaque réponse est classée **comme le contrat Swagger la déclare** :
+ * `api-contract/payments.openapi.json` dans `kora-core` décrit, opération par
+ * opération, chaque couple statut + type de contenu possible. Une réponse que
+ * le contrat ne déclare pas — un `500`, un `502` HTML de passerelle, un `504` —
+ * n'est décrite par personne : sur une écriture monétaire, l'app ignore alors
+ * si l'argent a bougé.
+ *
+ * | Statut | Type de contenu              | Code               | Issue d'un paiement |
+ * |--------|------------------------------|--------------------|---------------------|
+ * | 400    | application/problem+json     | VALIDATION         | échec               |
+ * | 401    | application/json             | TOKEN_EXPIRED      | rafraîchir          |
+ * | 401    | application/problem+json     | INVALID_PIN / OTP  | échec               |
+ * | 403    | application/json             | FORBIDDEN          | échec               |
+ * | 404    | application/problem+json     | NOT_FOUND          | échec               |
+ * | 409    | application/problem+json     | CONFLICT           | échec               |
+ * | 422    | application/problem+json     | BUSINESS_RULE      | échec               |
+ * | 502    | application/problem+json     | PROVIDER_REFUSED   | échec : le provider a refusé, rien n'a bougé |
+ * | 503    | application/problem+json     | UNAVAILABLE        | incertaine          |
+ * | 5xx    | non déclaré                  | SERVER             | incertaine          |
  */
 
 import { t } from '@/i18n';
@@ -17,7 +34,8 @@ export type KoraErrorCode =
   | 'NOT_FOUND' // 404
   | 'CONFLICT' // 409
   | 'BUSINESS_RULE' // 422
-  | 'SERVER' // 500
+  | 'PROVIDER_REFUSED' // 502 déclaré : ProblemDetail, le provider a refusé
+  | 'SERVER' // 500, ou toute réponse 5xx que le contrat ne déclare pas
   | 'UNAVAILABLE' // 503
   | 'NETWORK' // pas de réponse
   | 'TIMEOUT' // délai dépassé
@@ -56,6 +74,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+/** Type de contenu des erreurs métier dans le contrat Swagger. */
+export const PROBLEM_JSON = 'application/problem+json';
+
+/** `application/problem+json; charset=utf-8` → `application/problem+json`. */
+function mediaTypeOf(contentType: string | undefined): string | undefined {
+  const media = contentType?.split(';')[0]?.trim().toLowerCase();
+  return media ? media : undefined;
+}
+
+function isProblem(contentType: string | undefined): boolean {
+  return mediaTypeOf(contentType) === PROBLEM_JSON;
+}
+
 /**
  * ⚠️ LA FONCTION LA PLUS DÉLICATE DU SOCLE RÉSEAU — contrat §5.2.
  *
@@ -65,12 +96,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  *   ProblemDetail avec `detail`    → PIN ou OTP    → NE PAS rafraîchir, afficher
  *
  * Les confondre produit soit une boucle de rafraîchissement infinie, soit une
- * déconnexion à chaque PIN erroné. La discrimination repose sur la forme du
- * corps : la couche de sécurité Spring émet `error` sans `detail`, le
- * `GlobalExceptionHandler` émet `detail` sans `error`.
+ * déconnexion à chaque PIN erroné. Le contrat Swagger les déclare sous deux
+ * types de contenu : `application/json` pour la couche de sécurité,
+ * `application/problem+json` pour le PIN et l'OTP. Le type de contenu tranche ;
+ * à défaut, la forme du corps : la sécurité émet `error` sans `detail`, les
+ * handlers métier `detail` sans `error`.
  */
-export function isTokenExpiry(status: number, body: unknown): boolean {
+export function isTokenExpiry(status: number, body: unknown, contentType?: string): boolean {
   if (status !== 401) return false;
+  if (isProblem(contentType)) return false;
   if (!isRecord(body)) {
     // 401 au corps vide ou illisible : seule la couche de sécurité en produit.
     return true;
@@ -86,7 +120,12 @@ function classifyUnauthorized(detail: string | undefined): KoraErrorCode {
   return 'INVALID_PIN';
 }
 
-function codeForStatus(status: number, detail: string | undefined, tokenExpiry: boolean) {
+function codeForStatus(
+  status: number,
+  detail: string | undefined,
+  tokenExpiry: boolean,
+  contentType: string | undefined,
+) {
   switch (status) {
     case 400:
       return 'VALIDATION' as const;
@@ -100,6 +139,8 @@ function codeForStatus(status: number, detail: string | undefined, tokenExpiry: 
       return 'CONFLICT' as const;
     case 422:
       return 'BUSINESS_RULE' as const;
+    case 502:
+      return isProblem(contentType) ? ('PROVIDER_REFUSED' as const) : ('SERVER' as const);
     case 503:
       return 'UNAVAILABLE' as const;
     default:
@@ -127,15 +168,21 @@ export interface NormalizeContext {
 /**
  * Réduit n'importe quel corps d'erreur — les trois formats du contrat, un corps
  * vide, du HTML, du texte brut — à un `KoraError`.
+ *
+ * `contentType` est l'en-tête `Content-Type` de la réponse. Absent, la réponse
+ * est traitée comme non déclarée : un `502` ne devient un refus affirmé que
+ * s'il arrive en `application/problem+json`, comme le contrat le déclare.
  */
 export function normalizeHttpError(
   status: number,
   body: unknown,
   context: NormalizeContext,
+  contentType?: string,
 ): KoraError {
-  const tokenExpiry = isTokenExpiry(status, body);
+  const tokenExpiry = isTokenExpiry(status, body, contentType);
   const detail = isRecord(body) && typeof body.detail === 'string' ? body.detail : undefined;
-  const code = codeForStatus(status, detail, tokenExpiry);
+  const code = codeForStatus(status, detail, tokenExpiry, contentType);
+  const providerRefused = code === 'PROVIDER_REFUSED';
 
   const violations =
     isRecord(body) && Array.isArray(body.violations)
@@ -144,11 +191,12 @@ export function normalizeHttpError(
 
   // Contrat §6.1 — aucune clé d'idempotence côté serveur tant que l'étape 4
   // n'a pas atterri. Une écriture monétaire n'est JAMAIS rejouable d'office.
-  const isRetryable = !context.isMoneyMovement && (status === 503 || status >= 500);
+  const isRetryable = !context.isMoneyMovement && status >= 500 && !providerRefused;
 
-  // 503, 500 et absence de réponse sur une écriture monétaire : l'app ignore si
-  // l'argent a bougé. Contrat §2 et §6.1.
-  const isOutcomeUnknown = context.isMoneyMovement && (status === 503 || status >= 500);
+  // Un 502 déclaré est un refus du provider : l'opération a échoué et rien n'a
+  // bougé. Un 503 — reprises épuisées après la réponse du provider — et toute
+  // réponse 5xx non déclarée laissent l'issue incertaine. Contrat §2 et §6.1.
+  const isOutcomeUnknown = context.isMoneyMovement && status >= 500 && !providerRefused;
 
   return {
     status,

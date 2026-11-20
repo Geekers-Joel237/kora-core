@@ -367,7 +367,7 @@ Le lot le plus long et le plus risqué.
 
 - **Un double appui produit UNE SEULE requête** — deux `submit` concurrents dans le même `act`, avant tout re-rendu, exactement ce que produit un appui à 50 ms d'intervalle
 - La clé d'idempotence est transportée et **reste identique** entre deux passages au récapitulatif
-- Un `503`, un `500` de fournisseur et une coupure réseau conduisent tous trois à « issue incertaine », **avec une seule requête émise**
+- Un `503`, un `5xx` non déclaré et une coupure réseau conduisent tous trois à « issue incertaine », **avec une seule requête émise** ; un `502` déclaré (`application/problem+json`) conduit à l'échec
 - Un état `CAPTURED` est classé **en cours**, jamais en succès
 - Un `422` de solde insuffisant conserve le montant
 - Les 6 motifs de rejet sont traduits ; un motif inconnu affiche le `detail` brut

@@ -10,6 +10,8 @@ Si un besoin d'écran n'apparaît pas ici, il n'existe pas côté backend. Voir 
 Base URL de développement : `http://localhost:8081` — aucun préfixe de contexte, aucun versionnement dans l'URL.
 Contrat vivant : `http://localhost:8081/v3/api-docs`.
 
+> **Contrat machine du parcours paiement : `api-contract/payments.openapi.json`** dans `kora-core`. Il est vérifié par les tests de contrat du backend : statut, type de contenu et corps de chaque réponse, valeurs énumérées dérivées du code. En cas d'écart avec ce document, **il fait foi**. Resynchronisé le **2026-11-20** : moyens de paiement (§4), refus du provider en `502` (§2), `ProblemDetail` sans `type` (§5.1), montants entiers.
+
 ---
 
 ## 1. Authentification
@@ -154,9 +156,9 @@ Rôle requis : `CUSTOMER`. Un jeton `ADMIN` reçoit `403` sur `/payments/**`.
 ```jsonc
 {
   "rawPin":        "1234",
-  "amount":         50000,           // > 0.01
+  "amount":         50000,           // entier ≥ 1 : XAF n'a pas d'unité mineure
   "currency":      "XAF",            // exactement 3 caractères
-  "paymentMethod": "ORANGE_MONEY"    // chaîne libre — voir §4
+  "paymentMethod": "ORANGE_MONEY"    // valeur fermée, validée par le serveur — voir §4
 }
 ```
 
@@ -195,18 +197,22 @@ Codes d'erreur possibles :
 
 | Code | Cause | Traitement app |
 |---|---|---|
-| `400` | Validation de la requête | Marquer le champ fautif via `violations[]` |
+| `400` | Validation de la requête, ou `paymentMethod` hors de la liste du §4 | Marquer le champ fautif via `violations[]` |
 | `401` | PIN invalide, **ou** jeton expiré | **Deux cas à distinguer** — voir §5.2 |
+| `403` | Jeton d'un rôle autre que client | Ne survient pas avec un jeton client |
 | **`404`** | **Destinataire introuvable** (`AccountNotFoundException`), compte de l'appelant introuvable | Message métier. **Ce n'est pas un `422`** |
+| `409` | Un `X-Correlation-Id` déjà reçu | L'app n'envoie pas cet en-tête : ne survient pas |
 | `422` | Solde insuffisant, compte bloqué ou suspendu, auto-transfert, devise incompatible, transition d'état interdite | Message métier, l'opération n'a pas eu lieu |
-| **`500`** | **`PaymentProviderException`** — non mappée par le `GlobalExceptionHandler` | Corps **non conforme à RFC 7807**. Traiter comme une issue incertaine |
+| **`502`** | **Le provider a refusé** l'opération (`PaymentProviderException`) — cash-in et cash-out uniquement | Corps `ProblemDetail`. L'argent n'a pas bougé côté Kora — voir l'encadré ci-dessous |
 | `503` | Conflit de concurrence après 5 tentatives, ou échec d'envoi de mail | Incident temporaire |
 
-> **⚠️ Un transfert vers un numéro inconnu renvoie `404`, pas `422`.** `validateRecipientAndGetAccount` lève `AccountNotFoundException`, que le `GlobalExceptionHandler` mappe sur `NOT_FOUND`. Brancher ce cas sur `422` produirait un message générique là où l'utilisateur a besoin d'une réponse précise. C'est l'erreur de transfert la plus fréquente en usage réel.
+> **⚠️ Un transfert vers un numéro inconnu renvoie `404`, pas `422`.** `TransferService` lève `AccountNotFoundException`, que `PaymentExceptionHandler` mappe sur `NOT_FOUND`. Brancher ce cas sur `422` produirait un message générique là où l'utilisateur a besoin d'une réponse précise. C'est l'erreur de transfert la plus fréquente en usage réel.
 
-> **⚠️ `PaymentProviderException` n'est mappée nulle part.** `MobileMoneyProviderAdapter` la lève sur échec fournisseur (trois points de levée), et aucun `@ExceptionHandler` ne la couvre. Le résultat est un **`500` avec le corps d'erreur Spring par défaut** — ni `ProblemDetail`, ni `{status, error}`. C'est un **troisième format d'erreur** que le client doit tolérer. À signaler côté backend : c'est vraisemblablement un oubli.
+> **Un délai dépassé chez le provider n'est pas une erreur HTTP.** L'opération répond `200` avec `state: "UNKNOWN"` : l'argent a peut-être bougé, la réconciliation tranchera. C'est **ce** cas qui porte l'incertitude, pas le `502`.
 
-> **`503` sur une opération monétaire est le cas le plus délicat.** Le serveur a épuisé 5 tentatives de verrouillage optimiste (`TransientPaymentException`). L'opération n'a très probablement pas eu lieu — mais l'app ne peut pas l'affirmer. Traitement imposé en §6.1. **Un `500` de fournisseur relève du même traitement** : issue incertaine, jamais un échec affirmé.
+> **`502` : refus du provider, depuis le 2026-10-17.** Avant cette date, `PaymentProviderException` n'était mappée par aucun handler et produisait un `500` au corps Spring par défaut. Elle produit désormais un `502` en `ProblemDetail`, et l'opération est en échec : un cash-out libère ses fonds réservés. **L'app classe chaque réponse comme le contrat Swagger la déclare** (`src/lib/http/errors.ts`) : un `502` en `application/problem+json` est un refus affirmé, affiché avec `errors.PROVIDER_REFUSED` ; un `502` de passerelle, que le contrat ne déclare pas, reste une issue incertaine.
+
+> **`503` sur une opération monétaire est le cas le plus délicat.** Le serveur a épuisé 5 tentatives de verrouillage optimiste. L'opération n'a très probablement pas eu lieu — mais l'app ne peut pas l'affirmer. Traitement imposé en §6.1.
 
 ### `GET /payments/history`
 
@@ -291,30 +297,38 @@ UserStatus        PENDING · VERIFIED · SUSPENDED
 
 ## 4. Moyens de paiement
 
-Le backend accepte `paymentMethod` comme **chaîne libre non validée**. La liste est donc définie et figée côté application. Elle ne doit pas être rendue configurable par l'utilisateur.
+`paymentMethod` est une **valeur fermée, validée par le serveur** (`PaymentMethod` dans `kora-core`). Toute autre valeur produit un `400` (`Unknown payment method: …`). Le serveur accepte, sans tenir compte de la casse :
+
+| Valeur | Alias accepté | Proposé par l'app |
+|---|---|---|
+| `ORANGE_MONEY` | `OM` | ✅ Orange Money |
+| `MOBILE_MONEY` | `MOMO` | ✅ MTN MoMo |
+| `CARD` | — | ❌ aucun parcours carte dans l'app |
+| `WALLET` | — | ❌ |
+
+L'app envoie toujours la forme longue, jamais l'alias. La liste est figée côté application et n'est jamais rendue configurable par l'utilisateur :
 
 ```ts
 export const PAYMENT_METHODS = [
   { id: 'ORANGE_MONEY', label: 'Orange Money', brand: '#FF7900' },
-  { id: 'MTN_MOMO',     label: 'MTN MoMo',     brand: '#FFCB05' },
-  { id: 'MOOV_MONEY',   label: 'Moov Money',   brand: '#0066B3' },
-  { id: 'WAVE',         label: 'Wave',         brand: '#1DC8FF' },
+  { id: 'MOBILE_MONEY', label: 'MTN MoMo',     brand: '#FFCB05' },
 ] as const;
 ```
 
-`WALLET` apparaît en lecture dans l'historique pour les transferts P2P. Il n'est jamais envoyé par l'app.
+Ajouter un opérateur (Moov Money, Wave…) demande **d'abord** une valeur côté backend, puis ce tableau — jamais l'inverse.
+
+En lecture, `channel` de l'historique prend l'une des quatre valeurs du tableau pour un dépôt ou un retrait, et vaut **`null` pour un transfert P2P** : un transfert n'a pas de canal.
 
 ---
 
 ## 5. Erreurs et montants
 
-### 5.1 Format d'erreur — RFC 7807
+### 5.1 Format d'erreur — RFC 9457
 
-Toute erreur gérée renvoie un `application/problem+json` :
+Toute erreur gérée renvoie un `application/problem+json`. Le champ `type` est **absent** : il vaudrait `about:blank`, que la norme permet d'omettre.
 
 ```jsonc
 {
-  "type":     "about:blank",
   "title":    "Unprocessable Content",
   "status":    422,
   "detail":   "Insufficient funds for account ACC-20260806-A3F91C2D",
@@ -338,9 +352,9 @@ Sur un `400` de validation, un champ supplémentaire apparaît :
 
 | # | Format | Producteur | Cas |
 |---|---|---|---|
-| 1 | `ProblemDetail` (RFC 7807) | `GlobalExceptionHandler` | Toute exception métier mappée |
-| 2 | `{ "status": n, "error": "…" }` | Couche de sécurité Spring | `401` jeton absent/invalide, `403` rôle insuffisant |
-| 3 | Corps d'erreur Spring par défaut | Aucun handler | `500` sur `PaymentProviderException` et toute exception non mappée |
+| 1 | `ProblemDetail` (RFC 9457), `application/problem+json` | `SharedExceptionHandler`, `PaymentExceptionHandler`, `AuthExceptionHandler` | Toute exception métier mappée, `502` du provider compris |
+| 2 | `{ "status": n, "error": "…" }`, `application/json` | Couche de sécurité Spring | `401` jeton absent/invalide, `403` rôle insuffisant |
+| 3 | Corps d'erreur Spring par défaut | Aucun handler | `500` sur une exception que personne ne mappe — un défaut, plus aucun cas connu |
 
 ```jsonc
 { "status": 401, "error": "Unauthorized" }   // format 2 — jeton absent, invalide ou expiré
@@ -348,10 +362,12 @@ Sur un `400` de validation, un champ supplémentaire apparaît :
 ```
 
 ```jsonc
-// format 3 — ProviderException, non mappée
+// format 3 — exception non mappée
 { "timestamp": "2026-08-06T11:42:13.401+00:00", "status": 500,
   "error": "Internal Server Error", "path": "/payments/cash-in" }
 ```
+
+Le **type de contenu** distingue les formats 1 et 2 sans lire le corps : `application/problem+json` contre `application/json`.
 
 Le parseur doit être défensif : un corps **non-JSON** ou vide reste possible, et ne doit jamais faire planter la couche HTTP.
 

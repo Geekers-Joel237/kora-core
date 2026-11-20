@@ -42,6 +42,7 @@ export function paymentErrorMessage(error: unknown): string {
   const rule = RULES.find((entry) => entry.status === error.status && detail.includes(entry.match));
   if (rule) return t(rule.key);
 
+  if (error.code === 'PROVIDER_REFUSED') return t('errors.PROVIDER_REFUSED');
   if (error.code === 'INVALID_PIN') return t('errors.INVALID_PIN');
   if (error.status === 400) return t('errors.VALIDATION');
 
@@ -51,9 +52,11 @@ export function paymentErrorMessage(error: unknown): string {
 /**
  * Classe une issue de paiement — `docs/05-screens.md` §4.6.
  *
- * `isOutcomeUnknown` est calculé par la couche HTTP et couvre `503`, `500` et
- * l'absence de réponse. C'est **la seule** condition qui mène à l'écran
- * « issue incertaine ».
+ * `isOutcomeUnknown` est calculé par la couche HTTP à partir du contrat Swagger :
+ * il couvre le `503`, toute réponse `5xx` que le contrat ne déclare pas et
+ * l'absence de réponse. Un `502` déclaré — `application/problem+json` — est un
+ * refus du provider : un échec affirmé, pas une incertitude. C'est **la seule**
+ * condition qui mène à l'écran « issue incertaine ».
  */
 export function outcomeForError(error: unknown): FlowOutcome {
   if (isKoraError(error) && error.isOutcomeUnknown) return 'uncertain';

@@ -1,0 +1,801 @@
+{
+  "openapi" : "3.1.0",
+  "info" : {
+    "title" : "KORA Core API",
+    "version" : "v1"
+  },
+  "servers" : [ {
+    "url" : "http://localhost",
+    "description" : "Generated server url"
+  } ],
+  "paths" : {
+    "/payments/transfer" : {
+      "post" : {
+        "tags" : [ "Payments" ],
+        "summary" : "Transfer funds to another customer",
+        "operationId" : "transfer",
+        "parameters" : [ {
+          "name" : "X-Correlation-Id",
+          "in" : "header",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/TransferRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Transfer completed",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TransactionResponse"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Request validation failed",
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid token (security format), or wrong PIN (problem format)",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SecurityError"
+                }
+              },
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "The token's role does not grant customer payments",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SecurityError"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "No wallet holds the recipient's phone number, or the caller's wallet does not exist",
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "A command with this correlation id was already received",
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422" : {
+            "description" : "Insufficient available funds, a transfer to oneself, a blocked or suspended wallet, or a currency mismatch",
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503" : {
+            "description" : "Concurrent updates exhausted the retries; nothing was refused",
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/payments/cash-out" : {
+      "post" : {
+        "tags" : [ "Payments" ],
+        "summary" : "Cash out from customer wallet",
+        "operationId" : "cashOut",
+        "parameters" : [ {
+          "name" : "X-Correlation-Id",
+          "in" : "header",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CashOutRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Cash-out recorded; state UNKNOWN when the provider outcome is not known",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TransactionResponse"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Request validation failed, or an unknown payment method",
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid token (security format), or wrong PIN (problem format)",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SecurityError"
+                }
+              },
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "The token's role does not grant customer payments",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SecurityError"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The caller's wallet does not exist",
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "A command with this correlation id was already received",
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422" : {
+            "description" : "Insufficient available funds, a blocked or suspended wallet, or a currency mismatch",
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502" : {
+            "description" : "The provider refused the operation",
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503" : {
+            "description" : "Concurrent updates exhausted the retries; nothing was refused",
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/payments/cash-in" : {
+      "post" : {
+        "tags" : [ "Payments" ],
+        "summary" : "Cash in to customer wallet",
+        "operationId" : "cashIn",
+        "parameters" : [ {
+          "name" : "X-Correlation-Id",
+          "in" : "header",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CashInRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Cash-in recorded; state UNKNOWN when the provider outcome is not known",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TransactionResponse"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Request validation failed, or an unknown payment method",
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid token (security format), or wrong PIN (problem format)",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SecurityError"
+                }
+              },
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "The token's role does not grant customer payments",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SecurityError"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The caller's wallet does not exist",
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "A command with this correlation id was already received",
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422" : {
+            "description" : "The wallet is blocked or suspended, or the currency does not match",
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502" : {
+            "description" : "The provider refused the operation",
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503" : {
+            "description" : "Concurrent updates exhausted the retries; nothing was refused",
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/payments/history" : {
+      "get" : {
+        "tags" : [ "Payments" ],
+        "summary" : "Get the customer's transaction history, most recent first",
+        "operationId" : "getHistory",
+        "parameters" : [ {
+          "name" : "status",
+          "in" : "query",
+          "description" : "Customer status to keep",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "enum" : [ "PENDING", "COMPLETED", "FAILED", "REFUNDED" ]
+          }
+        }, {
+          "name" : "kind",
+          "in" : "query",
+          "description" : "Kind of operation to keep",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "enum" : [ "DEPOSIT", "WITHDRAWAL", "TRANSFER_SENT", "TRANSFER_RECEIVED" ]
+          }
+        }, {
+          "name" : "from",
+          "in" : "query",
+          "description" : "First day included, YYYY-MM-DD",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "to",
+          "in" : "query",
+          "description" : "Last day included, YYYY-MM-DD",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "cursor",
+          "in" : "query",
+          "description" : "nextCursor of the previous page; absent for the first page",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "limit",
+          "in" : "query",
+          "description" : "Items per page; defaults to 20, max 100",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "One page; nextCursor is null on the last page",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TransactionHistoryResponse"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "An unknown status or kind, a date that is not YYYY-MM-DD, from after to, a limit out of 1..100, or an unreadable cursor",
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SecurityError"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "The token's role does not grant customer payments",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SecurityError"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The caller's wallet does not exist",
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/payments/balance" : {
+      "get" : {
+        "tags" : [ "Payments" ],
+        "summary" : "Get current wallet balance",
+        "operationId" : "getBalance",
+        "responses" : {
+          "200" : {
+            "description" : "amount is the available balance; ledgerAmount the ledger balance",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BalanceResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SecurityError"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "The token's role does not grant customer payments",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SecurityError"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The caller's wallet does not exist",
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    }
+  },
+  "components" : {
+    "schemas" : {
+      "Problem" : {
+        "type" : "object",
+        "description" : "RFC 9457 problem detail",
+        "properties" : {
+          "title" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "detail" : {
+            "type" : "string"
+          },
+          "instance" : {
+            "type" : "string"
+          },
+          "violations" : {
+            "type" : "array",
+            "description" : "Present on a 400 raised by request validation",
+            "items" : {
+              "type" : "object",
+              "properties" : {
+                "field" : {
+                  "type" : "string"
+                },
+                "message" : {
+                  "type" : "string"
+                }
+              },
+              "required" : [ "field", "message" ]
+            }
+          }
+        },
+        "required" : [ "detail", "instance", "status", "title" ]
+      },
+      "SecurityError" : {
+        "type" : "object",
+        "description" : "Written by the security filter chain: missing, invalid or expired token, or a role that does not grant the route",
+        "properties" : {
+          "status" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "error" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "error", "status" ]
+      },
+      "TransferRequest" : {
+        "type" : "object",
+        "properties" : {
+          "rawPin" : {
+            "type" : "string",
+            "minLength" : 1
+          },
+          "amount" : {
+            "type" : "number",
+            "description" : "Whole major units of the currency: XAF, the only currency today, has no minor unit",
+            "minimum" : 1,
+            "multipleOf" : 1.0
+          },
+          "currency" : {
+            "type" : "string",
+            "maxLength" : 3,
+            "minLength" : 3
+          },
+          "toPhonePrefix" : {
+            "type" : "string",
+            "minLength" : 1,
+            "pattern" : "\\+\\d{1,4}"
+          },
+          "toPhoneNumber" : {
+            "type" : "string",
+            "minLength" : 1,
+            "pattern" : "\\d{8,15}"
+          }
+        },
+        "required" : [ "amount", "currency", "rawPin", "toPhoneNumber", "toPhonePrefix" ]
+      },
+      "TransactionResponse" : {
+        "type" : "object",
+        "properties" : {
+          "transactionId" : {
+            "type" : "string"
+          },
+          "transactionNumber" : {
+            "type" : "string",
+            "description" : "Human-readable reference to show the customer"
+          },
+          "state" : {
+            "type" : "string",
+            "description" : "Technical lifecycle state; UNKNOWN when the provider outcome is not known yet",
+            "enum" : [ "INITIALIZED", "AUTHORIZED", "CAPTURED", "SETTLEMENT_PENDING", "SETTLED", "COMPLETED", "FAILED", "AUTHORIZATION_FAILED", "CAPTURE_FAILED", "SETTLEMENT_FAILED", "REVERSED", "UNKNOWN" ]
+          },
+          "amount" : {
+            "type" : "number",
+            "description" : "Whole major units of the currency: XAF, the only currency today, has no minor unit",
+            "multipleOf" : 1.0
+          },
+          "currency" : {
+            "type" : "string",
+            "description" : "ISO 4217 code"
+          }
+        },
+        "required" : [ "amount", "currency", "state", "transactionId", "transactionNumber" ]
+      },
+      "CashOutRequest" : {
+        "type" : "object",
+        "properties" : {
+          "rawPin" : {
+            "type" : "string",
+            "minLength" : 1
+          },
+          "amount" : {
+            "type" : "number",
+            "description" : "Whole major units of the currency: XAF, the only currency today, has no minor unit",
+            "minimum" : 1,
+            "multipleOf" : 1.0
+          },
+          "currency" : {
+            "type" : "string",
+            "maxLength" : 3,
+            "minLength" : 3
+          },
+          "paymentMethod" : {
+            "type" : "string",
+            "description" : "One of the listed values, case-insensitive; OM and MOMO are short forms of ORANGE_MONEY and MOBILE_MONEY",
+            "enum" : [ "CARD", "ORANGE_MONEY", "OM", "MOBILE_MONEY", "MOMO", "WALLET" ],
+            "minLength" : 1
+          }
+        },
+        "required" : [ "amount", "currency", "paymentMethod", "rawPin" ]
+      },
+      "CashInRequest" : {
+        "type" : "object",
+        "properties" : {
+          "rawPin" : {
+            "type" : "string",
+            "minLength" : 1
+          },
+          "amount" : {
+            "type" : "number",
+            "description" : "Whole major units of the currency: XAF, the only currency today, has no minor unit",
+            "minimum" : 1,
+            "multipleOf" : 1.0
+          },
+          "currency" : {
+            "type" : "string",
+            "maxLength" : 3,
+            "minLength" : 3
+          },
+          "paymentMethod" : {
+            "type" : "string",
+            "description" : "One of the listed values, case-insensitive; OM and MOMO are short forms of ORANGE_MONEY and MOBILE_MONEY",
+            "enum" : [ "CARD", "ORANGE_MONEY", "OM", "MOBILE_MONEY", "MOMO", "WALLET" ],
+            "minLength" : 1
+          }
+        },
+        "required" : [ "amount", "currency", "paymentMethod", "rawPin" ]
+      },
+      "TransactionHistoryItem" : {
+        "type" : "object",
+        "properties" : {
+          "reference" : {
+            "type" : "string",
+            "description" : "Human-readable reference"
+          },
+          "kind" : {
+            "type" : "string",
+            "enum" : [ "DEPOSIT", "WITHDRAWAL", "TRANSFER_SENT", "TRANSFER_RECEIVED" ]
+          },
+          "status" : {
+            "type" : "string",
+            "description" : "What the customer sees of the lifecycle",
+            "enum" : [ "PENDING", "COMPLETED", "FAILED", "REFUNDED" ]
+          },
+          "amount" : {
+            "type" : "number",
+            "description" : "Whole major units of the currency: XAF, the only currency today, has no minor unit. Negative when the money leaves the wallet",
+            "multipleOf" : 1.0
+          },
+          "currency" : {
+            "type" : "string",
+            "description" : "ISO 4217 code"
+          },
+          "counterpart" : {
+            "type" : [ "string", "null" ],
+            "description" : "The other wallet's phone number, masked by the server. Transfers only, otherwise null"
+          },
+          "channel" : {
+            "type" : [ "string", "null" ],
+            "description" : "Deposits and withdrawals only, otherwise null",
+            "enum" : [ "CARD", "ORANGE_MONEY", "MOBILE_MONEY", "WALLET", null ]
+          },
+          "date" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        },
+        "required" : [ "amount", "channel", "counterpart", "currency", "date", "kind", "reference", "status" ]
+      },
+      "TransactionHistoryResponse" : {
+        "type" : "object",
+        "properties" : {
+          "items" : {
+            "type" : "array",
+            "description" : "Most recent first",
+            "items" : {
+              "$ref" : "#/components/schemas/TransactionHistoryItem"
+            }
+          },
+          "nextCursor" : {
+            "type" : [ "string", "null" ],
+            "description" : "Opaque: send it back as cursor to read the next page. Null on the last page"
+          }
+        },
+        "required" : [ "items", "nextCursor" ]
+      },
+      "BalanceResponse" : {
+        "type" : "object",
+        "properties" : {
+          "accountId" : {
+            "type" : "string"
+          },
+          "accountNumber" : {
+            "type" : "string"
+          },
+          "amount" : {
+            "type" : "number",
+            "description" : "Available balance, the one to show and the most the customer can spend: the ledger balance minus the funds held by debits awaiting the provider. Whole major units of the currency: XAF, the only currency today, has no minor unit",
+            "multipleOf" : 1.0
+          },
+          "ledgerAmount" : {
+            "type" : "number",
+            "description" : "Ledger balance. Whole major units of the currency: XAF, the only currency today, has no minor unit",
+            "multipleOf" : 1.0
+          },
+          "currency" : {
+            "type" : "string",
+            "description" : "ISO 4217 code"
+          }
+        },
+        "required" : [ "accountId", "accountNumber", "amount", "currency", "ledgerAmount" ]
+      }
+    },
+    "securitySchemes" : {
+      "bearerAuth" : {
+        "type" : "http",
+        "scheme" : "bearer",
+        "bearerFormat" : "JWT"
+      }
+    }
+  }
+}

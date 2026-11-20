@@ -39,9 +39,8 @@ class ConfigurationHygieneTest {
     private static final Pattern PURE_PLACEHOLDER =
             Pattern.compile("^['\"]?\\$\\{[A-Za-z0-9_.\\-]+}['\"]?$");
 
-    /** Marks a value in an example file as deliberately unusable. */
-    private static final Pattern OBVIOUS_PLACEHOLDER =
-            Pattern.compile("(?i).*(change_me|replace_me|unused).*");
+    /** The command that generates the value, in angle brackets: {@code <openssl rand -hex 16>}. */
+    private static final Pattern OBVIOUS_PLACEHOLDER = Pattern.compile("^<[^<>\\s][^<>]*>$");
 
     /** {@code ${VAR:fallback}} — the capture group is non-empty only when a fallback exists. */
     private static final Pattern PLACEHOLDER_WITH_FALLBACK =
@@ -235,7 +234,7 @@ class ConfigurationHygieneTest {
                 String key = trimmed.substring(0, equals).strip();
                 String value = trimmed.substring(equals + 1).strip();
                 if (!CREDENTIAL_KEY.matcher(key).matches() || value.isEmpty()) continue;
-                if (!OBVIOUS_PLACEHOLDER.matcher(value).matches()) {
+                if (!isGeneratorPlaceholder(value)) {
                     offenders.add(file + ":" + (i + 1) + "  →  " + key + " = '" + value + "'");
                 }
             }
@@ -244,8 +243,9 @@ class ConfigurationHygieneTest {
         assertThat(offenders)
                 .withFailMessage("""
                         A versioned example file carries a credential that could be used as-is.
-                        Example values must be obviously unusable — CHANGE_ME, REPLACE_ME — so
-                        nobody ships one by accident.
+                        Example values are the command that generates them, in angle brackets —
+                        <openssl rand -hex 16> — so nobody ships one by accident and anyone can
+                        make a real one.
                         Offending lines:
                           %s""", String.join("\n  ", offenders))
                 .isEmpty();
@@ -280,6 +280,23 @@ class ConfigurationHygieneTest {
         assertThat(hardcodedCredential(line))
                 .withFailMessage("'%s' should NOT have been flagged.", line)
                 .isEmpty();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"<openssl rand -hex 16>", "<openssl rand -base64 48>"})
+    void accepts_the_command_that_generates_the_value_as_an_example(String value) {
+        assertThat(isGeneratorPlaceholder(value)).isTrue();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"CHANGE_ME_local_only", "REPLACE_ME", "hunter2", "<>", "< >",
+            "prefix-<openssl rand -hex 16>", "<openssl rand -hex 16>-suffix"})
+    void refuses_anything_else_as_an_example_value(String value) {
+        assertThat(isGeneratorPlaceholder(value)).isFalse();
+    }
+
+    private static boolean isGeneratorPlaceholder(String value) {
+        return OBVIOUS_PLACEHOLDER.matcher(value).matches();
     }
 
     /** Both formats are scanned: the repository is YAML today, and .properties would win if reintroduced. */

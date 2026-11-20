@@ -1,0 +1,11 @@
+{
+  "operation" : "POST /payments/cash-in",
+  "status" : 401,
+  "contentType" : "application/problem+json",
+  "body" : {
+    "detail" : "Invalid PIN",
+    "instance" : "/payments/cash-in",
+    "status" : 401,
+    "title" : "Unauthorized"
+  }
+}

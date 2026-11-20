@@ -1,0 +1,11 @@
+{
+  "operation" : "GET /payments/history",
+  "status" : 400,
+  "contentType" : "application/problem+json",
+  "body" : {
+    "detail" : "Invalid date for from: expected YYYY-MM-DD, got: 19-11-2026",
+    "instance" : "/payments/history",
+    "status" : 400,
+    "title" : "Bad Request"
+  }
+}

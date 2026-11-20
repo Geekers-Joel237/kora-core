@@ -1,0 +1,11 @@
+{
+  "operation" : "POST /payments/transfer",
+  "status" : 503,
+  "contentType" : "application/problem+json",
+  "body" : {
+    "detail" : "Retries exhausted",
+    "instance" : "/payments/transfer",
+    "status" : 503,
+    "title" : "Service Unavailable"
+  }
+}

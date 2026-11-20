@@ -27,8 +27,9 @@ exist. Load tests: `perf/*.js`, run via `perf/*-run.sh`.
 
 ## 3. Stack
 
-Java 21 · Spring Boot 4.0.3 · PostgreSQL + Flyway · springdoc-openapi 3.0.1 · jjwt 0.12.6 · Lombok · JUnit 5 + Testcontainers 1.20.4.
+Java 21 · Spring Boot 4.0.3 · PostgreSQL + Flyway · springdoc-openapi 3.0.1 · jjwt 0.12.6 · Lombok · MapStruct 1.6.3 (+ `lombok-mapstruct-binding`) · JUnit 5 + Testcontainers 1.20.4.
 Starters: webmvc, data-jpa, data-jdbc, security, validation, mail, actuator, flyway.
+Test starters: test, testcontainers, webmvc-test and security-test — the web slice of the contract level.
 
 ## 4. Modules & layers
 
@@ -72,6 +73,18 @@ an entry costs a line there and the sentence that justifies it.
 
 Interactors are plain classes wired by hand in `config/`. Every use case is
 instantiable in one line, with no container.
+
+MapStruct maps at two boundaries, both in adapters, and nowhere else:
+
+| Boundary | Mappers | Config | Fails the build on |
+|---|---|---|---|
+| In: request → command | `<module>/adapters/in/rest/mapping/*RequestMapper` | `RequestMapperConfig` | an unmapped command component **or** an unused request field |
+| Out: snapshot ↔ entity | `<module>/adapters/out/persistence/mapping/*PersistenceMapper` | `PersistenceMapperConfig` | an unmapped entity or snapshot property; Lombok builders are disabled so the inherited `id` is mapped |
+
+Conversions to value objects (`Id`, the correlation id, `Pin`, `OtpCode`, `RefreshToken`,
+`PaymentMethod`) are named methods in `RequestConversions` and the modules'
+`*RequestConversions`. An update of a managed entity is a named method on the entity
+taking plain values, never a mapper. Responses are built by hand in `*Response.from(...)`.
 
 ## 5. Domain vocabulary
 
@@ -164,13 +177,16 @@ Assertions to apply to a diff. Each one is decidable by reading the diff alone.
     in the same transaction is a defect.
 11. An `*Action` class in `<module>/adapters/in/rest/api/**` containing branching on
     domain state, arithmetic, or repository access is a defect — it may only build a
-    command or query, delegate, and map the result. Naming more than one driving port
-    is a defect too.
+    command through its module's `*RequestMapper` (or a query), delegate, and map the
+    result. Naming more than one driving port is a defect too.
 12. An interactor in `<module>/application/usecases/` that imports another interactor,
     or a second driving port, is a defect.
 13. A command, port, or domain type accepting a raw `String` where a domain type
     exists (`Id`, `Amount`, `PaymentMethod`, `PhoneNumber`, `Pin`) is a
-    defect. Conversion happens once, in `Request.toCommand()` at the web layer.
+    defect. Conversion happens once, at the web edge: a command is built by the module's
+    MapStruct `*RequestMapper` (`<module>/adapters/in/rest/mapping/`), never by the
+    request record, which carries only its shape and its validation. The history query
+    is still built by `HistoryRequest.toQuery()`, whose parsing errors are contracted.
 14. A new or altered table column without a new
     `V<yyyyMMddHHmm>__snake_case.sql` under `src/main/resources/db/migration/`
     is a defect. `ddl-auto` must stay `validate` in `application.yaml` and
@@ -179,8 +195,9 @@ Assertions to apply to a diff. Each one is decidable by reading the diff alone.
     handler (`AuthExceptionHandler`, `PaymentExceptionHandler`) or in
     `SharedExceptionHandler` is a defect.
 16. New domain behaviour without a Spring-free unit test is a defect.
-17. A test placed outside `<module>/{unit,integration,e2e}/` is a defect, as is a
-    `@SpringBootTest` under `unit/` or an HTTP client under `integration/`.
+17. A test placed outside `<module>/{unit,integration,contract,e2e}/` is a defect, as is a
+    `@SpringBootTest` under `unit/`, an HTTP client under `integration/`, or a database or
+    a server under `contract/`.
 18. A constant added to or removed from a persisted enum — `Role`, `UserStatus`,
     `ResourceType`, `TransactionType`, `PaymentMethod`, `LedgerEntryType`,
     `TriggerSource`, `AuthorizationStatus`, `HoldStatus` — or a singleton added to or removed from
@@ -203,7 +220,7 @@ Assertions to apply to a diff. Each one is decidable by reading the diff alone.
 
 ## 8. Testing strategy
 
-67 test classes under `src/test/java`. The tree states the pyramid level first, and
+75 test classes under `src/test/java`. The tree states the pyramid level first, and
 `TestPyramidTest` checks that the statement is true.
 
 ```
@@ -211,6 +228,7 @@ src/test/java/com/geekersjoel237/koracore/
 └── <module>/            auth · payment · shared
     ├── unit/            domain · application · doubles · (auth: config) · (shared: adapters, ports, architecture)
     ├── integration/     persistence · query · (auth: security)
+    ├── contract/        payment and the shared harness; auth has none yet, by decision
     └── e2e/
 ```
 
@@ -227,6 +245,16 @@ splits into `account`, `ledger`, `transaction`, `authorization`, `hold`.
   append-only trigger, an injected failure, the e2e `TRUNCATE` — asks `KoraPostgres` for
   that connection. No HTTP, asserted. `@DataJpaTest` and
   `@AutoConfigureTestDatabase` are gone in Spring Boot 4 — do not reintroduce them.
+- **Contract** — `@ContractTest(<actions>)` from `shared/contract/`: the HTTP boundary of
+  the payment journey with everything real down to the driving ports — dispatcher, JSON,
+  bean validation, the security filter chain, the exception handlers — and the driving
+  ports replaced by `ProgrammableCommandBus` and the query doubles. Tokens come from the
+  real `JwtTokenIssuer`. No database, no server, asserted. Each case is compared, status,
+  content type and body, to a committed file under `src/test/resources/contracts/`; a
+  difference writes a `*.received.json` beside it and fails. `PaymentOpenApiContractTest`
+  compares `/v3/api-docs` to `api-contract/payments.openapi.json` and asserts that the
+  responses it declares are exactly the ones the contracts observe. A boundary changes
+  only through a reviewed diff of those files.
 - **E2E** — extends `AbstractE2ETest`: `@SpringBootTest(RANDOM_PORT)` over real HTTP
   with `RestTemplate`; isolation by `TRUNCATE` in `@BeforeEach`, not by rollback.
   `KoraCoreApplicationTests` starts its own container through `KoraPostgres` too.
@@ -278,9 +306,17 @@ Deliberate and tracked. Do not raise them on a PR.
   wallet lookup by phone number.
 - Access tokens are not stored: after a logout, one stays valid until it expires, at
   most 15 minutes. Checking them per request would put a database read on every call.
+- Amounts cross the API as whole major units (`multipleOf: 1` in `api-contract/payments.openapi.json`,
+  `@Digits(fraction = 0)` on requests): XAF, the only currency, has no minor unit. Moving to integer
+  minor units with the ISO 4217 exponent is planned; it changes every amount field and is a
+  versioned API change, never an in-place one.
 - Expired `refresh_tokens` rows are never purged.
 - Two concurrent exchanges of the same refresh token count as a replay and end the
   session. The mobile client sends one refresh at a time (`mobile/docs/06-architecture.md`).
+- The operator reversal, `POST /admin/payments/{txId}/reverse`, is outside the contract
+  level and outside `api-contract/payments.openapi.json`, and `ReverseAction` takes the
+  correlation id from the request body, ignoring the `X-Correlation-Id` header it declares.
+  Its full journey is revisited as one piece later (`docs/technical-foundation.md` §14).
 
 ## 10. Key files
 

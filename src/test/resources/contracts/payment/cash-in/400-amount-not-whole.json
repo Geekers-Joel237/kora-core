@@ -1,0 +1,15 @@
+{
+  "operation" : "POST /payments/cash-in",
+  "status" : 400,
+  "contentType" : "application/problem+json",
+  "body" : {
+    "detail" : "Request validation failed",
+    "instance" : "/payments/cash-in",
+    "status" : 400,
+    "title" : "Bad Request",
+    "violations" : [ {
+      "message" : "XAF has no minor unit: amount must be a whole number",
+      "field" : "amount"
+    } ]
+  }
+}

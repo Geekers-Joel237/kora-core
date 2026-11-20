@@ -1,0 +1,18 @@
+{
+  "operation" : "GET /payments/history",
+  "status" : 200,
+  "contentType" : "application/json",
+  "body" : {
+    "items" : [ {
+      "reference" : "TRX-20261118-E7B35A6B",
+      "kind" : "DEPOSIT",
+      "status" : "COMPLETED",
+      "amount" : 20000,
+      "currency" : "XAF",
+      "counterpart" : null,
+      "channel" : "MOBILE_MONEY",
+      "date" : "2026-11-18T09:15:00Z"
+    } ],
+    "nextCursor" : null
+  }
+}

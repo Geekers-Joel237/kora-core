@@ -1,0 +1,11 @@
+{
+  "operation" : "POST /payments/cash-in",
+  "status" : 502,
+  "contentType" : "application/problem+json",
+  "body" : {
+    "detail" : "Provider refused the credit",
+    "instance" : "/payments/cash-in",
+    "status" : 502,
+    "title" : "Bad Gateway"
+  }
+}

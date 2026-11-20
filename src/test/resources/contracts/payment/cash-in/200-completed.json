@@ -1,0 +1,12 @@
+{
+  "operation" : "POST /payments/cash-in",
+  "status" : 200,
+  "contentType" : "application/json",
+  "body" : {
+    "transactionId" : "55555555-5555-5555-5555-555555555555",
+    "transactionNumber" : "TRX-20261119-B4E02D3E",
+    "state" : "COMPLETED",
+    "amount" : 5000,
+    "currency" : "XAF"
+  }
+}

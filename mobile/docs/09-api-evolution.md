@@ -232,6 +232,7 @@ Tenu à jour à chaque synchronisation. Une ligne par livraison backend ayant un
 | 2026-10-13 | `develop` — transfert en deux champs, historique en vue client | **Cassant** : corps du transfert, forme complète de l'historique | `toPhonePrefix` + `toPhoneNumber` ; historique `status` / `kind` / montant signé / curseur ; détail ouvert depuis le cache ; sondage par référence ; regroupement des états aligné sur `CustomerStatus` (terminée dès la capture) ; §6.8 levé, drapeau `multiStateFilter` supprimé ; frise d'états et durées inter-états retirées (FR-43, VR-03) ; destinataires récents en une chaîne ignorés |
 | 2026-10-16 | `feature/KC-xx-l10-token-hardening` — jetons durcis (L-10) | **Cassant** : jeton de rafraîchissement à usage unique ; reconnexion forcée au déploiement (jetons émis avant refusés) | Remplacer le jeton de rafraîchissement **dès** la réponse de `/auth/refresh` ; garder un seul rafraîchissement en vol (un rejeu clôt la session) ; traiter `403` au rafraîchissement comme compte suspendu ; brancher `POST /auth/logout` puis passer le drapeau `logout` à `true` ; §6.5 levé ; observation n° 2 corrigée |
 | 2026-10-17 | `feature/KC-xx-l10-token-hardening` — réservation des fonds au retrait (L-1, ADR-008) | Sémantique : `amount` de `GET /payments/balance` devient le solde **disponible** ; nouveau champ `ledgerAmount` (solde comptable) | Afficher `amount` tel quel ; un retrait ou un transfert pendant qu’un retrait est en cours peut recevoir `422` alors que le solde comptable paraît suffisant |
+| 2026-11-20 | `feature/api-contract-tests` — tests de contrat et `api-contract/payments.openapi.json` | **Cassant pour l'app** : `MTN_MOMO`, `MOOV_MONEY` et `WAVE` n'ont jamais été acceptés par le backend (`400`) ; refus du provider en `502` `ProblemDetail` depuis le 2026-10-17 ; `ProblemDetail` sans `type` ; montants entiers | Liste réduite à `ORANGE_MONEY` et `MOBILE_MONEY` (MTN MoMo) ; `paymentMethod` retiré de l'entrée du transfert ; contrat §2, §4, §5.1 corrigés ; erreurs classées par couple statut + type de contenu du contrat Swagger : un `502` en `application/problem+json` devient un échec affirmé (`PROVIDER_REFUSED`), un `5xx` non déclaré reste une issue incertaine |
 | | | | |
 
 ### Anomalies backend à remonter
@@ -240,11 +241,11 @@ Relevées lors de la revue du 2026-08-06. Ce sont des observations, pas des bloc
 
 | # | Observation | Gravité |
 |---|---|---|
-| 1 | `PaymentProviderException` n'est mappée par aucun `@ExceptionHandler` → `500` au corps non conforme à RFC 7807 | moyenne |
+| 1 | ~~`PaymentProviderException` n'est mappée par aucun `@ExceptionHandler` → `500` au corps non conforme à RFC 7807~~ — mappée en `502` `ProblemDetail` depuis le 2026-10-17 | moyenne |
 | 2 | ~~`/auth/refresh` ne distingue pas jeton d'accès et jeton de rafraîchissement~~ — corrigé le 2026-10-16 | faible |
 | 3 | `User.create` attribue `VERIFIED` d'emblée ; `UserStatus.PENDING` n'est jamais utilisé | faible |
-| 4 | `Amount` n'impose aucune échelle — `100.5 XAF` serait accepté | moyenne |
-| 5 | `paymentMethod` n'est pas validé — toute chaîne est acceptée | faible |
+| 4 | ~~`Amount` n'impose aucune échelle — `100.5 XAF` serait accepté~~ — refusé en `400` par `@Digits(fraction = 0)` sur les requêtes, `multipleOf: 1` dans la spec | moyenne |
+| 5 | ~~`paymentMethod` n'est pas validé — toute chaîne est acceptée~~ — n'est plus vrai : `PaymentMethod.fromValue` refuse toute valeur hors liste, constaté le 2026-11-20 | **haute** pour l'app : trois opérateurs sur quatre échouaient |
 | 6 | Aucun endpoint de renvoi d'OTP ; le renvoi passe par `/auth/login` | faible |
 
 ---

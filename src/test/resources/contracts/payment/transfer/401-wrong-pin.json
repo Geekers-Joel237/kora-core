@@ -1,0 +1,11 @@
+{
+  "operation" : "POST /payments/transfer",
+  "status" : 401,
+  "contentType" : "application/problem+json",
+  "body" : {
+    "detail" : "Invalid PIN",
+    "instance" : "/payments/transfer",
+    "status" : 401,
+    "title" : "Unauthorized"
+  }
+}

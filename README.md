@@ -57,7 +57,9 @@ Autonomy grows one evidenced step at a time: observe → explain → recommend �
 
 ## ✅ What runs today
 
-Java 21 · Spring Boot 4.0.3 · PostgreSQL + Flyway · 650+ tests, no mocking framework, Testcontainers against a real database.
+Java 21 · Spring Boot 4.0.3 · PostgreSQL + Flyway · MapStruct · 750+ tests on four levels — unit, integration, contract, e2e — no mocking framework, Testcontainers against a real database.
+
+MapStruct maps at the two edges and nowhere else: request to command on the way in, snapshot to entity on the way out. An unmapped field fails the build on both.
 
 Three packages — `auth`, `payment`, `shared` — with a hexagonal interior whose dependency rules are asserted by the build, not by convention. Not yet a modular monolith: one Gradle project, one Spring Boot application, and eleven classes still crossing between `auth` and `payment`. Those crossings are *recorded* so they cannot grow unnoticed — the first half of Step 2, not the whole of it.
 
@@ -91,6 +93,11 @@ POST /admin/payments/{txId}/reverse
 - Correlation id born at the HTTP edge and propagated into every log line; validation before any write; anti-replay over a TTL window.
 - A command with no registered use case **stops the application from booting**.
 - Optimistic clashes and deadlocks retry with jittered backoff. The retry wraps the transaction boundary, never the reverse, and never spans the provider call — replaying that would charge twice.
+
+### 6️⃣ A payment API boundary that cannot change unnoticed
+- **Contract tests** on cash-in, cash-out, transfer, balance and history: the real web layer, security filter chain and exception handlers, with the use cases replaced by doubles — no database, about ten seconds. Every status, content type and body is compared to a committed file; a difference fails the build until the change is reviewed.
+- **A published contract**, [`api-contract/payments.openapi.json`](./api-contract/payments.openapi.json): every response declared with its content type, required and nullable fields, enumerations taken from the Java sources, whole-unit amounts. The build asserts the declared responses are exactly the ones the contract tests observe.
+- The operator reversal is not under contract yet; its full journey comes later.
 
 ---
 

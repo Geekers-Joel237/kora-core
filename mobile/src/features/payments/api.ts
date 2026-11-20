@@ -28,7 +28,7 @@ export interface CashInput {
   idempotencyKey: string;
 }
 
-export interface TransferInput extends CashInput {
+export interface TransferInput extends Omit<CashInput, 'paymentMethod'> {
   /** Envoyé en deux champs, `toPhonePrefix` + `toPhoneNumber` — contrat §2. */
   recipient: PhoneNumber;
 }

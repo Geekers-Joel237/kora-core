@@ -310,6 +310,7 @@
     "NOT_FOUND": "Ressource introuvable.",
     "CONFLICT": "Cette ressource existe déjà.",
     "BUSINESS_RULE": "L’opération n’a pas pu être effectuée.",
+    "PROVIDER_REFUSED": "L’opérateur a refusé l’opération. Votre solde Kora n’a pas changé.",
     "SERVER": "Le service rencontre un incident.",
     "UNAVAILABLE": "Service temporairement indisponible.",
     "NETWORK": "Pas de connexion internet.",

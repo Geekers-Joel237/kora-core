@@ -310,6 +310,7 @@
     "NOT_FOUND": "Resource not found.",
     "CONFLICT": "This resource already exists.",
     "BUSINESS_RULE": "The payment could not be carried out.",
+    "PROVIDER_REFUSED": "The operator declined the operation. Your Kora balance has not changed.",
     "SERVER": "The service is having an incident.",
     "UNAVAILABLE": "Service temporarily unavailable.",
     "NETWORK": "No internet connection.",

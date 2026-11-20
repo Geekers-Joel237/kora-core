@@ -1,0 +1,9 @@
+{
+  "operation" : "POST /payments/transfer",
+  "status" : 401,
+  "contentType" : "application/json",
+  "body" : {
+    "status" : 401,
+    "error" : "Unauthorized"
+  }
+}

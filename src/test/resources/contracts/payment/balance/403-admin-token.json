@@ -1,0 +1,9 @@
+{
+  "operation" : "GET /payments/balance",
+  "status" : 403,
+  "contentType" : "application/json",
+  "body" : {
+    "status" : 403,
+    "error" : "Forbidden"
+  }
+}

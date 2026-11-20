@@ -40,3 +40,6 @@ out/
 .env.*
 !.env.example
 /logs/
+
+# Contract tests: an observed boundary waiting to be reviewed, never committed
+*.received.json

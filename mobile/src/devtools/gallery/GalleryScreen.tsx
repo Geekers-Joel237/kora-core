@@ -49,7 +49,7 @@ const GALLERY_TRANSACTIONS: Transaction[] = [
     outcome: 'failed',
     direction: 'OUTBOUND',
     amount: { minor: 10000, currency: 'XOF' },
-    channel: 'WAVE',
+    channel: 'MOBILE_MONEY',
     counterpart: null,
     createdAt: new Date(),
   },
