@@ -79,7 +79,7 @@ public final class CashOutService implements CashOutCommandHandler {
         }
 
         try {
-            provider.capture(authorization.providerReference(), correlationId);
+            provider.capture(cmd.paymentMethod(), authorization.providerReference(), correlationId);
         } catch (PaymentTimeoutProviderException e) {
             return boundary.execute(() -> recordCaptureUnknown(initiated.transactionId(), authorization, cmd));
         } catch (PaymentProviderException e) {

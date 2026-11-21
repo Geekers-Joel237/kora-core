@@ -72,7 +72,7 @@ public class InMemoryPaymentProviderAdapter implements PaymentProviderPort {
     }
 
     @Override
-    public CaptureResult capture(String authorizationReference, Id correlationId) {
+    public CaptureResult capture(PaymentMethod paymentMethod, String authorizationReference, Id correlationId) {
         this.captureCalls++;
         if (behavior == Behavior.FAIL_ON_CAPTURE)
             throw new PaymentProviderException("Provider simulated capture failure");
@@ -82,7 +82,7 @@ public class InMemoryPaymentProviderAdapter implements PaymentProviderPort {
     }
 
     @Override
-    public ReverseResult reverse(String reference, Amount amount, Id correlationId) {
+    public ReverseResult reverse(PaymentMethod paymentMethod, String reference, Amount amount, Id correlationId) {
         if (behavior == Behavior.TIMEOUT_ON_REVERSE)
             throw new PaymentTimeoutProviderException("Provider simulated reversal timeout");
         return new ReverseResult(UUID.randomUUID().toString(), true);
