@@ -11,7 +11,8 @@ of its own — the two documents used to mean different things by "Step 2" (ADR-
 Kora Core is a Spring Boot wallet backend for mobile-money operations: cash-in,
 cash-out, P2P transfer, balance, history, operator reversal. Money moves as
 immutable double-entry ledger entries on a transaction walking an 11-state
-lifecycle. Provider calls hit a configurable stub, not a real provider.
+lifecycle. Provider calls go to the provider of the payment method — Orange Money,
+MoMo, card — and each one is a configurable stub, not a real provider.
 
 ## 2. Build & run
 
@@ -241,7 +242,7 @@ Assertions to apply to a diff. Each one is decidable by reading the diff alone.
 
 ## 8. Testing strategy
 
-77 test classes under `src/test/java`. The tree states the pyramid level first, and
+78 test classes under `src/test/java`. The tree states the pyramid level first, and
 `TestPyramidTest` checks that the statement is true.
 
 ```
@@ -307,8 +308,10 @@ Deliberate and tracked. Do not raise them on a PR.
   every transition until reconciliation (roadmap Step 6) defines how it is resolved, and a
   cash-out hold stays `ACTIVE` meanwhile. The expiry job leaves it alone: its authorization stays
   `ACTIVE`, so reconciliation keeps the provider reference.
-- `MobileMoneyProviderAdapter` is a latency-simulating stub, not an HTTP client,
-  and has no circuit breaker.
+- `PaymentProviderRouter`, the only `PaymentProviderPort`, sends every step of a payment to
+  the provider of its method: `OrangeMoneyProvider`, `MomoProvider`, `CardProvider`. `WALLET`
+  has none, a transfer never leaves Kora. All three compose `MobileMoneyPaymentProviderAdapter`,
+  a latency-simulating stub, not an HTTP client, and have no circuit breaker.
 - `InMemoryExpiringStore` holds OTP codes in one JVM's heap. Single-instance only;
   Redis replaces it by changing one `@Bean` line in `AuthUseCaseConfiguration`.
 - `SETTLEMENT_PENDING` to `SETTLED` is not automated; the reconciliation engine is

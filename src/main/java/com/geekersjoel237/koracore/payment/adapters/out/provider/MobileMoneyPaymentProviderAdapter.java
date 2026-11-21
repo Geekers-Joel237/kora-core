@@ -4,7 +4,6 @@ import com.geekersjoel237.koracore.payment.domain.enums.PaymentMethod;
 import com.geekersjoel237.koracore.payment.domain.enums.ProviderOperationType;
 import com.geekersjoel237.koracore.payment.domain.exception.PaymentProviderException;
 import com.geekersjoel237.koracore.payment.domain.exception.PaymentTimeoutProviderException;
-import com.geekersjoel237.koracore.payment.ports.out.provider.PaymentProviderPort;
 import com.geekersjoel237.koracore.shared.domain.vo.Amount;
 import com.geekersjoel237.koracore.payment.domain.vo.AuthorizationResult;
 import com.geekersjoel237.koracore.payment.domain.vo.CaptureResult;
@@ -21,7 +20,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
 @Component
-public class MobileMoneyPaymentProviderAdapter implements PaymentProviderPort {
+public class MobileMoneyPaymentProviderAdapter {
 
     private static final Logger log = LoggerFactory.getLogger(MobileMoneyPaymentProviderAdapter.class);
     private final ProviderBehavior behavior;
@@ -45,7 +44,6 @@ public class MobileMoneyPaymentProviderAdapter implements PaymentProviderPort {
                 this.behavior, simulateLatency);
     }
 
-    @Override
     public AuthorizationResult authorize(Amount amount,
                                          PaymentMethod paymentMethod,
                                          Id correlationId,
@@ -64,8 +62,7 @@ public class MobileMoneyPaymentProviderAdapter implements PaymentProviderPort {
                 true);
     }
 
-    @Override
-    public CaptureResult capture(PaymentMethod paymentMethod, String authorizationReference, Id correlationId) {
+    public CaptureResult capture(String authorizationReference, Id correlationId) {
         log.debug("capture — authRef={} correlationId={}", authorizationReference, correlationId.value());
         checkBehavior(Checkpoint.CAPTURE);
         simulateLatency(captureMs);
@@ -73,8 +70,7 @@ public class MobileMoneyPaymentProviderAdapter implements PaymentProviderPort {
     }
 
 
-    @Override
-    public ReverseResult reverse(PaymentMethod paymentMethod, String reference, Amount amount, Id correlationId) {
+    public ReverseResult reverse(String reference, Amount amount, Id correlationId) {
         log.debug("reverse — ref={} amount={} correlationId={}", reference, amount.value(), correlationId.value());
         checkBehavior(Checkpoint.REVERSE);
         simulateLatency(captureMs);
