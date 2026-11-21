@@ -3,6 +3,7 @@ package com.geekersjoel237.koracore.payment.application.command.reversePayment;
 import com.geekersjoel237.koracore.payment.application.command.reversePayment.ReversePaymentCommand;
 import com.geekersjoel237.koracore.payment.ports.in.ReversePaymentCommandHandler;
 import com.geekersjoel237.koracore.payment.application.command.reversePayment.ReversePaymentResult;
+import com.geekersjoel237.koracore.payment.domain.enums.PaymentMethod;
 import com.geekersjoel237.koracore.payment.domain.enums.TriggerSource;
 import com.geekersjoel237.koracore.payment.domain.exception.AccountNotFoundException;
 import com.geekersjoel237.koracore.payment.domain.exception.InvalidStateTransitionException;
@@ -72,7 +73,7 @@ public final class ReversePaymentService implements ReversePaymentCommandHandler
             return retry.execute(() -> boundary.execute(() -> compensate(cmd)));
 
         try {
-            provider.reverse(plan.holdToRelease(), plan.amount(), cmd.correlationId());
+            provider.reverse(plan.paymentMethod(), plan.holdToRelease(), plan.amount(), cmd.correlationId());
         } catch (PaymentTimeoutProviderException e) {
             return retry.execute(() -> boundary.execute(() -> recordReversalUnknown(cmd)));
         }
@@ -85,10 +86,10 @@ public final class ReversePaymentService implements ReversePaymentCommandHandler
 
         if (state == TransactionState.AUTHORIZED) {
             AuthorizationRecord record = activeAuthorization(cmd.transactionId());
-            return new Plan(record.snapshot().providerReference(), tx.snapshot().amount());
+            return new Plan(record.snapshot().providerReference(), tx.snapshot().amount(), tx.snapshot().paymentMethod());
         }
         if (isPosted(state))
-            return new Plan(null, tx.snapshot().amount());
+            return new Plan(null, tx.snapshot().amount(), tx.snapshot().paymentMethod());
 
         throw new InvalidStateTransitionException(state, TransactionState.REVERSED);
     }
@@ -167,6 +168,6 @@ public final class ReversePaymentService implements ReversePaymentCommandHandler
                 .orElseThrow();
     }
 
-    private record Plan(String holdToRelease, Amount amount) {
+    private record Plan(String holdToRelease, Amount amount, PaymentMethod paymentMethod) {
     }
 }

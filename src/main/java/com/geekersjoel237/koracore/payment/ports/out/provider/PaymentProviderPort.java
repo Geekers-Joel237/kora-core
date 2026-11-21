@@ -18,7 +18,9 @@ public interface PaymentProviderPort {
                                   ProviderOperationType operationType,
                                   PhoneNumber customerPhone) throws PaymentProviderException;
 
-    CaptureResult capture(String authorizationReference, Id correlationId) throws PaymentProviderException;
+    CaptureResult capture(PaymentMethod paymentMethod, String authorizationReference, Id correlationId)
+            throws PaymentProviderException;
 
-    ReverseResult reverse(String reference, Amount amount, Id correlationId) throws PaymentProviderException;
+    ReverseResult reverse(PaymentMethod paymentMethod, String reference, Amount amount, Id correlationId)
+            throws PaymentProviderException;
 }

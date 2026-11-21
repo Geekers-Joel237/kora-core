@@ -65,7 +65,7 @@ public class MobileMoneyPaymentProviderAdapter implements PaymentProviderPort {
     }
 
     @Override
-    public CaptureResult capture(String authorizationReference, Id correlationId) {
+    public CaptureResult capture(PaymentMethod paymentMethod, String authorizationReference, Id correlationId) {
         log.debug("capture — authRef={} correlationId={}", authorizationReference, correlationId.value());
         checkBehavior(Checkpoint.CAPTURE);
         simulateLatency(captureMs);
@@ -74,7 +74,7 @@ public class MobileMoneyPaymentProviderAdapter implements PaymentProviderPort {
 
 
     @Override
-    public ReverseResult reverse(String reference, Amount amount, Id correlationId) {
+    public ReverseResult reverse(PaymentMethod paymentMethod, String reference, Amount amount, Id correlationId) {
         log.debug("reverse — ref={} amount={} correlationId={}", reference, amount.value(), correlationId.value());
         checkBehavior(Checkpoint.REVERSE);
         simulateLatency(captureMs);

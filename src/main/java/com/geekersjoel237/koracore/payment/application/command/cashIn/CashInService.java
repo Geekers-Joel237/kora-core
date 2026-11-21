@@ -75,7 +75,7 @@ public final class CashInService implements CashInCommandHandler {
         }
 
         try {
-            provider.capture(authorization.providerReference(), correlationId);
+            provider.capture(cmd.paymentMethod(), authorization.providerReference(), correlationId);
         } catch (PaymentTimeoutProviderException e) {
             return boundary.execute(() -> recordCaptureUnknown(initiated.transactionId(), authorization, cmd));
         } catch (PaymentProviderException e) {
