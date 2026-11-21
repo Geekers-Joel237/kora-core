@@ -110,8 +110,7 @@ public final class CashInService implements CashInCommandHandler {
     private CashInResult settle(Id transactionId, AuthorizationResult authorization, CashInCommand cmd) {
         Transaction tx = reload(transactionId);
         Account wallet = accountRepository.findByCustomerIdForUpdate(cmd.customerId())
-                .orElseThrow(() -> new AccountNotFoundException(
-                        "Account not found for customer: " + cmd.customerId().value()));
+                .orElseThrow();
         Account floatAccount = loadFloatAccount();
 
         AuthorizationRecord record = AuthorizationRecord.create(
@@ -179,8 +178,7 @@ public final class CashInService implements CashInCommandHandler {
 
     private Transaction reload(Id transactionId) {
         return transactionRepository.findById(transactionId)
-                .orElseThrow(() -> new AccountNotFoundException(
-                        "Transaction not found: " + transactionId.value()));
+                .orElseThrow();
     }
 
     private Account loadFloatAccount() {
