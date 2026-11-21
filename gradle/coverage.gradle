@@ -109,7 +109,7 @@ tasks.register('verifyCoverage') {
         }
 
         if (!raisable.isEmpty())
-            logger.lifecycle("Coverage above its floor; raise it in ${coverageFloors.name}:\n  " + raisable.join('\n  '))
+            logger.lifecycle("Coverage above its floor in ${coverageFloors.name}:\n  " + raisable.join('\n  '))
         if (!failures.isEmpty())
             throw new GradleException("Coverage fell below its floor:\n  " + failures.join('\n  '))
         def out = marker.get().asFile

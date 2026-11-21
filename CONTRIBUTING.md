@@ -497,17 +497,22 @@ Docker). It then compares each measure with its floor in `config/coverage-floors
 | Key | Measured on | Scope |
 |---|---|---|
 | `all.total.*`, `all.<module>.*` | every level | the whole of `src/main`, or one module |
-| `unit.<module>.domain.*`, `unit.<module>.application.*` | the unit level alone | the domain and the use cases |
+| `unit.total.*` | the unit level alone | the hexagon: every `domain/` and `application/` |
+| `unit.<module>.domain.*`, `unit.<module>.application.*` | the unit level alone | the domain and the use cases of one module |
 
 The `unit.*` keys are the pyramid gate: code that only an e2e test reaches is not covered
-where it counts.
+where it counts. Floors are in percent with one decimal, for `lines` and `branches`, and
+**below a floor the build fails** and names the key. There are two kinds:
 
-A floor is a ratchet, in percent with one decimal, for `lines` and `branches`:
+- **The hexagon has fixed minimums.** Payment, `domain` and `application`, is at **100 %**:
+  every line and branch that moves money is tested. Every other `unit.*` key, and the hexagon
+  as a whole, is at **90 %**. Written test first, the code stays near 100; 90 is what breaks
+  the build, not the target.
+- **The `all.*` keys are a ratchet.** They start at the measure and only go up: the build
+  prints every measure above its floor, and raising one is a one-line diff in the same pull
+  request.
 
-- **Below the floor, the build fails** and names the key.
-- **Above it, the build prints the new value.** Raising the floor is a one-line diff in the
-  same pull request.
-- **Lowering one needs the reason in the pull request.**
+Lowering any floor needs the reason in the pull request.
 
 Two things are never measured: `KoraCoreApplication` and the classes MapStruct generates
 (`*MapperImpl`). The mappers' behaviour stays covered through the tests of their callers.
