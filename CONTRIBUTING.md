@@ -461,7 +461,7 @@ The test tree states the pyramid level first, so a level is a package selector.
 In-memory adapters, no Spring context, no external dependency:
 
 ```bash
-./gradlew test --tests "com.geekersjoel237.koracore.*.unit.*"
+./gradlew unitTest
 ./gradlew test --tests "com.geekersjoel237.koracore.payment.unit.*"
 ```
 
@@ -488,8 +488,34 @@ invariants asserted through JDBC:
 ./gradlew test
 ```
 
-There is no coverage gate. Coverage is not the target — the architecture tests in
-`shared/unit/architecture/` are, and they fail the build.
+### Coverage gate
+
+`./gradlew check`, and therefore `build`, ends with `verifyCoverage`. It measures twice with
+JaCoCo: every level together (`test`), and the unit level alone (`unitTest`, about 15 s, no
+Docker). It then compares each measure with its floor in `config/coverage-floors.properties`:
+
+| Key | Measured on | Scope |
+|---|---|---|
+| `all.total.*`, `all.<module>.*` | every level | the whole of `src/main`, or one module |
+| `unit.<module>.domain.*`, `unit.<module>.application.*` | the unit level alone | the domain and the use cases |
+
+The `unit.*` keys are the pyramid gate: code that only an e2e test reaches is not covered
+where it counts.
+
+A floor is a ratchet, in percent with one decimal, for `lines` and `branches`:
+
+- **Below the floor, the build fails** and names the key.
+- **Above it, the build prints the new value.** Raising the floor is a one-line diff in the
+  same pull request.
+- **Lowering one needs the reason in the pull request.**
+
+Two things are never measured: `KoraCoreApplication` and the classes MapStruct generates
+(`*MapperImpl`). The mappers' behaviour stays covered through the tests of their callers.
+Reports, HTML and XML, are in `build/reports/jacoco/test/` and
+`build/reports/jacoco/jacocoUnitTestReport/`.
+
+The architecture tests in `shared/unit/architecture/` remain the first gate. Coverage tells
+what was run, not what was checked.
 
 ### Running a single test class
 

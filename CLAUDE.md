@@ -16,18 +16,22 @@ lifecycle. Provider calls hit a configurable stub, not a real provider.
 ## 2. Build & run
 
 ```bash
-./gradlew build     # compile + full test suite
+./gradlew build     # compile + full test suite + coverage gate (verifyCoverage)
 ./gradlew test --tests "*LedgerTest"
+./gradlew unitTest  # the unit level alone, no Docker
 ./gradlew test --tests "com.geekersjoel237.koracore.payment.unit.*"    # one pyramid level
 ./gradlew bootRun   # :8081; reads .env directly. Services come from COMPOSE_PROFILES
 ```
+
+Coverage floors live in `config/coverage-floors.properties`, a ratchet: the build fails below
+one and prints the new value above it (`gradle/coverage.gradle`, CONTRIBUTING §5).
 
 Tests ignore compose and start their own Testcontainers. `compose.yaml` does not
 exist. Load tests: `perf/*.js`, run via `perf/*-run.sh`.
 
 ## 3. Stack
 
-Java 21 · Spring Boot 4.0.3 · PostgreSQL + Flyway · springdoc-openapi 3.0.1 · jjwt 0.12.6 · Lombok · MapStruct 1.6.3 (+ `lombok-mapstruct-binding`) · JUnit 5 + Testcontainers 1.20.4.
+Java 21 · Spring Boot 4.0.3 · PostgreSQL + Flyway · springdoc-openapi 3.0.1 · jjwt 0.12.6 · Lombok · MapStruct 1.6.3 (+ `lombok-mapstruct-binding`) · JUnit 5 + Testcontainers 1.20.4 · JaCoCo 0.8.13.
 Starters: webmvc, data-jpa, data-jdbc, security, validation, mail, actuator, flyway.
 Test starters: test, testcontainers, webmvc-test and security-test — the web slice of the contract level.
 
