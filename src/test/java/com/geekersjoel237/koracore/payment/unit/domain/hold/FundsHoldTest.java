@@ -37,6 +37,8 @@ class FundsHoldTest {
     void a_hold_must_be_for_a_positive_amount() {
         assertThatThrownBy(() -> FundsHold.place(TX, WALLET, Amount.of(BigDecimal.ZERO, "XAF")))
                 .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> FundsHold.place(TX, WALLET, null))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

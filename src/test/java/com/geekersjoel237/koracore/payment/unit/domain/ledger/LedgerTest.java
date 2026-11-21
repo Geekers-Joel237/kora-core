@@ -310,6 +310,15 @@ class LedgerTest {
     }
 
     @Test
+    void should_refuse_to_release_a_hold_on_an_account_it_was_not_placed_on() {
+        FundsHold hold = ledger.hold(initiateCashOut(), accountA);
+
+        assertThrows(IllegalArgumentException.class, () -> ledger.release(hold, accountB));
+        assertEquals(HoldStatus.ACTIVE, hold.snapshot().status());
+        assertAmount(100, accountA.snapshot().reserved());
+    }
+
+    @Test
     void should_write_the_mirrored_pair_on_reverse() {
         Transaction tx = postedTransfer();
         ledger.reverse(tx, accountA, accountB);

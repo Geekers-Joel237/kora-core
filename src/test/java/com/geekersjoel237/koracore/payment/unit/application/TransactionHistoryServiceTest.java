@@ -23,6 +23,8 @@ import com.geekersjoel237.koracore.shared.domain.vo.Amount;
 import com.geekersjoel237.koracore.shared.domain.vo.Id;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -34,6 +36,7 @@ import static com.geekersjoel237.koracore.payment.domain.model.state.Transaction
 import static com.geekersjoel237.koracore.payment.domain.model.state.TransactionState.FAILED;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 
 class TransactionHistoryServiceTest {
 
@@ -268,5 +271,77 @@ class TransactionHistoryServiceTest {
 
         assertThat(page.content()).hasSize(1);
         assertThat(page.hasNext()).isTrue();
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "INITIALIZED, PENDING", "AUTHORIZED, PENDING", "UNKNOWN, PENDING",
+            "CAPTURED, COMPLETED", "SETTLEMENT_PENDING, COMPLETED", "SETTLED, COMPLETED",
+            "COMPLETED, COMPLETED", "SETTLEMENT_FAILED, COMPLETED",
+            "FAILED, FAILED", "AUTHORIZATION_FAILED, FAILED", "CAPTURE_FAILED, FAILED",
+            "REVERSED, REFUNDED"})
+    void should_show_every_lifecycle_state_as_the_status_the_customer_understands(String state, CustomerStatus shown) {
+        transactions.give(deposit(state));
+
+        assertThat(readOnly().status()).isEqualTo(shown);
+    }
+
+    @Test
+    void should_refuse_a_row_whose_state_the_domain_does_not_know() {
+        transactions.give(deposit("LOST_IN_TRANSIT"));
+
+        assertThatThrownBy(() -> read(HistoryFilter.empty()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("LOST_IN_TRANSIT");
+    }
+
+    @Test
+    void should_sign_every_kind_by_the_side_of_the_wallet_it_is_on() {
+        transactions.give(deposit("COMPLETED"), withdrawal(), transferToOther(),
+                row(TransactionType.P2P_TRANSFER, OTHER_WALLET, WALLET, "COMPLETED", PaymentMethod.WALLET,
+                        "+237", "699887766"));
+
+        assertThat(read(HistoryFilter.empty()).content())
+                .extracting(TransactionSummary::kind, summary -> summary.signedAmount().signum())
+                .containsExactlyInAnyOrder(
+                        tuple(TransactionKind.DEPOSIT, 1),
+                        tuple(TransactionKind.WITHDRAWAL, -1),
+                        tuple(TransactionKind.TRANSFER_SENT, -1),
+                        tuple(TransactionKind.TRANSFER_RECEIVED, 1));
+    }
+
+    @Test
+    void should_name_no_counterpart_when_only_the_number_is_missing() {
+        transactions.give(row(TransactionType.P2P_TRANSFER, WALLET, OTHER_WALLET, "COMPLETED", PaymentMethod.WALLET,
+                "+237", null));
+
+        assertThat(readOnly().counterpart()).isNull();
+    }
+
+    @Test
+    void should_accept_a_window_open_on_one_side() {
+        read(new HistoryFilter(null, null, LocalDate.of(2026, 10, 1), null));
+        assertThat(transactions.lastCriteria().until()).isNull();
+
+        read(new HistoryFilter(null, null, null, LocalDate.of(2026, 10, 1)));
+        assertThat(transactions.lastCriteria().from()).isNull();
+    }
+
+    @Test
+    void should_refuse_a_query_without_a_customer_a_filter_or_a_page() {
+        assertThatThrownBy(() -> new TransactionHistoryQuery(null, HistoryFilter.empty(), null, Pagination.firstPage()))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("Customer");
+        assertThatThrownBy(() -> new TransactionHistoryQuery(CUSTOMER, null, null, Pagination.firstPage()))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("Filter");
+        assertThatThrownBy(() -> new TransactionHistoryQuery(CUSTOMER, HistoryFilter.empty(), null, null))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("Pagination");
+    }
+
+    @Test
+    void should_refuse_a_cursor_missing_one_of_its_two_parts() {
+        assertThatThrownBy(() -> new HistoryCursor(null, new Id("trx-1")))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new HistoryCursor(NOW, null))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 }
