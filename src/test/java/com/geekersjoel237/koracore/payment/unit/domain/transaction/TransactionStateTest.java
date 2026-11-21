@@ -165,6 +165,7 @@ class TransactionStateTest {
         assertFalse(TransactionState.CAPTURED.isTerminal());
         assertFalse(TransactionState.SETTLEMENT_PENDING.isTerminal());
         assertFalse(TransactionState.SETTLED.isTerminal());
+        assertFalse(TransactionState.UNKNOWN.isTerminal());
     }
 
     @Test

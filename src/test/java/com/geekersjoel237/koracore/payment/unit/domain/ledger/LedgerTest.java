@@ -310,6 +310,13 @@ class LedgerTest {
     }
 
     @Test
+    void should_expose_its_identity_in_its_snapshot() {
+        Id ledgerId = Id.generate();
+
+        assertEquals(ledgerId, Ledger.create(ledgerId).snapshot().ledgerId());
+    }
+
+    @Test
     void should_refuse_to_release_a_hold_on_an_account_it_was_not_placed_on() {
         FundsHold hold = ledger.hold(initiateCashOut(), accountA);
 
