@@ -28,7 +28,6 @@ public record PhoneNumber(String prefix, String number) {
 
 
     public String masked() {
-        if (number.length() <= 6) return prefix + "***";
         return prefix
                 + number.substring(0, 3)
                 + "***"

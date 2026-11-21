@@ -1,6 +1,5 @@
 package com.geekersjoel237.koracore.payment.application.command.transfer;
 
-import com.geekersjoel237.koracore.auth.domain.exception.CustomerNotFoundException;
 import com.geekersjoel237.koracore.auth.domain.model.Customer;
 import com.geekersjoel237.koracore.auth.ports.out.repository.CustomerRepository;
 import com.geekersjoel237.koracore.payment.application.command.transfer.TransferCommand;
@@ -82,8 +81,7 @@ public final class TransferService implements TransferCommandHandler {
 
     private Account lockPayerWallet(com.geekersjoel237.koracore.shared.domain.vo.Id customerId) {
         Customer customer = customerRepository.findById(customerId)
-                .orElseThrow(() -> new CustomerNotFoundException(
-                        "Customer not found: " + customerId.value()));
+                .orElseThrow();
         if (customer.isSuspended())
             throw new AccountSuspendedException(
                     "Account suspended for customer: " + customerId.value());

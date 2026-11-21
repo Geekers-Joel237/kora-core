@@ -103,6 +103,17 @@ class TransactionTest {
     }
 
     @Test
+    void should_refuse_to_write_on_top_of_an_unbalanced_ledger() {
+        Transaction original = createTestTransaction();
+        Transaction corrupted = Transaction.createFromSnapshot(
+                original.snapshot(), java.util.List.of(testOperation()), original.history());
+
+        IllegalStateException refused = assertThrows(IllegalStateException.class,
+                () -> corrupted.recordDoubleEntry(AMT, new Id("from"), new Id("to")));
+        assertTrue(refused.getMessage().contains("Double-entry invariant violated"));
+    }
+
+    @Test
     void should_transition_to_authorized_from_initialized() {
         Transaction tx = createTestTransaction();
         assertDoesNotThrow(tx::authorize);

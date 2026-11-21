@@ -54,6 +54,7 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.function.Supplier;
 import com.geekersjoel237.koracore.shared.domain.vo.Pin;
 import com.geekersjoel237.koracore.payment.application.command.cashOut.CashOutResult;
 import com.geekersjoel237.koracore.payment.application.query.balance.BalanceResult;
@@ -66,6 +67,7 @@ import com.geekersjoel237.koracore.payment.unit.doubles.InMemoryFundsHoldReposit
 import com.geekersjoel237.koracore.payment.domain.model.FundsHold;
 import com.geekersjoel237.koracore.payment.ports.in.TransferCommandHandler;
 import com.geekersjoel237.koracore.shared.unit.doubles.DirectTransactionBoundary;
+import com.geekersjoel237.koracore.shared.ports.out.transaction.TransactionBoundary;
 
 import static com.geekersjoel237.koracore.payment.domain.model.state.TransactionState.AUTHORIZATION_FAILED;
 import static com.geekersjoel237.koracore.payment.domain.model.state.TransactionState.CAPTURE_FAILED;
@@ -1018,6 +1020,27 @@ class PaymentUseCaseTest {
         }
 
         @Test
+        void of_two_operators_reversing_the_same_payment_at_once_only_one_moves_the_money() {
+            var deposit = cashIn.execute(
+                    new CashInCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
+            Id transactionId = new Id(deposit.transactionId());
+            var interleaving = new InterleavingBoundary();
+            var slowOperator = UseCaseFixtures.build(
+                    interleaving, accountRepo, customerRepo, provider,
+                    transactionRepo, historicRepo, ledgerRepository,
+                    authorizationRecordRepo, holdRepo, pinEncoder).reversePayment();
+            interleaving.beforeExecution(2, () -> reversePayment.execute(new ReversePaymentCommand(
+                    transactionId, new Id("op-002"), "OPERATOR", "chargeback", Id.generate())));
+
+            assertThatThrownBy(() -> slowOperator.execute(new ReversePaymentCommand(
+                    transactionId, new Id("op-001"), "OPERATOR", "chargeback", Id.generate())))
+                    .isInstanceOf(InvalidStateTransitionException.class);
+            assertEquals(REVERSED, persisted(deposit.transactionId()).snapshot().state());
+            assertEquals(4, persisted(deposit.transactionId()).snapshot().entries().size());
+            assertTrue(AMOUNT_ZERO.equals(walletOf(CUST_ID_A).snapshot().balance().solde()));
+        }
+
+        @Test
         void an_unknown_transaction_cannot_be_reversed() {
             assertThatThrownBy(() -> reversePayment.execute(new ReversePaymentCommand(
                     new Id("trx-ghost"), new Id("op-001"), "OPERATOR", "dispute", Id.generate())))
@@ -1062,4 +1085,23 @@ class PaymentUseCaseTest {
             assertEquals(TransactionState.AUTHORIZED, persisted(transactionId.value()).snapshot().state());
             assertThat(authorizationRecordRepo.findActiveByTransactionId(transactionId)).isPresent();
         }
-    }}
+    }
+    private static final class InterleavingBoundary implements TransactionBoundary {
+
+        private int executions;
+        private int interleavedAt;
+        private Runnable interleaved;
+
+        private void beforeExecution(int execution, Runnable work) {
+            this.interleavedAt = execution;
+            this.interleaved = work;
+        }
+
+        @Override
+        public <T> T execute(Supplier<T> work) {
+            executions++;
+            if (executions == interleavedAt) interleaved.run();
+            return work.get();
+        }
+    }
+}

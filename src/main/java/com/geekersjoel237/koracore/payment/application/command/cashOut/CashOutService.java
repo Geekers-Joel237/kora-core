@@ -1,6 +1,5 @@
 package com.geekersjoel237.koracore.payment.application.command.cashOut;
 
-import com.geekersjoel237.koracore.auth.domain.exception.CustomerNotFoundException;
 import com.geekersjoel237.koracore.auth.domain.model.Customer;
 import com.geekersjoel237.koracore.auth.ports.out.repository.CustomerRepository;
 import com.geekersjoel237.koracore.payment.application.command.cashOut.CashOutCommand;
@@ -93,8 +92,7 @@ public final class CashOutService implements CashOutCommandHandler {
 
     private Initiated initiate(CashOutCommand cmd) {
         Customer customer = customerRepository.findById(cmd.customerId())
-                .orElseThrow(() -> new CustomerNotFoundException(
-                        "Customer not found: " + cmd.customerId().value()));
+                .orElseThrow();
         if (customer.isSuspended())
             throw new AccountSuspendedException(
                     "Account suspended for customer: " + cmd.customerId().value());
