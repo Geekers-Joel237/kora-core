@@ -1077,6 +1077,51 @@ class PaymentUseCaseTest {
         }
 
         @Test
+        void an_expired_cash_out_authorization_gives_the_held_funds_back() {
+            cashIn.execute(new CashInCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
+            Id transactionId = authorized(TransactionType.CASH_OUT, AMOUNT_5K);
+
+            expireAt(Instant.now().plus(Duration.ofHours(1)));
+
+            assertEquals(AUTHORIZATION_FAILED, persisted(transactionId.value()).snapshot().state());
+            assertTrue(AMOUNT_ZERO.equals(walletOf(CUST_ID_A).snapshot().reserved()));
+            assertTrue(AMOUNT_10K.equals(walletOf(CUST_ID_A).available()));
+            assertThat(holdRepo.findActiveByTransactionId(transactionId)).isEmpty();
+        }
+
+        @Test
+        void an_unknown_payment_is_left_to_reconciliation_and_the_others_still_expire() {
+            cashIn.execute(new CashInCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
+            provider.setBehavior(TIMEOUT_ON_CAPTURE);
+            var unknown = cashOut.execute(
+                    new CashOutCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_5K, PAYMENT_METHOD));
+            provider.setBehavior(SUCCESS);
+            Id other = authorized(TransactionType.CASH_IN, AMOUNT_5K);
+            Id unknownId = new Id(unknown.transactionId());
+
+            expireAt(Instant.now().plus(Duration.ofHours(1)));
+
+            assertEquals(AUTHORIZATION_FAILED, persisted(other.value()).snapshot().state());
+            assertEquals(UNKNOWN, persisted(unknown.transactionId()).snapshot().state());
+            assertThat(authorizationRecordRepo.findActiveByTransactionId(unknownId)).isPresent();
+            assertThat(holdRepo.findActiveByTransactionId(unknownId)).isPresent();
+            assertTrue(AMOUNT_5K.equals(walletOf(CUST_ID_A).snapshot().reserved()));
+        }
+
+        @Test
+        void an_authorization_whose_payment_is_gone_still_expires() {
+            Id dangling = new Id("trx-dangling");
+            authorizationRecordRepo.save(AuthorizationRecord.create(
+                    dangling, "provider-ref-003", AMOUNT_5K, Duration.ofMinutes(15)));
+
+            expireAt(Instant.now().plus(Duration.ofHours(1)));
+
+            assertThat(authorizationRecordRepo.findByTransactionId(dangling))
+                    .get().extracting(record -> record.snapshot().status())
+                    .isEqualTo(AuthorizationRecord.AuthorizationStatus.EXPIRED);
+        }
+
+        @Test
         void an_authorization_still_alive_is_left_alone() {
             Id transactionId = authorized(TransactionType.CASH_IN, AMOUNT_5K);
 
