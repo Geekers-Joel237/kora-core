@@ -98,4 +98,17 @@ class TrxStateHistoricTest {
         assertNull(snap.actorId());
         assertNull(snap.notes());
     }
+
+    @Test
+    void a_history_row_names_its_row_its_transaction_its_new_state_and_its_instant() {
+        java.time.Instant now = java.time.Instant.now();
+        assertThrows(IllegalArgumentException.class, () -> new TrxStateHistoric(
+                null, TX_ID, null, TransactionState.INITIALIZED, now, null, null, null, null, null));
+        assertThrows(IllegalArgumentException.class, () -> new TrxStateHistoric(
+                Id.generate(), null, null, TransactionState.INITIALIZED, now, null, null, null, null, null));
+        assertThrows(IllegalArgumentException.class, () -> new TrxStateHistoric(
+                Id.generate(), TX_ID, null, null, now, null, null, null, null, null));
+        assertThrows(IllegalArgumentException.class, () -> new TrxStateHistoric(
+                Id.generate(), TX_ID, null, TransactionState.INITIALIZED, null, null, null, null, null, null));
+    }
 }

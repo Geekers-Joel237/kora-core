@@ -1,6 +1,7 @@
 package com.geekersjoel237.koracore.payment.unit.domain.account;
 
 import com.geekersjoel237.koracore.payment.domain.model.Account;
+import com.geekersjoel237.koracore.payment.domain.vo.AccountType;
 import com.geekersjoel237.koracore.payment.domain.enums.ResourceType;
 import com.geekersjoel237.koracore.payment.domain.exception.InsufficientFundsException;
 import com.geekersjoel237.koracore.payment.domain.exception.InvalidAccountException;
@@ -46,6 +47,17 @@ class AccountTest {
         assertEquals(PROVIDER_ID, account.snapshot().accountType().resourceId());
         assertEquals(ResourceType.FLOAT_ACCOUNT, account.snapshot().accountType().resourceType());
 
+    }
+
+    @Test
+    void should_refuse_an_account_without_an_owner() {
+        assertThrows(IllegalArgumentException.class, () -> Account.createCustomerAccount(Id.generate(), null));
+        assertThrows(IllegalArgumentException.class, () -> Account.createFloatAccount(Id.generate(), null));
+    }
+
+    @Test
+    void should_refuse_an_account_type_without_its_kind() {
+        assertThrows(IllegalArgumentException.class, () -> new AccountType(CUSTOMER_ID, null));
     }
 
     @Test

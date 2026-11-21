@@ -1,6 +1,5 @@
 package com.geekersjoel237.koracore.payment.application.command.cashOut;
 
-import com.geekersjoel237.koracore.auth.domain.exception.CustomerNotFoundException;
 import com.geekersjoel237.koracore.auth.domain.model.Customer;
 import com.geekersjoel237.koracore.auth.ports.out.repository.CustomerRepository;
 import com.geekersjoel237.koracore.payment.application.command.cashOut.CashOutCommand;
@@ -93,8 +92,7 @@ public final class CashOutService implements CashOutCommandHandler {
 
     private Initiated initiate(CashOutCommand cmd) {
         Customer customer = customerRepository.findById(cmd.customerId())
-                .orElseThrow(() -> new CustomerNotFoundException(
-                        "Customer not found: " + cmd.customerId().value()));
+                .orElseThrow();
         if (customer.isSuspended())
             throw new AccountSuspendedException(
                     "Account suspended for customer: " + cmd.customerId().value());
@@ -118,8 +116,7 @@ public final class CashOutService implements CashOutCommandHandler {
     private CashOutResult settle(Id transactionId, AuthorizationResult authorization, CashOutCommand cmd) {
         Transaction tx = reload(transactionId);
         Account wallet = accountRepository.findByCustomerIdForUpdate(cmd.customerId())
-                .orElseThrow(() -> new AccountNotFoundException(
-                        "Account not found for customer: " + cmd.customerId().value()));
+                .orElseThrow();
         Account floatAccount = loadFloatAccount();
 
         AuthorizationRecord record = AuthorizationRecord.create(
@@ -129,11 +126,9 @@ public final class CashOutService implements CashOutCommandHandler {
         tx.authorize();
         tx.capture();
         Ledger ledger = ledgerRepository.findFirst();
-        holdRepository.findActiveByTransactionId(transactionId)
-                .ifPresentOrElse(hold -> {
-                    ledger.capture(tx, hold, wallet, floatAccount);
-                    holdRepository.save(hold);
-                }, () -> ledger.post(tx, wallet, floatAccount));
+        FundsHold hold = holdRepository.findActiveByTransactionId(transactionId).orElseThrow();
+        ledger.capture(tx, hold, wallet, floatAccount);
+        holdRepository.save(hold);
         accountRepository.save(wallet);
         record.consume();
         authorizationRecordRepository.save(record);
@@ -195,8 +190,7 @@ public final class CashOutService implements CashOutCommandHandler {
     private void releaseHold(Transaction tx) {
         holdRepository.findActiveByTransactionId(tx.snapshot().transactionId()).ifPresent(hold -> {
             Account wallet = accountRepository.findByIdForUpdate(tx.snapshot().fromAccountId())
-                    .orElseThrow(() -> new AccountNotFoundException(
-                            "Account not found: " + tx.snapshot().fromAccountId().value()));
+                    .orElseThrow();
             ledgerRepository.findFirst().release(hold, wallet);
             holdRepository.save(hold);
         });
@@ -204,8 +198,7 @@ public final class CashOutService implements CashOutCommandHandler {
 
     private Transaction reload(Id transactionId) {
         return transactionRepository.findById(transactionId)
-                .orElseThrow(() -> new AccountNotFoundException(
-                        "Transaction not found: " + transactionId.value()));
+                .orElseThrow();
     }
 
     private Account loadFloatAccount() {

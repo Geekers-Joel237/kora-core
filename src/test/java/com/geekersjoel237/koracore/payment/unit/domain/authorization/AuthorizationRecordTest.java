@@ -63,6 +63,11 @@ class AuthorizationRecordTest {
     }
 
     @Test
+    void isActive_should_return_true_when_status_is_active_and_within_ttl() {
+        assertTrue(freshRecord().isActive());
+    }
+
+    @Test
     void isActive_should_return_false_when_expired_but_status_still_active() {
         AuthorizationRecord record = AuthorizationRecord.createFromSnapshot(
                 new AuthorizationRecord.Snapshot(

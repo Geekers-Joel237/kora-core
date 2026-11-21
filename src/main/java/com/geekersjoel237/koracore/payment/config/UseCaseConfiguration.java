@@ -99,7 +99,11 @@ public class UseCaseConfiguration {
     ExpireAuthorizationsCommandHandler expireAuthorizationsCommandHandler(TransactionBoundary boundary,
                                                             TransactionRepository transactions,
                                                             TrxHistoricStatesRepository history,
-                                                            AuthorizationRecordRepository authorizations) {
-        return new ExpireAuthorizationsService(boundary, transactions, history, authorizations);
+                                                            AuthorizationRecordRepository authorizations,
+                                                            AccountRepository accounts,
+                                                            LedgerRepository ledgers,
+                                                            FundsHoldRepository holds) {
+        return new ExpireAuthorizationsService(boundary, transactions, history, authorizations,
+                accounts, ledgers, holds);
     }
 }

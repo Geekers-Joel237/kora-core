@@ -9,6 +9,6 @@ public record HistoryCriteria(Set<TransactionState> states, TransactionKind kind
                               Instant from, Instant until, HistoryCursor after) {
 
     public HistoryCriteria {
-        states = states == null ? Set.of() : Set.copyOf(states);
+        states = Set.copyOf(states);
     }
 }

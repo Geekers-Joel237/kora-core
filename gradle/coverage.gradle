@@ -1,0 +1,123 @@
+apply plugin: 'jacoco'
+
+jacoco {
+    toolVersion = '0.8.13'
+}
+
+def coverageExclusions = [
+        'com/geekersjoel237/koracore/KoraCoreApplication.class',
+        '**/*MapperImpl.class'
+]
+
+def measuredClasses = files(sourceSets.main.output.classesDirs.collect { dir ->
+    fileTree(dir) { exclude coverageExclusions }
+})
+
+def hexagonClasses = files(sourceSets.main.output.classesDirs.collect { dir ->
+    fileTree(dir) {
+        include 'com/geekersjoel237/koracore/*/domain/**', 'com/geekersjoel237/koracore/*/application/**'
+        exclude coverageExclusions
+    }
+})
+
+tasks.register('unitTest', Test) {
+    description = 'Runs the unit level alone: no Spring context, no container.'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform()
+    filter {
+        includeTestsMatching 'com.geekersjoel237.koracore.*.unit.*'
+    }
+}
+
+tasks.named('jacocoTestReport', JacocoReport) {
+    dependsOn tasks.named('test')
+    classDirectories.setFrom(measuredClasses)
+    reports {
+        xml.required = true
+        html.required = true
+        csv.required = false
+    }
+}
+
+def jacocoUnitTestReport = tasks.register('jacocoUnitTestReport', JacocoReport) {
+    description = 'Coverage of the hexagon, domain and application, by the unit level alone.'
+    group = 'verification'
+    dependsOn tasks.named('unitTest')
+    executionData layout.buildDirectory.file('jacoco/unitTest.exec')
+    sourceDirectories.setFrom(sourceSets.main.allJava.srcDirs)
+    classDirectories.setFrom(hexagonClasses)
+    reports {
+        xml.required = true
+        html.required = true
+        csv.required = false
+    }
+}
+
+def coverageFloors = file('config/coverage-floors.properties')
+
+tasks.register('verifyCoverage') {
+    description = 'Fails below a floor of config/coverage-floors.properties; reports what can be raised.'
+    group = 'verification'
+    def reportsBySuite = [
+            all : layout.buildDirectory.file('reports/jacoco/test/jacocoTestReport.xml'),
+            unit: layout.buildDirectory.file('reports/jacoco/jacocoUnitTestReport/jacocoUnitTestReport.xml')
+    ]
+    dependsOn tasks.named('jacocoTestReport'), jacocoUnitTestReport
+    inputs.file(coverageFloors).withPathSensitivity(PathSensitivity.RELATIVE)
+    reportsBySuite.each { suite, report -> inputs.file(report).withPropertyName("${suite}Report") }
+    def marker = layout.buildDirectory.file('coverage/verified')
+    outputs.file(marker)
+
+    doLast {
+        def floors = new Properties()
+        coverageFloors.withInputStream { floors.load(it) }
+        def root = 'com/geekersjoel237/koracore/'
+        def counters = [lines: 'LINE', branches: 'BRANCH']
+
+        def measure = { String suite, String scope, String counter ->
+            def parser = new groovy.xml.XmlSlurper(false, false, true)
+            parser.setFeature('http://apache.org/xml/features/nonvalidating/load-external-dtd', false)
+            def report = parser.parse(reportsBySuite[suite].get().asFile)
+            def prefix = scope == 'total' ? root : root + scope.replace('.', '/') + '/'
+            long covered = 0, missed = 0
+            report.package.findAll { pkg -> (pkg.@name.text() + '/').startsWith(prefix) }.each { pkg ->
+                pkg.counter.findAll { it.@type.text() == counters[counter] }.each {
+                    covered += it.@covered.text() as long
+                    missed += it.@missed.text() as long
+                }
+            }
+            if (covered + missed == 0)
+                throw new GradleException("Coverage floor '${suite}.${scope}.${counter}' measures nothing")
+            Math.floor(1000.0d * covered / (covered + missed)) / 10.0d
+        }
+
+        def failures = []
+        def raisable = []
+        floors.stringPropertyNames().sort().each { key ->
+            def parts = key.split('\\.')
+            def suite = parts.first()
+            def counter = parts.last()
+            def scope = parts[1..-2].join('.')
+            if (!reportsBySuite.containsKey(suite) || !counters.containsKey(counter))
+                throw new GradleException("Unknown coverage floor key: ${key}")
+            def floor = floors.getProperty(key) as double
+            def actual = measure(suite, scope, counter)
+            if (actual < floor) failures << "${key}: ${actual} % is below the floor of ${floor} %"
+            else if (actual > floor) raisable << "${key}=${actual}"
+        }
+
+        if (!raisable.isEmpty())
+            logger.lifecycle("Coverage above its floor in ${coverageFloors.name}:\n  " + raisable.join('\n  '))
+        if (!failures.isEmpty())
+            throw new GradleException("Coverage fell below its floor:\n  " + failures.join('\n  '))
+        def out = marker.get().asFile
+        out.parentFile.mkdirs()
+        out.text = 'verified'
+    }
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('verifyCoverage')
+}

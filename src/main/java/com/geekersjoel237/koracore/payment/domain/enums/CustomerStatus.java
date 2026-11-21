@@ -28,6 +28,6 @@ public enum CustomerStatus {
         return Arrays.stream(values())
                 .filter(status -> status.states.contains(state))
                 .findFirst()
-                .orElseThrow(() -> new IllegalStateException("No customer status for state " + state.name()));
+                .orElseThrow();
     }
 }

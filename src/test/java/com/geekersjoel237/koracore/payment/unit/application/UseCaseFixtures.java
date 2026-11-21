@@ -67,7 +67,8 @@ public final class UseCaseFixtures {
                 new ReversePaymentService(boundary, retry, accounts, transactions,
                         history, provider, ledgers, authorizations, holds),
                 new BalanceService(new InMemoryReadAccountRepository(accounts)),
-                new ExpireAuthorizationsService(boundary, transactions, history, authorizations));
+                new ExpireAuthorizationsService(boundary, transactions, history, authorizations,
+                        accounts, ledgers, holds));
     }
 
     public static CashInCommandHandler cashIn(TransactionBoundary boundary,

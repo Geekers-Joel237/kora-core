@@ -10,7 +10,11 @@ import com.geekersjoel237.koracore.payment.domain.enums.ProviderOperationType;
 import com.geekersjoel237.koracore.payment.domain.enums.TransactionType;
 import com.geekersjoel237.koracore.auth.domain.enums.Role;
 import com.geekersjoel237.koracore.auth.domain.enums.UserStatus;
+import com.geekersjoel237.koracore.payment.application.command.expireAuthorizations.ExpireAuthorizationsCommand;
+import com.geekersjoel237.koracore.payment.domain.enums.TriggerSource;
+import com.geekersjoel237.koracore.payment.domain.exception.AccountBlockedException;
 import com.geekersjoel237.koracore.payment.domain.exception.AccountNotFoundException;
+import com.geekersjoel237.koracore.payment.domain.model.state.TransactionState;
 import com.geekersjoel237.koracore.payment.domain.exception.AccountSuspendedException;
 import com.geekersjoel237.koracore.auth.domain.exception.CustomerNotFoundException;
 import com.geekersjoel237.koracore.payment.domain.exception.InsufficientFundsException;
@@ -42,10 +46,15 @@ import com.geekersjoel237.koracore.payment.unit.doubles.InMemoryTrxHistoricState
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
+import java.util.function.Supplier;
 import com.geekersjoel237.koracore.shared.domain.vo.Pin;
 import com.geekersjoel237.koracore.payment.application.command.cashOut.CashOutResult;
 import com.geekersjoel237.koracore.payment.application.query.balance.BalanceResult;
@@ -58,8 +67,10 @@ import com.geekersjoel237.koracore.payment.unit.doubles.InMemoryFundsHoldReposit
 import com.geekersjoel237.koracore.payment.domain.model.FundsHold;
 import com.geekersjoel237.koracore.payment.ports.in.TransferCommandHandler;
 import com.geekersjoel237.koracore.shared.unit.doubles.DirectTransactionBoundary;
+import com.geekersjoel237.koracore.shared.ports.out.transaction.TransactionBoundary;
 
 import static com.geekersjoel237.koracore.payment.domain.model.state.TransactionState.AUTHORIZATION_FAILED;
+import static com.geekersjoel237.koracore.payment.domain.model.state.TransactionState.CAPTURE_FAILED;
 import static com.geekersjoel237.koracore.payment.domain.model.state.TransactionState.COMPLETED;
 import static com.geekersjoel237.koracore.payment.domain.model.state.TransactionState.REVERSED;
 import static com.geekersjoel237.koracore.payment.domain.model.state.TransactionState.UNKNOWN;
@@ -742,6 +753,400 @@ class PaymentUseCaseTest {
             assertEquals(UNKNOWN, transactionRepo.findById(transactionId).orElseThrow().snapshot().state());
             assertTrue(AMOUNT_5K.equals(heldOnWalletA()));
             assertEquals("provider-ref-001", activeAuthorization(transactionId).snapshot().providerReference());
+        }
+    }
+
+    private Account walletOf(Id customerId) {
+        return accountRepo.findByCustomerId(customerId).orElseThrow();
+    }
+
+    private Account floatAccount() {
+        return accountRepo.findFloatByProviderId(PROVIDER_ID).orElseThrow();
+    }
+
+    private void registerCustomerWithoutWallet(Id customerId, String email, PhoneNumber phone) {
+        User user = User.create(customerId, "No Wallet", email, Role.CUSTOMER);
+        customerRepo.save(Customer.create(user, phone, RAW_PIN, pinEncoder));
+    }
+
+    private Id authorized(TransactionType type, Amount amount) {
+        Account wallet = walletOf(CUST_ID_A);
+        Ledger ledger = ledgerRepository.findFirst();
+        boolean debit = type == TransactionType.CASH_OUT;
+        Transaction tx = debit
+                ? ledger.initiate(wallet, floatAccount(), type, PAYMENT_METHOD, amount)
+                : ledger.initiate(floatAccount(), wallet, type, PAYMENT_METHOD, amount);
+        if (debit) holdRepo.save(ledger.hold(tx, wallet));
+        tx.authorize();
+        transactionRepo.save(tx);
+        Id transactionId = tx.snapshot().transactionId();
+        authorizationRecordRepo.save(AuthorizationRecord.create(
+                transactionId, "provider-ref-002", amount, Duration.ofMinutes(15)));
+        return transactionId;
+    }
+
+    @Nested
+    class RefusedBeforeAnyMoneyMoves {
+
+        private static final Id CUST_ID_C = new Id("cust-003");
+        private static final PhoneNumber PHONE_C = PhoneNumber.of("+237", "600000003");
+
+        @Test
+        void a_cash_in_to_a_customer_without_a_wallet_is_refused() {
+            registerCustomerWithoutWallet(CUST_ID_C, "c@koracore.com", PHONE_C);
+
+            assertThatThrownBy(() -> cashIn.execute(
+                    new CashInCommand(Id.generate(), CUST_ID_C, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD)))
+                    .isInstanceOf(AccountNotFoundException.class);
+            assertEquals(0, transactionRepo.count());
+        }
+
+        @Test
+        void a_cash_out_by_a_suspended_customer_is_refused() {
+            cashIn.execute(new CashInCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
+            suspendCustomerA();
+
+            assertThatThrownBy(() -> cashOut.execute(
+                    new CashOutCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_5K, PAYMENT_METHOD)))
+                    .isInstanceOf(AccountSuspendedException.class);
+            assertEquals(1, transactionRepo.count());
+            assertTrue(AMOUNT_10K.equals(walletOf(CUST_ID_A).snapshot().balance().solde()));
+        }
+
+        @Test
+        void a_cash_out_by_a_customer_without_a_wallet_is_refused() {
+            registerCustomerWithoutWallet(CUST_ID_C, "c@koracore.com", PHONE_C);
+
+            assertThatThrownBy(() -> cashOut.execute(
+                    new CashOutCommand(Id.generate(), CUST_ID_C, RAW_PIN, AMOUNT_5K, PAYMENT_METHOD)))
+                    .isInstanceOf(AccountNotFoundException.class);
+            assertEquals(0, transactionRepo.count());
+        }
+
+        @Test
+        void a_transfer_by_a_suspended_payer_is_refused() {
+            preloadCustomerB();
+            cashIn.execute(new CashInCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
+            suspendCustomerA();
+
+            assertThatThrownBy(() -> transfer.execute(new TransferCommand(Id.generate(),
+                    CUST_ID_A, RAW_PIN, AMOUNT_5K, phoneNumberB())))
+                    .isInstanceOf(AccountSuspendedException.class);
+            assertTrue(AMOUNT_ZERO.equals(walletOf(CUST_ID_B).snapshot().balance().solde()));
+        }
+
+        @Test
+        void a_transfer_by_a_payer_without_a_wallet_is_refused() {
+            preloadCustomerB();
+            registerCustomerWithoutWallet(CUST_ID_C, "c@koracore.com", PHONE_C);
+
+            assertThatThrownBy(() -> transfer.execute(new TransferCommand(Id.generate(),
+                    CUST_ID_C, RAW_PIN, AMOUNT_5K, phoneNumberB())))
+                    .isInstanceOf(AccountNotFoundException.class);
+            assertEquals(0, transactionRepo.count());
+        }
+
+        @Test
+        void a_transfer_to_a_customer_without_a_wallet_is_refused() {
+            cashIn.execute(new CashInCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
+            registerCustomerWithoutWallet(CUST_ID_C, "c@koracore.com", PHONE_C);
+
+            assertThatThrownBy(() -> transfer.execute(new TransferCommand(Id.generate(),
+                    CUST_ID_A, RAW_PIN, AMOUNT_5K, PHONE_C)))
+                    .isInstanceOf(AccountNotFoundException.class);
+            assertTrue(AMOUNT_10K.equals(walletOf(CUST_ID_A).snapshot().balance().solde()));
+        }
+
+        @Test
+        void a_transfer_to_a_blocked_wallet_is_refused() {
+            preloadCustomerB();
+            cashIn.execute(new CashInCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
+            Account walletB = walletOf(CUST_ID_B);
+            walletB.block();
+            accountRepo.save(walletB);
+
+            assertThatThrownBy(() -> transfer.execute(new TransferCommand(Id.generate(),
+                    CUST_ID_A, RAW_PIN, AMOUNT_5K, phoneNumberB())))
+                    .isInstanceOf(AccountBlockedException.class);
+            assertTrue(AMOUNT_10K.equals(walletOf(CUST_ID_A).snapshot().balance().solde()));
+            assertTrue(AMOUNT_ZERO.equals(walletOf(CUST_ID_B).snapshot().balance().solde()));
+        }
+
+        @Test
+        void no_money_moves_without_a_float_account() {
+            var accountsWithoutFloat = new InMemoryAccountRepository(holdRepo);
+            accountsWithoutFloat.save(Account.createCustomerAccount(Id.generate(), CUST_ID_A));
+            var withoutFloat = UseCaseFixtures.build(
+                    new DirectTransactionBoundary(), accountsWithoutFloat, customerRepo, provider,
+                    transactionRepo, historicRepo, ledgerRepository,
+                    authorizationRecordRepo, holdRepo, pinEncoder);
+
+            assertThatThrownBy(() -> withoutFloat.cashIn().execute(
+                    new CashInCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD)))
+                    .isInstanceOf(AccountNotFoundException.class);
+            assertThatThrownBy(() -> withoutFloat.cashOut().execute(
+                    new CashOutCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_5K, PAYMENT_METHOD)))
+                    .isInstanceOf(AccountNotFoundException.class);
+            assertEquals(0, transactionRepo.count());
+            assertThat(provider.authorizeCalls()).isZero();
+        }
+    }
+
+    @Nested
+    class CaptureRefusedByTheProvider {
+
+        @Test
+        void a_cash_in_whose_capture_is_refused_fails_without_crediting_the_wallet() {
+            provider.setBehavior(FAIL_ON_CAPTURE);
+
+            var result = cashIn.execute(
+                    new CashInCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
+
+            assertEquals(CAPTURE_FAILED.name(), result.state());
+            Transaction tx = persisted(result.transactionId());
+            assertEquals(0, tx.snapshot().entries().size());
+            assertThat(tx.history()).extracting(row -> row.snapshot().newState())
+                    .containsExactly("INITIALIZED", "AUTHORIZED", "CAPTURE_FAILED");
+            assertTrue(AMOUNT_ZERO.equals(walletOf(CUST_ID_A).snapshot().balance().solde()));
+            assertThat(authorizationRecordRepo.findByTransactionId(new Id(result.transactionId())))
+                    .get().extracting(record -> record.snapshot().status())
+                    .isEqualTo(AuthorizationRecord.AuthorizationStatus.CANCELLED);
+            assertDoubleEntryInvariant();
+        }
+    }
+
+    @Nested
+    class ReversalOfAnAuthorizedPayment {
+
+        @BeforeEach
+        void fundWalletA() {
+            cashIn.execute(new CashInCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
+        }
+
+        @Test
+        void reversing_an_authorized_cash_out_releases_its_hold_at_the_provider_and_on_the_wallet() {
+            Id transactionId = authorized(TransactionType.CASH_OUT, AMOUNT_5K);
+            assertTrue(AMOUNT_5K.equals(walletOf(CUST_ID_A).snapshot().reserved()));
+
+            var result = reversePayment.execute(new ReversePaymentCommand(
+                    transactionId, new Id("op-001"), "OPERATOR", "customer dispute", Id.generate()));
+
+            assertEquals(REVERSED.name(), result.state());
+            assertTrue(AMOUNT_ZERO.equals(walletOf(CUST_ID_A).snapshot().reserved()));
+            assertTrue(AMOUNT_10K.equals(walletOf(CUST_ID_A).snapshot().balance().solde()));
+            assertThat(authorizationRecordRepo.findActiveByTransactionId(transactionId)).isEmpty();
+            TrxStateHistoric last = persisted(transactionId.value()).history().getLast();
+            assertEquals("AUTHORIZED", last.snapshot().oldState());
+            assertEquals("REVERSED", last.snapshot().newState());
+            assertEquals("customer dispute", last.snapshot().notes());
+            assertEquals("op-001", last.snapshot().actorId());
+        }
+
+        @Test
+        void reversing_an_authorized_cash_in_cancels_it_without_touching_the_wallet() {
+            Id transactionId = authorized(TransactionType.CASH_IN, AMOUNT_5K);
+
+            var result = reversePayment.execute(new ReversePaymentCommand(
+                    transactionId, new Id("op-001"), "OPERATOR", "provider dispute", Id.generate()));
+
+            assertEquals(REVERSED.name(), result.state());
+            assertTrue(AMOUNT_10K.equals(walletOf(CUST_ID_A).snapshot().balance().solde()));
+            assertThat(authorizationRecordRepo.findActiveByTransactionId(transactionId)).isEmpty();
+        }
+
+        @Test
+        void an_authorized_payment_whose_authorization_is_gone_cannot_be_reversed() {
+            Id transactionId = authorized(TransactionType.CASH_IN, AMOUNT_5K);
+            var record = authorizationRecordRepo.findActiveByTransactionId(transactionId).orElseThrow();
+            record.cancel();
+            authorizationRecordRepo.save(record);
+
+            assertThatThrownBy(() -> reversePayment.execute(new ReversePaymentCommand(
+                    transactionId, new Id("op-001"), "OPERATOR", "dispute", Id.generate())))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining(transactionId.value());
+        }
+    }
+
+    @Nested
+    class ReversalOfAPostedPayment {
+
+        private Id postedCashIn(TransactionState reached) {
+            Account wallet = walletOf(CUST_ID_A);
+            Account floatAccount = floatAccount();
+            Ledger ledger = ledgerRepository.findFirst();
+            Transaction tx = ledger.initiate(floatAccount, wallet, TransactionType.CASH_IN, PAYMENT_METHOD, AMOUNT_10K);
+            tx.authorize();
+            ledger.post(tx, floatAccount, wallet);
+            accountRepo.save(wallet);
+            tx.capture();
+            if (reached != TransactionState.CAPTURED) tx.pendSettlement();
+            if (reached == TransactionState.SETTLED) tx.settle();
+            transactionRepo.save(tx);
+            return tx.snapshot().transactionId();
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"CAPTURED", "SETTLEMENT_PENDING", "SETTLED"})
+        void a_payment_posted_but_not_completed_is_compensated(String reached) {
+            Id transactionId = postedCashIn(TransactionState.fromValue(reached));
+            assertTrue(AMOUNT_10K.equals(walletOf(CUST_ID_A).snapshot().balance().solde()));
+
+            var result = reversePayment.execute(new ReversePaymentCommand(
+                    transactionId, new Id("op-001"), "OPERATOR", "chargeback", Id.generate()));
+
+            assertEquals(REVERSED.name(), result.state());
+            assertTrue(AMOUNT_ZERO.equals(walletOf(CUST_ID_A).snapshot().balance().solde()));
+            assertEquals(4, persisted(transactionId.value()).snapshot().entries().size());
+            assertDoubleEntryInvariant();
+        }
+    }
+
+    @Nested
+    class ReversalRefusals {
+
+        @ParameterizedTest
+        @NullSource
+        @ValueSource(strings = {"", "   "})
+        void a_reversal_needs_a_reason(String reason) {
+            var deposit = cashIn.execute(
+                    new CashInCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
+
+            assertThatThrownBy(() -> reversePayment.execute(new ReversePaymentCommand(
+                    new Id(deposit.transactionId()), new Id("op-001"), "OPERATOR", reason, Id.generate())))
+                    .isInstanceOf(IllegalArgumentException.class);
+            assertEquals(COMPLETED, persisted(deposit.transactionId()).snapshot().state());
+            assertTrue(AMOUNT_10K.equals(walletOf(CUST_ID_A).snapshot().balance().solde()));
+        }
+
+        @Test
+        void of_two_operators_reversing_the_same_payment_at_once_only_one_moves_the_money() {
+            var deposit = cashIn.execute(
+                    new CashInCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
+            Id transactionId = new Id(deposit.transactionId());
+            var interleaving = new InterleavingBoundary();
+            var slowOperator = UseCaseFixtures.build(
+                    interleaving, accountRepo, customerRepo, provider,
+                    transactionRepo, historicRepo, ledgerRepository,
+                    authorizationRecordRepo, holdRepo, pinEncoder).reversePayment();
+            interleaving.beforeExecution(2, () -> reversePayment.execute(new ReversePaymentCommand(
+                    transactionId, new Id("op-002"), "OPERATOR", "chargeback", Id.generate())));
+
+            assertThatThrownBy(() -> slowOperator.execute(new ReversePaymentCommand(
+                    transactionId, new Id("op-001"), "OPERATOR", "chargeback", Id.generate())))
+                    .isInstanceOf(InvalidStateTransitionException.class);
+            assertEquals(REVERSED, persisted(deposit.transactionId()).snapshot().state());
+            assertEquals(4, persisted(deposit.transactionId()).snapshot().entries().size());
+            assertTrue(AMOUNT_ZERO.equals(walletOf(CUST_ID_A).snapshot().balance().solde()));
+        }
+
+        @Test
+        void an_unknown_transaction_cannot_be_reversed() {
+            assertThatThrownBy(() -> reversePayment.execute(new ReversePaymentCommand(
+                    new Id("trx-ghost"), new Id("op-001"), "OPERATOR", "dispute", Id.generate())))
+                    .isInstanceOf(AccountNotFoundException.class)
+                    .hasMessageContaining("trx-ghost");
+        }
+    }
+
+    @Nested
+    class AuthorizationExpiry {
+
+        private void expireAt(Instant now) {
+            var useCases = UseCaseFixtures.build(
+                    new DirectTransactionBoundary(), accountRepo, customerRepo, provider,
+                    transactionRepo, historicRepo, ledgerRepository,
+                    authorizationRecordRepo, holdRepo, pinEncoder);
+            useCases.expireAuthorizations().execute(new ExpireAuthorizationsCommand(Id.generate(), now));
+        }
+
+        @Test
+        void an_authorization_past_its_lifetime_fails_the_payment_it_authorized() {
+            Id transactionId = authorized(TransactionType.CASH_IN, AMOUNT_5K);
+
+            expireAt(Instant.now().plus(Duration.ofHours(1)));
+
+            Transaction tx = persisted(transactionId.value());
+            assertEquals(AUTHORIZATION_FAILED, tx.snapshot().state());
+            TrxStateHistoric last = tx.history().getLast();
+            assertEquals("AUTHORIZED", last.snapshot().oldState());
+            assertEquals(TriggerSource.SYSTEM_JOB, last.snapshot().triggeredBy());
+            assertThat(authorizationRecordRepo.findByTransactionId(transactionId))
+                    .get().extracting(record -> record.snapshot().status())
+                    .isEqualTo(AuthorizationRecord.AuthorizationStatus.EXPIRED);
+        }
+
+        @Test
+        void an_expired_cash_out_authorization_gives_the_held_funds_back() {
+            cashIn.execute(new CashInCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
+            Id transactionId = authorized(TransactionType.CASH_OUT, AMOUNT_5K);
+
+            expireAt(Instant.now().plus(Duration.ofHours(1)));
+
+            assertEquals(AUTHORIZATION_FAILED, persisted(transactionId.value()).snapshot().state());
+            assertTrue(AMOUNT_ZERO.equals(walletOf(CUST_ID_A).snapshot().reserved()));
+            assertTrue(AMOUNT_10K.equals(walletOf(CUST_ID_A).available()));
+            assertThat(holdRepo.findActiveByTransactionId(transactionId)).isEmpty();
+        }
+
+        @Test
+        void an_unknown_payment_is_left_to_reconciliation_and_the_others_still_expire() {
+            cashIn.execute(new CashInCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_10K, PAYMENT_METHOD));
+            provider.setBehavior(TIMEOUT_ON_CAPTURE);
+            var unknown = cashOut.execute(
+                    new CashOutCommand(Id.generate(), CUST_ID_A, RAW_PIN, AMOUNT_5K, PAYMENT_METHOD));
+            provider.setBehavior(SUCCESS);
+            Id other = authorized(TransactionType.CASH_IN, AMOUNT_5K);
+            Id unknownId = new Id(unknown.transactionId());
+
+            expireAt(Instant.now().plus(Duration.ofHours(1)));
+
+            assertEquals(AUTHORIZATION_FAILED, persisted(other.value()).snapshot().state());
+            assertEquals(UNKNOWN, persisted(unknown.transactionId()).snapshot().state());
+            assertThat(authorizationRecordRepo.findActiveByTransactionId(unknownId)).isPresent();
+            assertThat(holdRepo.findActiveByTransactionId(unknownId)).isPresent();
+            assertTrue(AMOUNT_5K.equals(walletOf(CUST_ID_A).snapshot().reserved()));
+        }
+
+        @Test
+        void an_authorization_whose_payment_is_gone_still_expires() {
+            Id dangling = new Id("trx-dangling");
+            authorizationRecordRepo.save(AuthorizationRecord.create(
+                    dangling, "provider-ref-003", AMOUNT_5K, Duration.ofMinutes(15)));
+
+            expireAt(Instant.now().plus(Duration.ofHours(1)));
+
+            assertThat(authorizationRecordRepo.findByTransactionId(dangling))
+                    .get().extracting(record -> record.snapshot().status())
+                    .isEqualTo(AuthorizationRecord.AuthorizationStatus.EXPIRED);
+        }
+
+        @Test
+        void an_authorization_still_alive_is_left_alone() {
+            Id transactionId = authorized(TransactionType.CASH_IN, AMOUNT_5K);
+
+            expireAt(Instant.now());
+
+            assertEquals(TransactionState.AUTHORIZED, persisted(transactionId.value()).snapshot().state());
+            assertThat(authorizationRecordRepo.findActiveByTransactionId(transactionId)).isPresent();
+        }
+    }
+    private static final class InterleavingBoundary implements TransactionBoundary {
+
+        private int executions;
+        private int interleavedAt;
+        private Runnable interleaved;
+
+        private void beforeExecution(int execution, Runnable work) {
+            this.interleavedAt = execution;
+            this.interleaved = work;
+        }
+
+        @Override
+        public <T> T execute(Supplier<T> work) {
+            executions++;
+            if (executions == interleavedAt) interleaved.run();
+            return work.get();
         }
     }
 }

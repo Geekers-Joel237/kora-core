@@ -21,7 +21,7 @@ public final class RetryPolicy {
     }
 
     public <T> T execute(Supplier<T> work) {
-        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+        for (int attempt = 1; ; attempt++) {
             try {
                 return work.get();
             } catch (ConcurrentUpdateException e) {
@@ -31,7 +31,6 @@ public final class RetryPolicy {
                 backoff(attempt);
             }
         }
-        throw new IllegalStateException("unreachable");
     }
 
     /**

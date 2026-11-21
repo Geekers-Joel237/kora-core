@@ -1,10 +1,7 @@
 package com.geekersjoel237.koracore.payment.application.command.cashIn;
 
-import com.geekersjoel237.koracore.auth.domain.exception.CustomerNotFoundException;
 import com.geekersjoel237.koracore.auth.domain.model.Customer;
 import com.geekersjoel237.koracore.auth.ports.out.repository.CustomerRepository;
-import com.geekersjoel237.koracore.payment.application.command.cashIn.CashInCommand;
-import com.geekersjoel237.koracore.payment.application.command.cashIn.CashInResult;
 import com.geekersjoel237.koracore.payment.domain.SystemConstants;
 import com.geekersjoel237.koracore.payment.domain.enums.ProviderOperationType;
 import com.geekersjoel237.koracore.payment.domain.enums.TransactionType;
@@ -91,8 +88,7 @@ public final class CashInService implements CashInCommandHandler {
 
     private Initiated initiate(CashInCommand cmd) {
         Customer customer = customerRepository.findById(cmd.customerId())
-                .orElseThrow(() -> new CustomerNotFoundException(
-                        "Customer not found: " + cmd.customerId().value()));
+                .orElseThrow();
         if (customer.isSuspended())
             throw new AccountSuspendedException(
                     "Account suspended for customer: " + cmd.customerId().value());
@@ -114,8 +110,7 @@ public final class CashInService implements CashInCommandHandler {
     private CashInResult settle(Id transactionId, AuthorizationResult authorization, CashInCommand cmd) {
         Transaction tx = reload(transactionId);
         Account wallet = accountRepository.findByCustomerIdForUpdate(cmd.customerId())
-                .orElseThrow(() -> new AccountNotFoundException(
-                        "Account not found for customer: " + cmd.customerId().value()));
+                .orElseThrow();
         Account floatAccount = loadFloatAccount();
 
         AuthorizationRecord record = AuthorizationRecord.create(
@@ -183,8 +178,7 @@ public final class CashInService implements CashInCommandHandler {
 
     private Transaction reload(Id transactionId) {
         return transactionRepository.findById(transactionId)
-                .orElseThrow(() -> new AccountNotFoundException(
-                        "Transaction not found: " + transactionId.value()));
+                .orElseThrow();
     }
 
     private Account loadFloatAccount() {

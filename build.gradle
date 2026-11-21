@@ -63,7 +63,7 @@ tasks.withType(JavaCompile).configureEach {
     ]
 }
 
-tasks.named('test') {
+tasks.withType(Test).configureEach {
     useJUnitPlatform()
 
     // ConfigurationHygieneTest reads these files from the working directory, and
@@ -78,3 +78,5 @@ tasks.named('test') {
             .withPropertyName('configurationGuardInputs')
             .withPathSensitivity(PathSensitivity.RELATIVE)
 }
+
+apply from: 'gradle/coverage.gradle'

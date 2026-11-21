@@ -16,18 +16,22 @@ lifecycle. Provider calls hit a configurable stub, not a real provider.
 ## 2. Build & run
 
 ```bash
-./gradlew build     # compile + full test suite
+./gradlew build     # compile + full test suite + coverage gate (verifyCoverage)
 ./gradlew test --tests "*LedgerTest"
+./gradlew unitTest  # the unit level alone, no Docker
 ./gradlew test --tests "com.geekersjoel237.koracore.payment.unit.*"    # one pyramid level
 ./gradlew bootRun   # :8081; reads .env directly. Services come from COMPOSE_PROFILES
 ```
+
+Coverage floors live in `config/coverage-floors.properties`, a ratchet: the build fails below
+one and prints the new value above it (`gradle/coverage.gradle`, CONTRIBUTING §5).
 
 Tests ignore compose and start their own Testcontainers. `compose.yaml` does not
 exist. Load tests: `perf/*.js`, run via `perf/*-run.sh`.
 
 ## 3. Stack
 
-Java 21 · Spring Boot 4.0.3 · PostgreSQL + Flyway · springdoc-openapi 3.0.1 · jjwt 0.12.6 · Lombok · MapStruct 1.6.3 (+ `lombok-mapstruct-binding`) · JUnit 5 + Testcontainers 1.20.4.
+Java 21 · Spring Boot 4.0.3 · PostgreSQL + Flyway · springdoc-openapi 3.0.1 · jjwt 0.12.6 · Lombok · MapStruct 1.6.3 (+ `lombok-mapstruct-binding`) · JUnit 5 + Testcontainers 1.20.4 · JaCoCo 0.8.13.
 Starters: webmvc, data-jpa, data-jdbc, security, validation, mail, actuator, flyway.
 Test starters: test, testcontainers, webmvc-test and security-test — the web slice of the contract level.
 
@@ -160,7 +164,7 @@ Every aggregate exposes `snapshot()` returning an inner record, plus a static
 | An access token and a refresh token are never interchangeable | `JwtTokenIssuer` signs each use with its own key — `kora.security.jwt.access-secret` and `refresh-secret`, which `SecurityProperties` refuses to start with equal — and checks a `typ` claim on top. Each is refused at the other's door with 401. Asserted in `JwtTokenIssuerTest` and `AuthE2ETest` |
 | A refresh token is honoured only while the server remembers it | Every refresh token is a row in `refresh_tokens`, keyed by its `jti`. `POST /auth/logout` revokes its whole family — every token descended from the same login |
 | No debit spends funds an in-flight debit holds | `Account.debit` and `Account.reserve` refuse anything beyond `available()`, the ledger balance minus the reserved amount. The cash-out places its `FundsHold` (`Ledger.hold`) in TX-1 under the wallet lock (`findByCustomerIdForUpdate`); a transfer locks the payer, a reversal locks the account it debits (`findByIdForUpdate`). Asserted end to end in `ConcurrentDebitE2ETest` (L-1) |
-| A hold is resolved with its outcome, never by time | `CONSUMED` in TX-2 by `Ledger.capture`, which writes the entries and debits the reserved amount in the same call; `RELEASED` in the transaction that records a provider failure, or when a reversal releases the provider's hold. Nothing expires a hold; one left `ACTIVE` by a crash stays until resolved |
+| A hold is resolved with its outcome, never by time | `CONSUMED` in TX-2 by `Ledger.capture`, which writes the entries and debits the reserved amount in the same call; `RELEASED` in the transaction that records a provider failure, when a reversal releases the provider's hold, or when the expiry job fails an `AUTHORIZED` payment whose authorization outlived its TTL. Nothing expires a hold; one left `ACTIVE` by a crash stays until resolved |
 | A refresh token is exchanged once; a replay ends its session | `RefreshTokenStore.consume` marks the token used in one conditional `UPDATE`, so of two exchanges exactly one wins. A second exchange revokes the family through `revokeFamilyOfReplayed` — the only `@Transactional` in `src/main`, `REQUIRES_NEW`, so the revocation survives the 401 that rolls the caller back. Asserted end to end in `AuthE2ETest` |
 | The application connects as a role that cannot change the schema | `docker/postgres/initdb/10-kora-roles.sh` creates `kora_migration`, owner of the schema, which runs Flyway, and `kora_app`, which serves traffic. `V202610171921__grant_application_role.sql` gives `kora_app` `SELECT`, `INSERT`, `UPDATE`, `DELETE` on every table, present and future, except `flyway_schema_history`, and no `UPDATE` or `DELETE` on `ledger_entries` and `trx_state_historics`. Not the owner, it can neither `CREATE`, `ALTER`, `DROP` nor `TRUNCATE`, nor disable the append-only triggers. Every test connects as `kora_app` through `KoraPostgres`; asserted in `ApplicationDatabaseRoleTest` |
 | A provider timeout is not a refusal | `PaymentTimeoutProviderException`, a subclass of `PaymentProviderException`, is caught before it at every provider call and moves the transaction to `UNKNOWN` (`markUnknown()`): from `INITIALIZED` on `authorize`; from `AUTHORIZED` on `capture`, after the `AuthorizationRecord` keeps the provider reference; from `AUTHORIZED` on `reverse`. A cash-out hold stays `ACTIVE`. Any other provider error keeps its failed state, and reaches HTTP as 502. Asserted in `PaymentUseCaseTest` and `ProviderFailureE2ETest` |
@@ -237,7 +241,7 @@ Assertions to apply to a diff. Each one is decidable by reading the diff alone.
 
 ## 8. Testing strategy
 
-75 test classes under `src/test/java`. The tree states the pyramid level first, and
+77 test classes under `src/test/java`. The tree states the pyramid level first, and
 `TestPyramidTest` checks that the statement is true.
 
 ```
@@ -301,7 +305,8 @@ Deliberate and tracked. Do not raise them on a PR.
   `ProviderSuccessLostE2ETest`, disabled.
 - A transaction left `UNKNOWN` by a provider timeout stays there: `UnknownState` refuses
   every transition until reconciliation (roadmap Step 6) defines how it is resolved, and a
-  cash-out hold stays `ACTIVE` meanwhile.
+  cash-out hold stays `ACTIVE` meanwhile. The expiry job leaves it alone: its authorization stays
+  `ACTIVE`, so reconciliation keeps the provider reference.
 - `MobileMoneyProviderAdapter` is a latency-simulating stub, not an HTTP client,
   and has no circuit breaker.
 - `InMemoryExpiringStore` holds OTP codes in one JVM's heap. Single-instance only;

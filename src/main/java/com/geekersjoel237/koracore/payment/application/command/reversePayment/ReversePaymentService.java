@@ -152,8 +152,7 @@ public final class ReversePaymentService implements ReversePaymentCommandHandler
 
     private Account account(Id accountId) {
         return accountRepository.findById(accountId)
-                .orElseThrow(() -> new AccountNotFoundException(
-                        "Account not found: " + accountId.value()));
+                .orElseThrow();
     }
 
     private void recordTransition(ReversePaymentCommand cmd, Transaction tx, TransactionState from) {
@@ -165,8 +164,7 @@ public final class ReversePaymentService implements ReversePaymentCommandHandler
 
     private Account lockedAccount(Id accountId) {
         return accountRepository.findByIdForUpdate(accountId)
-                .orElseThrow(() -> new AccountNotFoundException(
-                        "Account not found: " + accountId.value()));
+                .orElseThrow();
     }
 
     private record Plan(String holdToRelease, Amount amount) {

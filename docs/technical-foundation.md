@@ -23,6 +23,12 @@ Coverage baseline measured on 2026-11-13 at `f7cf39d` (JaCoCo through a temporar
 all suites **91.9 % lines / 83.9 % branches**; unit suite alone 52.9 / 62.6, with `domain` at
 93.1 / 83.4 and `auth/application` at **30.0 / 0**.
 
+Since `feature/jacoco-coverage`, coverage is a gate of `check` (§6), measured without
+`KoraCoreApplication` and the generated `*MapperImpl`. At `e150bdd` it stood at **92.3 % lines
+/ 84.5 % branches** for all suites, with `auth/application` at **30.0 / 0** in the unit suite.
+The unit tests written on that branch brought the hexagon to **99.9 / 99.3** and payment to
+**100 / 100**, and turned up two expiry bugs, fixed there. All suites: **96.9 / 94.3**.
+
 ---
 
 ## Principles
@@ -174,22 +180,28 @@ the admin too, and an unsigned commit cannot merge.
 
 ### 6. Coverage — JaCoCo, four instruments
 
-- [ ] `test` split into `unitTest`, `integrationTest`, `e2eTest` (JVM test suites plugin),
-      matching the package levels `TestPyramidTest` already asserts. `check` depends on all
-      three; `build` stays the full gate.
-- [ ] **Ratchet** — all suites, per module: floors in a versioned file
-      (`config/coverage-floors.properties`), starting at 91 % lines / 83 % branches globally.
-      The build fails below the floor and prints the new value when above, so raising it is a
-      one-line diff.
-- [ ] **Pyramid gate** — `*/domain/**` and `*/application/**` measured on `unitTest` alone:
-      domain 93 / 83 now, 95 / 90 as target; application at today's value per module.
-      Coverage that only e2e provides is not coverage of the domain.
+- [x] A `unitTest` task beside `test`, filtered on `*.unit.*`, the level `TestPyramidTest`
+      asserts. `test` stays every level; the unit level runs a second time, alone, for its own
+      measure (about 15 s, no Docker). `integrationTest` and `e2eTest` are not split out: no
+      gate reads them on their own yet. `gradle/coverage.gradle`.
+- [x] **Ratchet** — all suites, globally and per module: floors in
+      `config/coverage-floors.properties`, at the measure (96.9 % lines / 94.3 % branches
+      globally). `verifyCoverage`, a dependency of `check`, fails below a floor and prints
+      every measure above its floor, so raising one is a one-line diff. Proven red by a floor
+      set 0.1 above its measure.
+- [x] **Pyramid gate** — the hexagon, `<module>/domain` and `<module>/application`, measured
+      on `unitTest` alone, with fixed minimums: **100 / 100 for payment**, the code that moves
+      money; **90 / 90** for every other module and for the hexagon as a whole. Written test
+      first, the code stays near 100; 90 is the floor that breaks the build. Coverage that
+      only e2e provides is not coverage of the domain.
 - [ ] **Critical paths at 100 % branches** — a named list in the build (`Ledger`,
       `Transaction`, the `*State` classes, `RetryPolicy`, the use cases that call the
       provider). A class enters when its gaps are closed; leaving needs a justification in
       the same diff, as `FRAMEWORK_ALLOW_LIST` does.
-- [ ] Exclusion: `KoraCoreApplication.main` only. `config/` and `adapters/` are measured.
-- [ ] XML reports for Sonar; HTML as a CI artifact.
+- [x] Exclusions: `KoraCoreApplication` and the classes MapStruct generates (`*MapperImpl`),
+      whose null checks are not ours and halved the adapters' branch figure. `config/` and
+      the handwritten `adapters/` are measured.
+- [ ] XML reports for Sonar; HTML as a CI artifact. Both are produced locally; no CI yet.
 
 ### 7. Close the gaps the measure revealed
 
