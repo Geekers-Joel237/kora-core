@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a vulnerability
+    url: https://github.com/Geekers-Joel237/kora-core/security/advisories/new
+    about: Never in a public issue — report it privately.
+  - name: Read the documentation
+    url: https://github.com/Geekers-Joel237/kora-core/blob/develop/docs/README.md
+    about: Setup, testing, standards and architecture decisions.
