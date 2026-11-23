@@ -75,7 +75,7 @@ spring:
   # Flyway owns the schema in every environment; Hibernate only checks that the
   # entities match it and never emits DDL. Out-of-order stays off everywhere:
   # a migration older than the highest applied one is re-stamped before merge,
-  # never inserted retroactively. See CONTRIBUTING.md section 9.
+  # never inserted retroactively. See docs/development/database.md.
   jpa:
     hibernate:
       ddl-auto: validate

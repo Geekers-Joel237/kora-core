@@ -95,6 +95,6 @@ MailDev      http://localhost:1080     ← les OTP arrivent ici en local
 Postgres     localhost:5432 / kora-db
 ```
 
-Démarrage backend : voir [`../../CONTRIBUTING.md`](../../CONTRIBUTING.md).
+Démarrage backend : voir [`../../docs/development/local-setup.md`](../../docs/development/local-setup.md).
 
 > **À retenir dès maintenant** : les OTP sont envoyés **par e-mail**, pas par SMS. En développement ils sont interceptés par MailDev. Cela a une conséquence UX directe traitée en `05-screens.md` §3.

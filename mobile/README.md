@@ -27,7 +27,7 @@ npm start
 | Émulateur Android | `http://10.0.2.2:8081` |
 | Appareil physique | `http://<IP-LAN-de-la-machine>:8081` |
 
-Le backend doit tourner : voir [`../CONTRIBUTING.md`](../CONTRIBUTING.md).
+Le backend doit tourner : voir [`../docs/development/local-setup.md`](../docs/development/local-setup.md).
 Les OTP arrivent dans MailDev sur <http://localhost:1080>.
 
 ---
