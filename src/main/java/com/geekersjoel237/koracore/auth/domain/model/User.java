@@ -52,7 +52,7 @@ public class User {
         return status == UserStatus.VERIFIED;
     }
 
-    public void requireActive() {
+    public void requireActiveOrThrowException() {
         if (!isActive())
             throw new UserNotActiveException("User is not active: " + id.value());
     }

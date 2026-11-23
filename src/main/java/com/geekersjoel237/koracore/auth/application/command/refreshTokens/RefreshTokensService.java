@@ -1,6 +1,5 @@
 package com.geekersjoel237.koracore.auth.application.command.refreshTokens;
 
-import com.geekersjoel237.koracore.auth.application.command.refreshTokens.RefreshTokensCommand;
 import com.geekersjoel237.koracore.auth.ports.in.RefreshTokensCommandHandler;
 import com.geekersjoel237.koracore.auth.ports.out.security.TokenIssuer;
 import com.geekersjoel237.koracore.auth.domain.exception.CustomerNotFoundException;
@@ -32,7 +31,7 @@ public final class RefreshTokensService implements RefreshTokensCommandHandler {
             User user = userRepository.findById(userId)
                     .orElseThrow(() -> new CustomerNotFoundException(
                             "User not found: " + userId.value()));
-            user.requireActive();
+            user.requireActiveOrThrowException();
             return tokenIssuer.renew(cmd.refreshToken(), user);
         });
     }

@@ -1,21 +1,20 @@
 package com.geekersjoel237.koracore.auth.application.command.register;
 
 import com.geekersjoel237.koracore.auth.domain.enums.OtpPurpose;
-import com.geekersjoel237.koracore.auth.application.command.register.RegisterCommand;
-import com.geekersjoel237.koracore.auth.ports.in.RegisterCommandHandler;
-import com.geekersjoel237.koracore.auth.ports.out.otp.OtpChallenge;
 import com.geekersjoel237.koracore.auth.domain.enums.Role;
 import com.geekersjoel237.koracore.auth.domain.exception.DuplicateEmailException;
 import com.geekersjoel237.koracore.auth.domain.model.Customer;
 import com.geekersjoel237.koracore.auth.domain.model.User;
-import com.geekersjoel237.koracore.auth.ports.out.security.CustomerPinEncoder;
+import com.geekersjoel237.koracore.auth.ports.in.RegisterCommandHandler;
+import com.geekersjoel237.koracore.auth.ports.out.otp.OtpChallenge;
 import com.geekersjoel237.koracore.auth.ports.out.repository.CustomerRepository;
 import com.geekersjoel237.koracore.auth.ports.out.repository.UserRepository;
-import com.geekersjoel237.koracore.shared.domain.vo.PhoneNumber;
+import com.geekersjoel237.koracore.auth.ports.out.security.CustomerPinEncoder;
 import com.geekersjoel237.koracore.payment.domain.model.Account;
 import com.geekersjoel237.koracore.payment.ports.out.repository.AccountRepository;
-import com.geekersjoel237.koracore.shared.ports.out.transaction.TransactionBoundary;
 import com.geekersjoel237.koracore.shared.domain.vo.Id;
+import com.geekersjoel237.koracore.shared.domain.vo.PhoneNumber;
+import com.geekersjoel237.koracore.shared.ports.out.transaction.TransactionBoundary;
 
 
 public final class RegisterService implements RegisterCommandHandler {

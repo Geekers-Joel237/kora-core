@@ -1,8 +1,6 @@
 package com.geekersjoel237.koracore.payment.application.command.reversePayment;
 
-import com.geekersjoel237.koracore.payment.application.command.reversePayment.ReversePaymentCommand;
 import com.geekersjoel237.koracore.payment.ports.in.ReversePaymentCommandHandler;
-import com.geekersjoel237.koracore.payment.application.command.reversePayment.ReversePaymentResult;
 import com.geekersjoel237.koracore.payment.domain.enums.PaymentMethod;
 import com.geekersjoel237.koracore.payment.domain.enums.TriggerSource;
 import com.geekersjoel237.koracore.payment.domain.exception.AccountNotFoundException;
@@ -85,7 +83,7 @@ public final class ReversePaymentService implements ReversePaymentCommandHandler
         TransactionState state = tx.snapshot().state();
 
         if (state == TransactionState.AUTHORIZED) {
-            AuthorizationRecord record = activeAuthorization(cmd.transactionId());
+            AuthorizationRecord record = findActiveAuthorization(cmd.transactionId());
             return new Plan(record.snapshot().providerReference(), tx.snapshot().amount(), tx.snapshot().paymentMethod());
         }
         if (isPosted(state))
@@ -97,7 +95,7 @@ public final class ReversePaymentService implements ReversePaymentCommandHandler
     private ReversePaymentResult recordRelease(ReversePaymentCommand cmd) {
         Transaction tx = reload(cmd.transactionId());
 
-        AuthorizationRecord record = activeAuthorization(cmd.transactionId());
+        AuthorizationRecord record = findActiveAuthorization(cmd.transactionId());
         record.cancel();
         authorizationRecordRepository.save(record);
         holdRepository.findActiveByTransactionId(cmd.transactionId()).ifPresent(hold -> {
@@ -145,7 +143,7 @@ public final class ReversePaymentService implements ReversePaymentCommandHandler
                         "Transaction not found: " + transactionId.value()));
     }
 
-    private AuthorizationRecord activeAuthorization(Id transactionId) {
+    private AuthorizationRecord findActiveAuthorization(Id transactionId) {
         return authorizationRecordRepository.findActiveByTransactionId(transactionId)
                 .orElseThrow(() -> new IllegalStateException(
                         "No active authorization for transaction: " + transactionId.value()));
