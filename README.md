@@ -106,7 +106,7 @@ A wallet backend with registration, OTP login, cash-in, cash-out, P2P transfer, 
 - Each provider is a latency-simulating stub, not an HTTP client. That is deliberate: it makes every failure mode reproducible in a test.
 
 ### 6️⃣ Command bus and safe retries
-- Correlation id born at the HTTP edge and propagated into every log line; validation before any write; anti-replay over a TTL window.
+- A correlation id on every command, read from the request or generated, and stored with the transaction's history; validation before any write; anti-replay over a TTL window. Printing it in every log line, and a trace id on every read and write, are next ([state of view](./docs/kora-core-state-of-view-v3.md) §9.5).
 - A command with no registered use case **stops the application from booting**.
 - Optimistic clashes and deadlocks retry with jittered backoff. The retry wraps the transaction boundary, never the reverse, and never spans the provider call — replaying that would charge twice.
 
