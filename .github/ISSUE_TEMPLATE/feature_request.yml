@@ -1,0 +1,34 @@
+name: Feature request
+description: Propose a capability, a change of behaviour or an improvement.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What a customer, an operator or a contributor cannot do today, and why it matters.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: The behaviour you suggest, stated so a test could check it.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      description: |
+        Does it touch financial correctness, a module or layer boundary, or the transaction
+        strategy? If so it needs an ADR — see docs/adr/README.md.
+  - type: input
+    id: roadmap
+    attributes:
+      label: Roadmap step
+      description: The step of ROADMAP.md it belongs to, if any.

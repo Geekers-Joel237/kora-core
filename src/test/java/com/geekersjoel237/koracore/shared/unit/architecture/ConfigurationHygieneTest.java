@@ -20,7 +20,7 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-// CONTRIBUTING.md section 3.4: no fallback for a secret, no env var missing from .env.example.
+// docs/development/local-setup.md §6: no fallback for a secret, no env var missing from .env.example.
 class ConfigurationHygieneTest {
 
     private static final Path MAIN_RESOURCES = Path.of("src", "main", "resources");

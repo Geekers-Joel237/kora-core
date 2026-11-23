@@ -1,1065 +1,170 @@
 # Contributing to KORA Core
 
-This document covers everything you need to run KORA Core locally, execute the
-test suite, and understand the development conventions in use.
+Thank you for taking the time to contribute. KORA Core moves money, so the bar is high on
+purpose: every change is written test first, every rule is enforced by the build, and every
+significant decision has its cost written down. This guide is the path from an idea to a
+merged pull request.
+
+## Contents
+
+1. [Before you start](#1-before-you-start)
+2. [Set up the project](#2-set-up-the-project)
+3. [Workflow](#3-workflow)
+4. [Making a change](#4-making-a-change)
+5. [Testing and gates](#5-testing-and-gates)
+6. [Commit messages](#6-commit-messages)
+7. [Pull requests](#7-pull-requests)
+8. [Architecture decisions](#8-architecture-decisions)
+9. [Reporting bugs and proposing features](#9-reporting-bugs-and-proposing-features)
 
 ---
 
-## Table of Contents
+## 1. Before you start
 
-1. [Prerequisites](#1-prerequisites)
-2. [Repository structure](#2-repository-structure)
-3. [Environment setup](#3-environment-setup)
-4. [Running the application](#4-running-the-application)
-5. [Running the tests](#5-running-the-tests)
-6. [Load testing](#6-load-testing)
-7. [Code conventions](#7-code-conventions)
-8. [Commit conventions](#8-commit-conventions)
-9. [Database migrations](#9-database-migrations)
-10. [Architecture decisions](#10-architecture-decisions)
+Read, in this order:
 
----
+1. the [README](./README.md) — what the project is and what runs today;
+2. [`CLAUDE.md`](./CLAUDE.md) — the invariants, the vocabulary and the **review rules** a diff
+   is checked against;
+3. [`docs/engineering-standards.md`](./docs/engineering-standards.md) — how the code is
+   written: definition of done, testing strategy, architecture, conventions.
 
-## 1. Prerequisites
+For anything bigger than a fix, open an issue first and say what you intend. A change that
+touches financial correctness, a module boundary or the transaction strategy needs an
+[ADR](./docs/adr/README.md) before the code.
 
-| Tool | Version | Purpose |
-|---|---|---|
-| Java | 21+ | Runtime and compilation |
-| Docker Desktop | Latest | PostgreSQL, MailDev, monitoring stack |
-| Gradle | via wrapper (`./gradlew`) | Build, test, run |
-| Git | Any | Version control |
+Security issues are never reported in a public issue — see [SECURITY.md](./SECURITY.md).
 
-No global installation of Gradle or k6 is required. Gradle is wrapped.
-k6 runs inside a Docker container — the shell scripts handle everything.
+## 2. Set up the project
 
-Verify your setup:
+You need Java 21+, Docker and Git; Gradle is wrapped.
 
 ```bash
-java --version        # must show 21+
-docker --version
-./gradlew --version
+git clone https://github.com/Geekers-Joel237/kora-core.git && cd kora-core
+cp .env.example .env          # then generate each secret it lists
+docker compose up -d          # PostgreSQL + MailDev
+./gradlew bootRun             # http://localhost:8081/swagger-ui.html
 ```
 
----
-
-## 2. Repository structure
-
-```
-kora-core/
-├── src/
-│   ├── main/java/com/geekersjoel237/koracore/
-│   │   └── <module>/           # auth · payment · shared
-│   │       ├── domain/         # model, model/state, vo, enums, exception
-│   │       ├── application/    # command/<intent>, query/<intent>
-│   │       ├── ports/          # in (driving) · out (driven)
-│   │       ├── adapters/       # in (REST, bus) · out (JPA, JDBC, provider, mail)
-│   │       └── config/         # the composition root
-│   └── test/java/
-│       └── <module>/           # the same three modules
-│           ├── unit/           # no context, no container — domain, application, doubles
-│           ├── integration/    # Testcontainers, no HTTP — persistence, query
-│           └── e2e/            # real HTTP + Testcontainers
-├── perf/                       # k6 load tests, Grafana dashboards, runbook
-├── docs/
-│   └── adr/                    # Architecture Decision Records
-├── docker-compose.yml          # Architecture: PostgreSQL, MailDev, pgAdmin, InfluxDB, Grafana
-├── docker-compose.override.yml # Development overrides (auto-loaded)
-├── docker-compose.prod.yml     # Production overrides (explicit -f)
-└── CONTRIBUTING.md             # This file
-```
-
-### Architecture layers
-
-KORA Core has a hexagonal interior and three top-level packages. It is **not yet a
-modular monolith**: there is one Gradle project and one `@SpringBootApplication`, so
-the module boundary is asserted by a test rather than enforced by the build, and
-`auth` and `payment` still share domain models. Step 2 is open — see `ROADMAP.md`.
-
-The dependency rule inside a module is strict:
-
-```
-adapters/in → ports/in → application → domain ← ports/out ← adapters/out
-                                ↑
-                             config wires it all
-```
-
-- `domain/` names the JDK and `shared/domain`. Nothing else.
-- `application/` and `ports/` name **no foreign type at all** — not Spring, not
-  Jakarta, not a JSON binding. `HexagonalArchitectureTest` compares every foreign
-  import against `FRAMEWORK_ALLOW_LIST`, which is empty.
-- `adapters/` implement the ports; `config/` is the only place Spring wires anything.
-- `shared/` is the kernel: it names neither `auth` nor `payment`. What those two still
-  take from each other is recorded as an equality in `ModuleBoundariesTest`, so a new
-  coupling fails the build and closing one fails it too.
-
-There is no `infrastructure/` package and no `web/` package. See ADR-007 for why the
-hexagonal split was done before the modules rather than after.
-
----
-
-## 3. Environment setup
-
-### 3.1 Copy the environment file
-
-```bash
-cp .env.example .env
-```
-
-`.env.example` is the authoritative list of every variable the application and
-Docker Compose can consume. It is versioned; `.env` is not, and must never be
-committed.
-
-Every password and secret in `.env.example` is the command that generates it, in angle
-brackets: `<openssl rand -hex 16>`, `<openssl rand -base64 48>`. Run each command and put
-its output in `.env` — one run per value, so no two values are the same. That includes
-the JWT signing keys, one per token use, as `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET`:
-
-```bash
-openssl rand -hex 16       # each database and pgAdmin password
-openssl rand -base64 48    # each JWT signing key
-```
-
-> **Security note**: each key must be at least 32 characters — HMAC-SHA256
-> rejects anything shorter — and the two must differ. `SecurityProperties`
-> refuses to start on either violation, so an untouched copy of `.env.example`,
-> whose two keys are the same placeholder, does not start.
-> `ConfigurationHygieneTest` fails the build if an example value is anything but
-> such a placeholder. Never commit a real secret; use a secrets manager outside local
-> development.
-
-### 3.2 Start the infrastructure services
-
-```bash
-docker compose up -d
-```
-
-Or press **Run** in your IDE and skip this step entirely — the `dev` profile
-lets Spring bring the same stack up itself (section 3.6).
-
-That starts **two** containers: Postgres and MailDev. MailDev is not optional in
-development — registration and login send an OTP by mail, so without it those
-flows fail and `/actuator/health` reports `mail` as DOWN.
-
-Everything else is an opt-in **Compose profile**, off by default:
-
-| Profile | Services | When |
-|---|---|---|
-| *(none)* | postgres, maildev | always, in development |
-| `tooling` | pgadmin | when you want a database GUI |
-| `observability` | influxdb, grafana | load-test campaigns only |
-
-```bash
-# For a single command — naming a service enables its profile automatically
-docker compose up -d pgadmin
-docker compose up -d influxdb grafana
-
-# For a whole session — set it once in .env and forget it
-#     COMPOSE_PROFILES=tooling,observability
-docker compose up -d
-```
-
-`COMPOSE_PROFILES` lives in `.env`, so `up`, `ps`, `logs` and `down` all agree on
-the same set. That is precisely why an optional group is a profile and not a
-separate `-f` file: with files you must repeat the identical `-f` list on the way
-down, and forgetting one silently leaves those containers running.
-
-Keeping the optional groups off by default is worth about 100 seconds every time
-you start work — measured, containers already pulled, waiting for every service to
-report healthy:
-
-| | Containers | Time to healthy |
-|---|---|---|
-| Default | 2 | **12 s** |
-| `tooling,observability` | 5 | **115 s** |
-
-Then verify — every service declares a healthcheck, so `healthy` means ready,
-not merely started:
-
-```bash
-docker compose ps                 # STATUS column must read "healthy"
-open http://localhost:1080        # MailDev — read the OTP mails here
-```
-
-pgAdmin takes about a minute on a first boot; `health: starting` until then is
-expected.
-
-All ports are published on `127.0.0.1` only. The database is reachable from this
-machine and from nowhere else on the network — the same posture production uses,
-where operators reach it through an SSH tunnel onto that loopback port.
-
-### 3.2.1 Files answer *where*, profiles answer *what else*
-
-One rule keeps the layout readable from an `ls` alone:
-
-> **One file = one environment. One profile = one optional group.**
-
-The two axes are independent: `tooling` is not an environment, and `prod` is not
-something you add on top of `dev`.
-
-| File | Loaded | Answers | Holds | Never holds |
-|---|---|---|---|---|
-| `docker-compose.yml` | always | *What does the application need to exist at all?* | postgres: image and tag, `environment`, `healthcheck`, named volume, network | `ports`, `restart`, `container_name`, host bind mounts, any service only some environments run |
-| `docker-compose.override.yml` | automatically, unless `-f` is used | *How do I run it on my machine?* | loopback port bindings, `container_name`, `restart: "no"`, and the development-only services — maildev, pgadmin, influxdb, grafana | anything a server would need |
-| `docker-compose.prod.yml` | only when named with `-f` | *How does it run on a server?* | loopback binding, `restart: unless-stopped`, `shm_size`, `stop_grace_period`, log rotation | any secret |
-
-```bash
-docker compose up -d                                                    # socle + dev
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d   # socle + prod
-```
-
-Naming any file with `-f` suppresses the automatic pickup of
-`docker-compose.override.yml`. That is the mechanism that keeps development port
-bindings off a server, and it is the one mistake worth guarding against: a deploy
-runbook must carry the full command, never a bare `docker compose up`.
-
-It is also what makes production safe by construction. pgAdmin and Grafana are
-declared *only* in the development file, so the production command never sees
-them — there is no service definition to activate, with or without a profile.
-Nothing has to be switched off, because nothing is switched on.
-
-Two rules keep the files from drifting:
-
-- **The socle holds only what every environment runs**, and it stays
-  environment-agnostic. That is testable:
-
-  ```bash
-  docker compose -f docker-compose.yml config | grep -E "^\s+(ports|restart|container_name):"
-  ```
-
-  It must print nothing. Anything it prints is a decision that every environment
-  now inherits, including ones that do not exist yet.
-- **A service that only one environment runs is declared in that environment's
-  file.** An environment file may therefore introduce services; that is the point
-  of the axis. What it must not do is redefine architecture — image, healthcheck
-  and volumes of a socle service stay in the socle.
-
-### 3.2.2 Compose profiles and Spring profiles are two different things
-
-They share a name and nothing else. One decides which **containers** run, the
-other which **application configuration** applies, and neither reads the other.
-
-| | Compose profile | Spring profile |
-|---|---|---|
-| Decides | which **containers** run | which **application configuration** applies |
-| Selected by | `COMPOSE_PROFILES` in `.env`, or naming a service on the command line | `SPRING_PROFILES_ACTIVE`, or `spring.profiles.default: dev` |
-| Values | *(none)*, `tooling`, `observability` | `dev`, `perf`, `prod`, `test` |
-| Declared in | `docker-compose*.yml` | `src/main/resources/application-<profile>.yaml` |
-
-Nothing enforces agreement between them, so a Spring profile that needs a
-container will start happily without it and fail later:
-
-| Spring profile | Requires which containers | Because |
-|---|---|---|
-| `dev` (default) | the default set | `SmtpMailAdapter` sends OTP mail to `MAIL_HOST:MAIL_SMTP_PORT` — MailDev, already running |
-| `perf` | default **+ `observability`** | Micrometer pushes to InfluxDB every 10 s, and `perf/*-run.sh` waits on `/actuator/health`, whose `mail` component probes SMTP |
-| `prod` | Postgres only | a real SMTP relay, no metrics export, no database GUI |
-| `test` | *(none — Compose is not used at all)* | every test starts its own PostgreSQL through Testcontainers and reads no `.env` |
-
-What a mismatch looks like:
-
-- `perf` without `observability` — `InfluxMeterRegistry` logs a failed push every
-  ten seconds and the Grafana panels stay empty, while the load test itself runs
-  and reports normal-looking results.
-- A stack started with `-f` but without naming `docker-compose.override.yml` —
-  Postgres publishes no port, so the application on the host cannot reach the
-  database it is being tested against.
-
-Switching to a load test therefore means moving **both** axes together:
-
-```bash
-docker compose up -d influxdb grafana          # Compose axis
-SPRING_PROFILES_ACTIVE=perf ./gradlew bootRun  # Spring axis
-```
-
-The two meet in exactly one place: `.env`. Compose and the application both read
-it directly, so there is a single source of truth rather than a convention that
-they are kept aligned by hand. A real environment variable still overrides the
-file, which is how CI and a secrets manager inject values.
-
-### 3.3 Verify the database connection
-
-Both Docker Compose and the application read `.env` — Compose natively, the
-application through `spring.config.import` in `application.yaml`. No shell
-preparation, and no second copy of the values to drift:
-
-```bash
-./gradlew bootRun &
-curl -s http://localhost:8081/actuator/health | python -m json.tool
-# Expected: "status": "UP", "db": { "status": "UP" }, "mail": { "status": "UP" }
-```
-
-No `--spring.profiles.active` is needed: `spring.profiles.default` is `dev`.
-
-Stop the background process before running tests:
-
-```bash
-pkill -f "KoraCoreApplication" 2>/dev/null || true
-```
-
-### 3.4 Where configuration lives
-
-Every value has exactly one legitimate home.
-
-| Support | Holds | Never holds |
-|---|---|---|
-| `.env` (git-ignored, mirrored by `.env.example`) | secrets, credentials, host-specific values: passwords, the JWT key, exposed ports | anything that is the same on every machine |
-| `src/main/resources/application.yaml` | the environment contract (`${VAR}` bindings) and policy identical in every environment | monitoring, mail transport, pool sizing, provider behaviour |
-| `src/main/resources/application-<profile>.yaml` | technical configuration for that environment only | secrets, and any fallback for one |
-
-The base file answers *what must exist*; a profile answers *how it behaves here*.
-That is why monitoring is never in the base file: `management.endpoint.health.show-details`
-is `always` in dev and `never` in prod, so no single value could be correct for both.
-
-| Variable | Consumed by | Profile |
-|---|---|---|
-| `POSTGRES_DB` `DB_HOST` `DB_PORT` | Compose + `application.yaml` | all |
-| `POSTGRES_USER` `POSTGRES_PASSWORD` | Compose only — superuser, initialises a fresh volume | — |
-| `POSTGRES_MIGRATION_USER` `POSTGRES_MIGRATION_PASSWORD` | Compose (role script) + `application.yaml` → `spring.flyway.*` | all |
-| `POSTGRES_APP_USER` `POSTGRES_APP_PASSWORD` | Compose (role script) + `application.yaml` → `spring.datasource.*` and the `app_role` Flyway placeholder | all |
-| `JWT_ACCESS_SECRET` `JWT_REFRESH_SECRET` | `application.yaml` | all |
-| `SERVER_PORT` | `application.yaml` | all |
-| `MAIL_HOST` `MAIL_SMTP_PORT` | Compose + `application.yaml` | all |
-| `MAIL_UI_PORT` | Compose | — |
-| `MAIL_FROM` `MAIL_USERNAME` `MAIL_PASSWORD` | `application-prod.yaml` | prod |
-| `INFLUXDB_HOST` `INFLUXDB_PORT` | Compose + `application-perf.yaml` | perf |
-| `GRAFANA_PORT` `DB_ADMIN_PORT` | Compose | — |
-| `PGADMIN_DEFAULT_EMAIL` `PGADMIN_DEFAULT_PASSWORD` | Compose | — |
-
-Four profiles, one file each:
-
-| Profile | File | Activated by |
-|---|---|---|
-| `dev` | `src/main/resources/application-dev.yaml` | nothing — `spring.profiles.default` |
-| `perf` | `src/main/resources/application-perf.yaml` | `SPRING_PROFILES_ACTIVE=perf` |
-| `prod` | `src/main/resources/application-prod.yaml` | `SPRING_PROFILES_ACTIVE=prod` |
-| `test` | `src/test/resources/application-test.yaml` | `@ActiveProfiles("test")` |
-
-The `test` profile sits in `src/test/resources` so it never ships in the
-production jar. Alongside it, `src/test/resources/application.yaml` shadows the
-base contract on the test classpath — which is what lets `./gradlew test` pass
-with no `.env` and no exported variable.
-
-### 3.6 Running from an IDE
-
-Nothing to configure, and nothing to start beforehand. A Run Configuration on
-`KoraCoreApplication` is enough: `application.yaml` imports `.env` itself — no
-EnvFile plugin, no variables pasted into the run configuration, no second copy to
-drift — and the `dev` profile has Spring bring the Compose stack up on its own.
-
-One condition: the **working directory** must be the project root, which is the
-IntelliJ default. Both `spring.config.import` (for `./.env`) and the Compose file
-paths resolve relative to it.
-
-The stack **stays up when you stop the application** — `lifecycle-management:
-start-only`. Stopping a run must not stop the database; you bring the stack down
-with `docker compose down` when you actually mean to.
-
-`COMPOSE_PROFILES` works here exactly as in a terminal: the `docker compose`
-subprocess inherits the working directory and reads the same `.env`, so setting
-it to `observability` makes the IDE run start InfluxDB and Grafana too.
-
-Two things make this safe, and both are load-bearing — see ADR-006 D7 before
-touching either:
-
-- `spring.docker.compose.file` names **both** Compose files. Left to itself the
-  integration resolves only `docker-compose.yml` and runs `docker compose -f` on
-  it, which suppresses the override where the ports live — the failure is
-  `No host port mapping found for container port 5432`.
-- The dev `postgres` service carries the label `org.springframework.boot.ignore`.
-  Without it, Spring derives `ConnectionDetails` from the container's
-  `environment:` block, and those **outrank `spring.datasource.*`** — the
-  application would connect as the superuser and bypass the
-  `kora_migration` / `kora_app` split, silently.
-
-Tests need even less. `@ActiveProfiles("test")` is self-contained, so running a
-test class from the IDE works on a clean clone with no `.env` at all.
-
-### 3.5 When a variable is missing
-
-No configuration entry carries a fallback, so the boot stops. For the signing key:
-
-```
-APPLICATION FAILED TO START
-
-Description:
-
-Binding to target com.geekersjoel237.koracore.application.config.SecurityProperties failed:
-
-    Property: kora.security.jwt.access-secret
-    Value: "${JWT_ACCESS_SECRET}"
-    Reason: must be at least 32 characters for HMAC-SHA256
-```
-
-Read `Value` carefully: Spring binds the unresolved text `${JWT_ACCESS_SECRET}` rather
-than failing on the placeholder itself. A bare `${VAR}` is therefore *not* enough
-on a `@ConfigurationProperties` target — the `@Size` constraint on
-`SecurityProperties` is what turns a 14-character literal into a refusal to start
-instead of a weak key discovered at the first token issuance.
-
-`ConfigurationHygieneTest` fails the build if a sensitive property regains a
-fallback, or if a `${VAR}` is referenced without being listed in `.env.example`.
-
----
-
-## 4. Running the application
-
-### Default (development)
-
-```bash
-docker compose up -d
-./gradlew bootRun
-```
-
-The application starts on **http://localhost:8081**.
-
-Spring Boot DevTools is active in development — the application reloads on
-class changes without a full restart.
-
-### Perf profile (required for load tests)
-
-```bash
-docker compose up -d influxdb grafana
-SPRING_PROFILES_ACTIVE=perf ./gradlew bootRun
-```
-
-The `perf` profile activates:
-- `GET /test/otp/{email}` — exposes OTP codes for k6 setup (never in production)
-- Micrometer → InfluxDB export every 10 seconds
-- Reduced logging to avoid biasing latency measurements
-
-Verify the perf profile is active:
-
-```bash
-curl -s "http://localhost:8081/test/otp/anyone%40test.com"
-# Returns 404 (no OTP exists yet) — endpoint is reachable = perf profile confirmed
-```
-
-### Useful URLs
-
-| URL | Purpose |
-|---|---|
-| http://localhost:8081 | Application |
-| http://localhost:8081/actuator/health | Health check |
-| http://localhost:8081/swagger-ui.html | OpenAPI documentation |
-| http://localhost:1080 | MailDev — inspect OTP emails |
-| http://localhost:5050 | pgAdmin — inspect the database |
-| http://localhost:3000 | Grafana (perf profile only) |
-
----
-
-## 5. Running the tests
-
-All test commands assume the infrastructure services are up
-(`docker compose up -d`).
-
-The test tree states the pyramid level first, so a level is a package selector.
-`TestPyramidTest` checks that the statement is true: no `@SpringBootTest` under
-`unit/`, no HTTP client under `integration/`, and nothing outside the three levels.
-
-### Unit tests (no Docker required)
-
-In-memory adapters, no Spring context, no external dependency:
-
-```bash
-./gradlew unitTest
-./gradlew test --tests "com.geekersjoel237.koracore.payment.unit.*"
-```
-
-### Integration tests (Testcontainers)
-
-A real PostgreSQL container, started automatically. Docker must be running:
-
-```bash
-./gradlew test --tests "com.geekersjoel237.koracore.*.integration.*"
-```
-
-### End-to-end tests (Testcontainers + real HTTP)
-
-Full HTTP stack — real Spring Boot server, real PostgreSQL container, financial
-invariants asserted through JDBC:
-
-```bash
-./gradlew test --tests "com.geekersjoel237.koracore.*.e2e.*"
-```
-
-### Full test suite
-
-```bash
-./gradlew test
-```
-
-### Coverage gate
-
-`./gradlew check`, and therefore `build`, ends with `verifyCoverage`. It measures twice with
-JaCoCo: every level together (`test`), and the unit level alone (`unitTest`, about 15 s, no
-Docker). It then compares each measure with its floor in `config/coverage-floors.properties`:
-
-| Key | Measured on | Scope |
-|---|---|---|
-| `all.total.*`, `all.<module>.*` | every level | the whole of `src/main`, or one module |
-| `unit.total.*` | the unit level alone | the hexagon: every `domain/` and `application/` |
-| `unit.<module>.domain.*`, `unit.<module>.application.*` | the unit level alone | the domain and the use cases of one module |
-
-The `unit.*` keys are the pyramid gate: code that only an e2e test reaches is not covered
-where it counts. Floors are in percent with one decimal, for `lines` and `branches`, and
-**below a floor the build fails** and names the key. There are two kinds:
-
-- **The hexagon has fixed minimums.** Payment, `domain` and `application`, is at **100 %**:
-  every line and branch that moves money is tested. Every other `unit.*` key, and the hexagon
-  as a whole, is at **90 %**. Written test first, the code stays near 100; 90 is what breaks
-  the build, not the target.
-- **The `all.*` keys are a ratchet.** They start at the measure and only go up: the build
-  prints every measure above its floor, and raising one is a one-line diff in the same pull
-  request.
-
-Lowering any floor needs the reason in the pull request.
-
-Two things are never measured: `KoraCoreApplication` and the classes MapStruct generates
-(`*MapperImpl`). The mappers' behaviour stays covered through the tests of their callers.
-Reports, HTML and XML, are in `build/reports/jacoco/test/` and
-`build/reports/jacoco/jacocoUnitTestReport/`.
-
-The architecture tests in `shared/unit/architecture/` remain the first gate. Coverage tells
-what was run, not what was checked.
-
-### Running a single test class
-
-```bash
-./gradlew test --tests "*CashInE2ETest"
-./gradlew test --tests "com.geekersjoel237.koracore.payment.e2e.PaymentLifecycleE2ETest"
-```
-
-### Test profiles
-
-Tests run with `@ActiveProfiles("test")`. `src/test/resources/application.yaml`
-shadows the base file on the test classpath, and `application-test.yaml` layers the
-profile on top. That is deliberate: the suite reads no environment variable and needs
-no `.env`. This configuration:
-- Uses a fixed, literal JWT key, independent from any environment
-- Disables real SMTP (`TestMailConfig` replaces `SmtpMailAdapter` with an in-memory stub)
-- Sets `ddl-auto: none` — Flyway creates the schema on the Testcontainers database
-  and stays its single owner
-- Declares no datasource: every integration and E2E class injects one at runtime
-  through `@DynamicPropertySource` or `@ServiceConnection`
-
----
-
-## 6. Load testing
-
-Load testing has its own dedicated runbook:
-
-**→ [perf/PERF.md](./perf/PERF.md)**
-
-Quick start:
-
-```bash
-# Start monitoring + app
-docker compose up -d influxdb grafana maildev
-SPRING_PROFILES_ACTIVE=perf ./gradlew bootRun
-
-# Run the smoke test first (mandatory gate)
-./perf/smoke-run.sh
-
-# Then load, stress, soak — in that order
-./perf/load-run.sh
-./perf/stress-run.sh
-./perf/soak-run.sh
-```
-
-**Never skip the smoke test.** Each test is a gate to the next.
-
-### Step 0 SLOs
-
-| Metric | Target |
-|---|---|
-| p95 latency | < 150ms |
-| Error rate | < 1% |
-| Check rate | > 99% |
-
----
-
-## 7. Code conventions
-
-### Package structure
-
-Two questions, in order. First: **which module?** `auth` owns identity, credentials
-and the OTP challenge; `payment` owns accounts, the ledger and the provider; `shared`
-owns what neither may claim — and `shared` may name neither of the other two.
-
-Then: **which layer?**
-
-- *Does it depend on Spring or any external library?* → `adapters/`
-- *Is it a use case?* → `application/command/<intent>/` or `application/query/<intent>/`, beside its command or query
-- *Is it an interface the use case needs?* → `ports/out/`, or `ports/in` if it is the
-  use case's own entry point
-- *Is it a business rule?* → `domain/`
-- *Is it wiring?* → `config/`
-
-`domain/`, `application/` and `ports/` must import nothing outside the JDK and this
-repository. Enforced by `HexagonalArchitectureTest` as an allow-list comparison, not
-a grep: adding a foreign type costs a line there and the sentence that justifies it.
-
-### Domain model conventions
-
-- Use **snapshots** to expose domain state read-only.
-  Never return mutable domain objects from repositories.
-- Use **Value Objects** for every primitive that means something: `Amount`, `Balance`,
-  `Id`, `PhoneNumber`, `Pin`, `OtpCode`. Never a raw `BigDecimal`, `String`
-  or `Long` for financial or identifying data. Conversion happens once, at the web
-  edge, in the module's MapStruct `*RequestMapper` (`<module>/adapters/in/rest/mapping/`):
-  a request record holds only its fields and their validation.
-- Use **state classes** for transaction lifecycle transitions; each validates its own
-  successors. Never expose `setState()` on a domain entity.
-- **Double-entry invariant**: every `Transaction` must have `SUM(DEBIT) == SUM(CREDIT)`
-  before being persisted. `Transaction.verifyDoubleEntry()` enforces it, privately,
-  after every `recordDoubleEntry()`.
-
-### Currency and precision
-
-Always use `BigDecimal` — never `double` or `float` for monetary values.
-The `Amount` value object enforces this at the type level.
-
-```java
-// ✅ Correct
-Amount amount = Amount.of(new BigDecimal("10000.00"), "XAF");
-
-// ❌ Wrong — floating point error in financial calculations
-double amount = 10000.00;
-```
-
-### Logging
-
-- Never log PII (email, phone number, full name) at any level
-- Never log secrets, tokens, OTP codes, or PIN values
-- Use structured MDC for correlation IDs (transaction ID, customer ID)
-- `INFO` for business events (payment initiated, completed, failed)
-- `WARN` for recoverable errors (JWT validation failure, OTP expired)
-- `ERROR` for unexpected exceptions only
-
-### Exception handling
-
-Domain exceptions extend `BusinessException`. They are mapped to HTTP status codes in
-the module's handler — `AuthExceptionHandler`, `PaymentExceptionHandler` — or in
-`SharedExceptionHandler` for what the kernel raises. There is no single
-`GlobalExceptionHandler`.
-
-Do not catch a `BusinessException` to swallow it. **Throwing one inside
-`TransactionBoundary.execute` is how a use case rolls back**, so catching it silently
-commits work the domain refused.
-
-There is one legitimate reason to catch: **compensating**. `CashInService` catches
-`PaymentProviderException` between phases and writes the failure to the ledger, because at
-that point TX-1 has already committed and the transaction must not be left dangling.
-A catch that does not compensate is a defect.
-
-Never return sensitive information in error responses. `ProblemDetail` (RFC 9457)
-is the standard response format for all errors.
-
----
-
-## 8.1 Commit conventions
-
-KORA Core uses [Conventional Commits](https://www.conventionalcommits.org/).
-
-Format: `<type>(<scope>): <description>`
-
-### Types
-
-| Type | When to use |
-|---|---|
-| `feat` | New feature or use case |
-| `fix` | Bug fix |
-| `refactor` | Code change with no functional impact |
-| `test` | Adding or fixing tests |
-| `docs` | Documentation only |
-| `perf` | Performance improvement |
-| `chore` | Build, dependencies, tooling |
-| `adr` | Architecture Decision Record |
-
-### Scopes
-
-Use the domain concept affected:
-
-`ledger`, `payment`, `auth`, `reconciliation`, `risk`, `provider`, `perf`, `infra`
-
-### Examples
-
-```
-feat(payment): add optimistic locking on AccountEntity
-fix(auth): align JWT secret source between filter and service
-test(ledger): add double-entry invariant assertions under concurrent load
-refactor(payment): extract provider orchestration to dedicated service
-adr(ledger): document balance concurrency technical debt for Step 1
-perf(payment): reduce DB round-trips on cashIn with batch insert
-```
-
-### Branch naming
-
-```
-feat/payment-optimistic-locking
-fix/jwt-secret-alignment
-test/cash-out-e2e
-refactor/provider-orchestration
-```
-
-## 8.2 Branch strategy
+Each secret in `.env.example` is the command that generates it. The details — profiles,
+optional containers, the IDE, what each variable feeds — are in
+[docs/development/local-setup.md](./docs/development/local-setup.md).
+
+## 3. Workflow
 
 KORA Core follows **Git Flow**.
+
+| Branch | From | Into | For |
+|---|---|---|---|
+| `main` | — | — | the released state; merges only, every merge tagged |
+| `develop` | — | — | integration; the target of every pull request, always green |
+| `feature/<scope>-<description>` | `develop` | `develop` | a feature or a refactoring |
+| `fix/<description>` | `develop` | `develop` | a bug found before release |
+| `release/v<major>.<minor>` | `develop` | `main` and `develop` | stabilisation: fixes, docs and version bumps only |
+| `hotfix/<description>` | `main` | `main` and `develop` | a production incident, never a feature in disguise |
+
+Examples: `feature/payment-method-providers`, `fix/transfer-deadlock-lock-ordering`.
+
+**Rules**: never commit to `develop` or `main` directly; never force-push either; keep a
+branch short-lived and a pull request small.
+
+**Versions** follow `vMAJOR.MINOR.PATCH`: `MINOR` when a roadmap step completes, `PATCH` for a
+fix, `MAJOR` for a breaking architecture change such as the first service extraction.
+
+## 4. Making a change
+
+1. **Start from a failing test** that states the behaviour, at the level that owns it — a
+   domain rule in a unit test, a query in an integration test, an HTTP boundary in a contract
+   test. Test a behaviour through its use case, not a class in isolation.
+2. **Write the code where it belongs**: domain rules in `domain/`, use cases in
+   `application/command/<intent>/` or `application/query/<intent>/`, framework code in
+   `adapters/`, wiring in `config/`
+   ([engineering-standards.md §8](./docs/engineering-standards.md#8-code-conventions)).
+3. **Keep the invariants** of [`CLAUDE.md` §6](./CLAUDE.md#6-non-negotiable-invariants): money
+   is `BigDecimal`, ledger entries are append-only, no provider call inside a database
+   transaction, a rollback happens by throwing.
+4. **A schema change is a migration**, named `V<yyyyMMddHHmm>__snake_case.sql`
+   ([database.md](./docs/development/database.md)).
+5. **Update the documentation** the change makes wrong, in the same pull request.
+
+## 5. Testing and gates
+
+```bash
+./gradlew unitTest     # the unit level alone, ~15 s, no Docker
+./gradlew test         # all four levels; Docker must be running for Testcontainers
+./gradlew build        # every level + the coverage gate — what a pull request must pass
 ```
-main          Production — always deployable, tagged on every release
-release/*     Pre-release stabilisation — feature freeze, bugfixes only
-develop       Integration branch — default target for all feature PRs
-feature/*     New features — branched from develop, merged back to develop
-hotfix/*      Production fixes — branched from main, merged to main AND develop
-```
 
-### Rules
+`./gradlew build` fails on any of these:
 
-**`feature/*`**
-- Branch from: `develop`
-- Merge into: `develop` only
-- Naming: `feature/<scope>-<short-description>`
-  → `feature/payment-optimistic-locking`
-  → `feature/ledger-snapshot-support`
-
-**`release/*`**
-- Branch from: `develop` when the milestone is feature-complete
-- Merge into: `main` AND `develop`
-- Naming: `release/v<major>.<minor>`
-  → `release/v0.1` (Step 0 complete)
-  → `release/v1.0` (Step 1 complete)
-- Only bugfixes, documentation, and version bumps are allowed on this branch
-- No new features
-
-**`hotfix/*`**
-- Branch from: `main`
-- Merge into: `main` AND `develop`
-- Naming: `hotfix/<short-description>`
-  → `hotfix/jwt-secret-alignment`
-- Reserved for production incidents only — not for features disguised as fixes
-
-**`develop`**
-- Default branch for pull requests
-- Must always be in a passing CI state
-- Never force-push
-
-**`main`**
-- Protected — no direct commits, merges only
-- Every merge is tagged with a semantic version: `v0.1.0`, `v1.0.0`
-- Represents the current production-deployable state of the system
-
-### Semantic versioning
-
-`vMAJOR.MINOR.PATCH`
-
-| Bump | When |
+| Gate | Fails when |
 |---|---|
-| `MAJOR` | Breaking architecture change (e.g. microservice extraction) |
-| `MINOR` | New roadmap step completed (Step 0 → Step 1) |
-| `PATCH` | Bugfix or hotfix |
+| Unit, integration, contract and e2e tests | a behaviour regresses |
+| Architecture tests (`shared/unit/architecture/`) | a layer points outward, a module couples, a test sits at the wrong level, a secret gains a fallback, a migration is misnamed |
+| API contract | a status, content type or body of the payment API changes without its committed file |
+| Coverage floors | the hexagon drops below 100 % for payment or 90 % elsewhere, or an all-suite measure drops below its ratchet |
 
-Step 0 complete → `v0.1.0`  
-Step 1 complete → `v0.2.0`  
-Hotfix on Step 1 → `v0.2.1`  
-Microservice extraction (Step 7) → `v1.0.0`
+How each gate works, and how to accept an intended contract change, is in
+[docs/development/testing.md](./docs/development/testing.md).
 
----
+## 6. Commit messages
 
-## 9. Database migrations
-
-Flyway owns the schema. Hibernate runs `ddl-auto=validate` in
-`application.properties` and `none` in the test properties — it never emits DDL.
-
-### Naming
-
-Migrations are versioned by **timestamp**, not by sequence:
+KORA Core uses [Conventional Commits](https://www.conventionalcommits.org/):
 
 ```
-V<yyyyMMddHHmm>__snake_case_name.sql
+<type>(<scope>): <what the change does, in the imperative>
+
+<why, when it is not obvious from the subject>
 ```
 
-- Valid — `V202605270702__initial_schema.sql`
-- Invalid — `V2__add_idempotency_keys.sql` (sequential version)
-- Invalid — `V202605270702__addIdempotencyKeys.sql` (not `snake_case`)
+| Type | When |
+|---|---|
+| `feat` | a new feature or use case |
+| `fix` | a bug fix |
+| `refactor` | a code change with no functional impact |
+| `test` | adding or fixing tests only |
+| `docs` | documentation only |
+| `perf` | a performance improvement |
+| `build` | the build, its gates and dependencies |
+| `chore` | tooling and housekeeping |
+| `adr` | an architecture decision record |
 
-A sequential version collides as soon as two branches add a migration in
-parallel: both claim the next integer, and the clash only surfaces at merge.
-
-Generate the timestamp for a new migration:
-
-```bash
-date -u +%Y%m%d%H%M
-```
-
-`MigrationNamingConventionTest` scans `src/main/resources/db/migration/` on every
-`./gradlew test` and fails on any file that breaks the pattern.
-
-### Enumerated columns carry a CHECK
-
-A column that stores an enum name is a closed set, and the schema has to say so.
-Every one of them carries a constraint named `ck_<table>_<column>` listing the
-values verbatim:
-
-```sql
-ALTER TABLE transactions
-    ADD CONSTRAINT ck_transactions_type
-        CHECK (type IN ('CASH_IN', 'CASH_OUT', 'P2P_TRANSFER'));
-```
-
-Nullable columns need no `IS NULL` branch: a `CHECK` fails only on FALSE, and
-`NULL IN (...)` is UNKNOWN.
-
-**Adding or removing a constant is a migration**, dropping and re-adding the
-constraint. Forgetting it does not slip through — `EnumColumnConstraintsDbTest`
-in `auth` and in `payment` reads the definition back out of `pg_get_constraintdef`
-and asserts the literals **equal** `Enum.values()`. The equality cuts both ways:
-a constant added only in Java fails, and a constraint still listing a constant
-the domain dropped fails too.
-
-Native `CREATE TYPE ... AS ENUM` was considered and rejected; the reasoning is in
-the header of `V202609071725__constrain_enum_columns.sql`.
-
-### Never modify an applied migration
-
-Add a new one instead. Flyway stores a checksum of each migration's content in
-`flyway_schema_history`; editing a file already applied anywhere invalidates that
-checksum and blocks startup on every database that holds it.
-
-#### The everyday case: your own migration, still on your branch
-
-The rule above is about migrations that have been **shared**. A migration you are still
-writing hits the same wall for a much smaller reason: you ran the application once, the
-dev database applied the file, and you then edited it — even only a comment. Startup
-refuses:
+**Scopes** name the concept affected: a module — `payment`, `auth`, `shared` — or a concern —
+`ledger`, `provider`, `persistence`, `rest`, `coverage`, `perf`, `infra`, `mobile`.
 
 ```
-Migration checksum mismatch for migration version 202609071725
--> Applied to database : -1060536491
--> Resolved locally    : -1364846286
+feat(payment): route each payment to the provider of its method
+fix(payment): release the hold of an expired authorization, leave UNKNOWN to reconciliation
+test(auth): drive registration, code verification and login through the use cases
 ```
 
-Flyway compares the **whole file**, comments included, so a reworded header breaks the
-checksum exactly as a rewritten `ALTER TABLE` would.
+One commit, one reason to change. Each commit compiles and passes the unit level on its own.
 
-**First, find out which of the two it was.** Read the schema back and compare it with
-the file — never assume the edit was cosmetic:
+## 7. Pull requests
 
-```bash
-docker compose exec postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c   "SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint
-    WHERE conname LIKE 'ck_%' ORDER BY conname;"
-```
+Open the pull request against `develop`; the template lists what is checked. Before asking for
+a review:
 
-Then pick:
+- [ ] the change started from a failing test, and the test now passes;
+- [ ] `./gradlew build` is green on your machine;
+- [ ] no committed contract file changed, or the change is intended and explained;
+- [ ] no coverage floor was lowered, or the reason is in the description;
+- [ ] the documentation the change makes wrong is updated;
+- [ ] a significant decision comes with its ADR;
+- [ ] no secret, no `.env`, no personal data in the diff.
 
-- **The database is disposable** — the usual answer on a feature branch. Recreate it and
-  let Flyway replay the whole chain from nothing:
+A reviewer applies the rules of [`CLAUDE.md` §7](./CLAUDE.md#7-review-rules), each decidable by
+reading the diff alone.
 
-  ```bash
-  docker compose down -v && docker compose up -d
-  ```
+## 8. Architecture decisions
 
-  This proves the migration applies, rather than declaring that it did, and it exercises
-  the chain on the dev engine — the Testcontainers suite runs `postgres:16-alpine`, the
-  dev container is on 17.x.
+A decision is significant if it affects financial correctness or auditability, a module,
+layer or port boundary, the concurrency or transaction isolation strategy, or a trade-off
+between performance and correctness. Such a decision gets an ADR, numbered and linked from
+[docs/adr/README.md](./docs/adr/README.md), which also gives the format.
 
-- **The database holds something you need** — realign the checksum by hand, but only
-  after the comparison above showed the applied DDL matches the file:
+## 9. Reporting bugs and proposing features
 
-  ```bash
-  docker compose exec postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c     "UPDATE flyway_schema_history SET checksum = <resolved locally>
-      WHERE version = '<version>';"
-  ```
-
-  Take `<resolved locally>` from the error message. Unlike the rename case below, this
-  works: the version still exists on disk, so it is the checksum and not the identity
-  that has to move.
-
-**Once the migration is pushed, neither applies.** Someone else's database holds it, and
-the only correct answer is a new migration.
-
-### Ordering across branches — `out-of-order` is off
-
-`spring.flyway.out-of-order=false`, on every profile. A migration whose version is
-lower than the highest already applied is never inserted retroactively.
-
-**The cost we accept**: a branch opened Monday and merged Friday can carry a
-timestamp older than a migration already applied on `develop`. Startup then fails:
-
-```
-Detected resolved migration not applied to database: 202605270702
-```
-
-**The fix**: before merging, `git mv` the migration to a fresh timestamp so its
-version is the highest. On the feature branch — never after the merge.
-
-`out-of-order=true` was rejected: it makes the applied order a property of each
-environment's history rather than of the repository, so two databases that
-received the same migrations in a different order can diverge with nothing in the
-repo to arbitrate.
-
-### Realigning an existing database
-
-`V1__initial_schema.sql` became `V202605270702__initial_schema.sql`. The version
-changed, so a database that already applied `V1` hits two problems: an applied
-migration missing from disk, and a higher pending version it would replay over
-tables that already exist.
-
-One statement fixes both. The checksum covers file **content**, which did not
-change, so it stays valid:
-
-```bash
-docker compose exec postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c \
-  "UPDATE flyway_schema_history
-      SET version = '202605270702',
-          script  = 'V202605270702__initial_schema.sql'
-    WHERE version = '1' AND script = 'V1__initial_schema.sql';"
-```
-
-`flyway repair` does not help: it matches by version, and version `1` no longer
-exists on disk.
-
-If the database holds nothing worth keeping, drop it instead:
-
-```bash
-docker compose down -v && docker compose up -d postgres
-```
-
-Testcontainers-backed tests need neither: each run starts an empty database and
-replays every migration.
-
-### Database roles
-
-The application never connects as the superuser. `docker/postgres/initdb/10-kora-roles.sh`
-creates two roles from `.env` and makes the first one owner of the schema:
-
-| Role | Used by | Rights |
-|---|---|---|
-| `POSTGRES_MIGRATION_USER` (`kora_migration`) | Flyway, the perf `/test/reset` | owner: DDL, `TRUNCATE` |
-| `POSTGRES_APP_USER` (`kora_app`) | the application | `SELECT` `INSERT` `UPDATE` `DELETE`, no `UPDATE` or `DELETE` on `ledger_entries` and `trx_state_historics` |
-
-The DML rights come from `V202610171921__grant_application_role.sql`, which also
-covers every table created afterwards. A new append-only table revokes `UPDATE` and
-`DELETE` from `${app_role}` in its own migration.
-
-Postgres runs the script on a **fresh volume only**. A volume created before it
-keeps the superuser as owner of every table. Recreate it if it holds nothing worth
-keeping:
-
-```bash
-docker compose down -v && docker compose up -d postgres
-```
-
-Otherwise run the script by hand. It creates the missing roles and transfers the
-schema, its tables and its functions to the migration role; running it twice
-changes nothing:
-
-```bash
-docker compose exec postgres sh /docker-entrypoint-initdb.d/10-kora-roles.sh
-```
-
-The next start then applies the grants migration as the new owner.
-
----
-
-## 10. Architecture decisions
-
-All significant architectural decisions are recorded in `docs/adr/`.
-
-| ADR | Decision | Status |
-|---|---|---|
-| [ADR-001](./docs/adr/ADR-001-immutable-ledger.md) | Immutable double-entry ledger with denormalized balance cache | Accepted |
-| [ADR-002](./docs/adr/ADR-002-payment-lifecycle.md) | Payment lifecycle state machine: INITIALIZED → AUTHORIZED → CAPTURED → SETTLEMENT_PENDING → SETTLED → COMPLETED | Accepted |
-| [ADR-003](./docs/adr/ADR-003-payment-api-design.md) | Payment lifecycle fully orchestrated inside cashIn/cashOut/transfer — no separate authorize/capture API | Accepted |
-| [ADR-004](./docs/adr/ADR-004-micro-transaction-optimization.md) | Micro-transaction model: TX-1 / provider I/O / TX-2, no connection held across a network call | Accepted |
-| [ADR-005](./docs/adr/ADR-005-load-test-calibration.md) | Load-test calibration and the SLO gates | Accepted |
-| [ADR-006](./docs/adr/ADR-006-compose-topology.md) | Compose topology: one file per environment, services selected by profile | Accepted |
-| [ADR-007](./docs/adr/ADR-007-hexagonal-before-modular.md) | Hexagonal split before the modules; `TransactionBoundary` is not a Unit of Work; retry scope | Accepted |
-
-When making a significant architectural decision, create a new ADR following
-the existing format. Link it from this table.
-
-A decision is "significant" if it affects:
-- Financial correctness or auditability
-- The boundary between a module, a layer, or a port
-- Concurrency or transaction isolation strategy
-- A trade-off between performance and correctness
-
----
-
-## 11. Client vs admin surface separation
-
-KORA Core exposes two distinct API surfaces with separate role requirements.
-
-### Customer surface (`ROLE_CUSTOMER`)
-
-```
-POST /payments/cash-in   — wallet top-up
-POST /payments/cash-out  — wallet withdrawal
-POST /payments/transfer  — peer-to-peer transfer
-GET  /payments/balance   — account balance
-GET  /payments/history   — transaction history
-```
-
-Each operation orchestrates the full lifecycle internally (INITIALIZED → AUTHORIZED
-→ CAPTURED → SETTLEMENT_PENDING → SETTLED → COMPLETED). Intermediate states are
-not exposed to the client — only the final state is returned.
-
-### Operator surface (`ROLE_ADMIN` / `ROLE_OPERATOR`) — Step 5+
-
-```
-POST /admin/payments/{txId}/reverse  — reverse an authorized or captured transaction
-```
-
-That is the whole operator surface today. Listing transactions by state — the query an
-operator needs to find what is stuck in `AUTHORIZED` — is not implemented; it arrives
-with the reconciliation engine (Step 6).
-
-RBAC is enforced in `SecurityConfig`. Never add business logic to the security
-layer — role checks are a routing concern, not a domain concern.
-
----
-
-## Troubleshooting
-
-### `health = DOWN` at startup
-
-```bash
-curl http://localhost:8081/actuator/health | python -m json.tool
-```
-
-| Component DOWN | Likely cause | Fix |
-|---|---|---|
-| `db` | PostgreSQL not running | `docker compose up -d` |
-| `mail` | MailDev not running | `docker compose up -d` |
-
-### JWT key too short, or both keys equal
-
-Spring will reject startup if `kora.security.jwt.access-secret` or
-`kora.security.jwt.refresh-secret` is shorter than 32 characters, or if the two are
-equal. Update the values in `.env` and restart.
-
-### Testcontainers fails to start
-
-Ensure Docker Desktop is running and the current user has access to the Docker socket:
-
-```bash
-docker run --rm hello-world
-```
-
-If this fails, restart Docker Desktop.
-
-### OTP endpoint returns 404 in perf profile
-
-The `GET /test/otp/{email}` endpoint is only active with `SPRING_PROFILES_ACTIVE=perf`.
-Verify the profile is set before running k6:
-
-```bash
-curl -s http://localhost:8081/actuator/info | grep -i profile
-```
-
-
-
----
-
-*For load testing specifics, see [perf/PERF.md](./perf/PERF.md).*  
-*For architectural decisions, see [docs/adr/](./docs/adr/).*
+Use the issue templates: **Bug report** for something that behaves wrongly, **Feature
+request** for a proposal. For a bug, give the request, the expected and the observed result,
+and the commit you ran. Never paste a token, a PIN, a secret or real personal data.

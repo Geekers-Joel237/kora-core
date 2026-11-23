@@ -1,0 +1,57 @@
+name: Bug report
+description: Something behaves wrongly — a wrong balance, a refused payment, a failing build.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A vulnerability is never reported here — see SECURITY.md.
+        Never paste a token, a PIN, a secret or real personal data.
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - Payment — cash-in, cash-out, transfer, reversal
+        - Ledger, balance or history
+        - Auth — registration, OTP, login, tokens
+        - Build, tests or tooling
+        - Mobile client
+        - Documentation
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The requests or commands, in order.
+      placeholder: |
+        1. POST /payments/cash-out with …
+        2. …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed
+      description: The response, the log line or the failing test output.
+    validations:
+      required: true
+  - type: input
+    id: commit
+    attributes:
+      label: Commit
+      description: The output of `git rev-parse --short HEAD`.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Spring profile, OS, Java and Docker versions — whatever is relevant.

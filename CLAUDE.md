@@ -25,7 +25,7 @@ MoMo, card — and each one is a configurable stub, not a real provider.
 ```
 
 Coverage floors live in `config/coverage-floors.properties`, a ratchet: the build fails below
-one and prints the new value above it (`gradle/coverage.gradle`, CONTRIBUTING §5).
+one and prints the new value above it (`gradle/coverage.gradle`, `docs/development/testing.md` §3).
 
 Tests ignore compose and start their own Testcontainers. `compose.yaml` does not
 exist. Load tests: `perf/*.js`, run via `perf/*-run.sh`.
@@ -346,8 +346,11 @@ Deliberate and tracked. Do not raise them on a PR.
 ## 10. Key files
 
 - `ROADMAP.md` — 10-step evolution plan, authoritative numbering
-- `HELP.md` — engineering standards, DDD/SOLID rules, project conventions
-- `CONTRIBUTING.md` — configuration assignment and migration naming, both test-enforced
+- `docs/README.md` — the map of every document
+- `docs/engineering-standards.md` — principles, definition of done, testing strategy, DDD/SOLID rules, project conventions
+- `CONTRIBUTING.md` — the contribution workflow: Git Flow, Conventional Commits, gates, pull request checklist
+- `docs/development/` — `local-setup.md` (environment, Compose, profiles, configuration assignment), `testing.md` (levels, coverage gate, API contract), `database.md` (migration naming, enum constraints, roles), `troubleshooting.md`; configuration assignment and migration naming are both test-enforced
+- `SECURITY.md` — vulnerability reporting, through GitHub private reporting
 - `docs/kora-core-state-of-view-v3.md` — review at `d28a6be`: what holds, what does
   not, ranked limits L-1 to L-15. Kept as written; a closed limit gets a dated note.
   `docs/kora-core-state-of-view-v2.md` is the Steps 2 and 3 retrospective and
