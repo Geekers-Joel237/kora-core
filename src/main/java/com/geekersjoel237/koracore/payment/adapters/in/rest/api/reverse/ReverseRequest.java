@@ -10,9 +10,6 @@ public record ReverseRequest(
         String actorRole,
 
         @NotBlank(message = "Reason is required for reversal — audit trail obligation")
-        String reason,
-
-        @NotBlank(message = "Correlation ID is required")
-        String correlationId
+        String reason
 ) {
 }

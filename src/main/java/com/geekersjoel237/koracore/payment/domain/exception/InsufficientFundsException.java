@@ -6,4 +6,9 @@ public class InsufficientFundsException extends BusinessException {
     public InsufficientFundsException(String message) {
         super(message);
     }
+
+    @Override
+    public String code() {
+        return "INSUFFICIENT_FUNDS";
+    }
 }

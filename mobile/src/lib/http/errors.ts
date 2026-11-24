@@ -8,12 +8,17 @@
  * n'est décrite par personne : sur une écriture monétaire, l'app ignore alors
  * si l'argent a bougé.
  *
+ * Toute erreur déclarée est un `application/problem+json` portant un `code`
+ * stable, que le catalogue `docs/problems.md` de `kora-core` décrit. C'est ce
+ * `code`, et non le type de contenu ni le texte de `detail`, qui distingue
+ * deux `401`.
+ *
  * | Statut | Type de contenu              | Code               | Issue d'un paiement |
  * |--------|------------------------------|--------------------|---------------------|
  * | 400    | application/problem+json     | VALIDATION         | échec               |
- * | 401    | application/json             | TOKEN_EXPIRED      | rafraîchir          |
- * | 401    | application/problem+json     | INVALID_PIN / OTP  | échec               |
- * | 403    | application/json             | FORBIDDEN          | échec               |
+ * | 401    | problem+json, UNAUTHENTICATED | TOKEN_EXPIRED     | rafraîchir          |
+ * | 401    | problem+json, INVALID_PIN…   | INVALID_PIN / OTP  | échec               |
+ * | 403    | application/problem+json     | FORBIDDEN          | échec               |
  * | 404    | application/problem+json     | NOT_FOUND          | échec               |
  * | 409    | application/problem+json     | CONFLICT           | échec               |
  * | 422    | application/problem+json     | BUSINESS_RULE      | échec               |
@@ -49,6 +54,10 @@ export interface KoraError {
   message: string;
   /** `detail` brut du serveur — pour le support et le mode validation. */
   detail?: string;
+  /** `code` stable du ProblemDetail, tel que le catalogue du serveur le nomme. */
+  problemCode?: string;
+  /** Identifiant de corrélation de la requête, à citer au support. */
+  correlationId?: string;
   violations?: ApiViolation[];
   /** Corps brut, tel que reçu. Alimente l'inspecteur réseau. */
   raw?: unknown;
@@ -92,37 +101,30 @@ function isProblem(contentType: string | undefined): boolean {
  *
  * Un `401` a deux causes qui appellent des réactions **opposées** :
  *
- *   { status, error }              → jeton expiré  → rafraîchir, rejouer une fois
- *   ProblemDetail avec `detail`    → PIN ou OTP    → NE PAS rafraîchir, afficher
+ *   code UNAUTHENTICATED             → jeton absent ou expiré → rafraîchir, rejouer une fois
+ *   code INVALID_PIN, INVALID_OTP, … → secret erroné         → NE PAS rafraîchir, afficher
  *
  * Les confondre produit soit une boucle de rafraîchissement infinie, soit une
- * déconnexion à chaque PIN erroné. Le contrat Swagger les déclare sous deux
- * types de contenu : `application/json` pour la couche de sécurité,
- * `application/problem+json` pour le PIN et l'OTP. Le type de contenu tranche ;
- * à défaut, la forme du corps : la sécurité émet `error` sans `detail`, les
- * handlers métier `detail` sans `error`.
+ * déconnexion à chaque PIN erroné. Les deux arrivent en
+ * `application/problem+json` : seul le `code` tranche. Un `401` au corps
+ * vide ou illisible ne peut venir que d'une passerelle ou de la sécurité : il
+ * est traité comme un jeton à rafraîchir.
  */
-export function isTokenExpiry(status: number, body: unknown, contentType?: string): boolean {
+export function isTokenExpiry(status: number, body: unknown): boolean {
   if (status !== 401) return false;
-  if (isProblem(contentType)) return false;
-  if (!isRecord(body)) {
-    // 401 au corps vide ou illisible : seule la couche de sécurité en produit.
-    return true;
-  }
-  return 'error' in body && !('detail' in body);
+  if (!isRecord(body)) return true;
+  return body.code === 'UNAUTHENTICATED';
 }
 
-/** Distingue un 401 de PIN d'un 401 d'OTP à partir du `detail` du serveur. */
-function classifyUnauthorized(detail: string | undefined): KoraErrorCode {
-  const text = (detail ?? '').toLowerCase();
-  if (text.includes('otp')) return 'INVALID_OTP';
-  if (text.includes('pin')) return 'INVALID_PIN';
+/** Distingue un `401` d'OTP d'un `401` de PIN par le `code` du serveur. */
+function classifyUnauthorized(problemCode: string | undefined): KoraErrorCode {
+  if (problemCode === 'INVALID_OTP' || problemCode === 'OTP_EXPIRED') return 'INVALID_OTP';
   return 'INVALID_PIN';
 }
 
 function codeForStatus(
   status: number,
-  detail: string | undefined,
+  problemCode: string | undefined,
   tokenExpiry: boolean,
   contentType: string | undefined,
 ) {
@@ -130,7 +132,7 @@ function codeForStatus(
     case 400:
       return 'VALIDATION' as const;
     case 401:
-      return tokenExpiry ? ('TOKEN_EXPIRED' as const) : classifyUnauthorized(detail);
+      return tokenExpiry ? ('TOKEN_EXPIRED' as const) : classifyUnauthorized(problemCode);
     case 403:
       return 'FORBIDDEN' as const;
     case 404:
@@ -166,7 +168,7 @@ export interface NormalizeContext {
 }
 
 /**
- * Réduit n'importe quel corps d'erreur — les trois formats du contrat, un corps
+ * Réduit n'importe quel corps d'erreur — les deux formats du contrat, un corps
  * vide, du HTML, du texte brut — à un `KoraError`.
  *
  * `contentType` est l'en-tête `Content-Type` de la réponse. Absent, la réponse
@@ -179,9 +181,12 @@ export function normalizeHttpError(
   context: NormalizeContext,
   contentType?: string,
 ): KoraError {
-  const tokenExpiry = isTokenExpiry(status, body, contentType);
+  const tokenExpiry = isTokenExpiry(status, body);
   const detail = isRecord(body) && typeof body.detail === 'string' ? body.detail : undefined;
-  const code = codeForStatus(status, detail, tokenExpiry, contentType);
+  const problemCode = isRecord(body) && typeof body.code === 'string' ? body.code : undefined;
+  const correlationId =
+    isRecord(body) && typeof body.correlationId === 'string' ? body.correlationId : undefined;
+  const code = codeForStatus(status, problemCode, tokenExpiry, contentType);
   const providerRefused = code === 'PROVIDER_REFUSED';
 
   const violations =
@@ -203,6 +208,8 @@ export function normalizeHttpError(
     code,
     message: detail ?? defaultMessage(code),
     ...(detail !== undefined && { detail }),
+    ...(problemCode !== undefined && { problemCode }),
+    ...(correlationId !== undefined && { correlationId }),
     ...(violations !== undefined && { violations }),
     raw: body,
     isRetryable,

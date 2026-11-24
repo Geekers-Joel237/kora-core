@@ -132,7 +132,7 @@ class HistoryContractTest {
     }
 
     @Test
-    void no_token_is_a_401_in_the_security_format() {
+    void no_token_is_a_401_unauthenticated() {
         assertMatches("payment/history/401-no-token", get(mvc, "/payments/history", null));
     }
 

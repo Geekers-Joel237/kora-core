@@ -6,6 +6,8 @@
     "detail" : "Account not found for customer",
     "instance" : "/payments/history",
     "status" : 404,
-    "title" : "Not Found"
+    "title" : "Not Found",
+    "type" : "https://github.com/Geekers-Joel237/kora-core/blob/develop/docs/problems.md#account-not-found",
+    "code" : "ACCOUNT_NOT_FOUND"
   }
 }

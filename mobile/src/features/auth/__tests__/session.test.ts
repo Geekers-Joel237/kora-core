@@ -153,7 +153,7 @@ describe('bootstrap — portail de session, docs §1', () => {
     fetchMock.mockImplementationOnce(async () => ({
       status: 401,
       ok: false,
-      text: async () => JSON.stringify({ status: 401, error: 'Unauthorized' }),
+      text: async () => JSON.stringify({ status: 401, code: 'UNAUTHENTICATED' }),
     }));
 
     await useSession.getState().bootstrap();

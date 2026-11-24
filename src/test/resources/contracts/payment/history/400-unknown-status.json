@@ -6,6 +6,8 @@
     "detail" : "Unknown status PAID, expected one of [PENDING, COMPLETED, FAILED, REFUNDED]",
     "instance" : "/payments/history",
     "status" : 400,
-    "title" : "Bad Request"
+    "title" : "Bad Request",
+    "type" : "https://github.com/Geekers-Joel237/kora-core/blob/develop/docs/problems.md#invalid-argument",
+    "code" : "INVALID_ARGUMENT"
   }
 }

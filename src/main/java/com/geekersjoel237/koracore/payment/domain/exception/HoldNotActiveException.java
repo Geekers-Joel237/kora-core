@@ -9,4 +9,9 @@ public class HoldNotActiveException extends BusinessException {
     public HoldNotActiveException(Id holdId, HoldStatus status) {
         super("Funds hold " + holdId.value() + " is " + status.name() + ", no longer ACTIVE");
     }
+
+    @Override
+    public String code() {
+        return "HOLD_NOT_ACTIVE";
+    }
 }

@@ -6,6 +6,9 @@
     "detail" : "Provider refused the debit",
     "instance" : "/payments/cash-out",
     "status" : 502,
-    "title" : "Bad Gateway"
+    "title" : "Bad Gateway",
+    "type" : "https://github.com/Geekers-Joel237/kora-core/blob/develop/docs/problems.md#provider-refused",
+    "code" : "PROVIDER_REFUSED",
+    "correlationId" : "33333333-3333-3333-3333-333333333333"
   }
 }

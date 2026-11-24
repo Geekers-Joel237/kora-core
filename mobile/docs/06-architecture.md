@@ -112,17 +112,14 @@ export type KoraError = {
 ### 3.3 Le point le plus délicat — discriminer les deux `401`
 
 ```ts
-function isTokenExpiry(status: number, body: unknown, contentType?: string): boolean {
+function isTokenExpiry(status: number, body: unknown): boolean {
   if (status !== 401) return false;
-  // Le contrat Swagger déclare le 401 du PIN en application/problem+json
-  if (contentType?.split(';')[0]?.trim() === 'application/problem+json') return false;
-  // À défaut : la sécurité émet { status, error }, les handlers métier un ProblemDetail avec 'detail'
-  return typeof body === 'object' && body !== null
-    && 'error' in body && !('detail' in body);
+  if (!isRecord(body)) return true;
+  return body.code === 'UNAUTHENTICATED';
 }
 ```
 
-Un `401` portant un `detail` provient d'une `PinValidationException`, d'une `InvalidOtpException` ou d'une `OtpExpiredException`. **Il ne doit jamais déclencher de rafraîchissement de jeton.** Se tromper ici produit soit une boucle de rafraîchissement infinie, soit une déconnexion à chaque PIN erroné.
+Les deux `401` arrivent en `application/problem+json` depuis le 2026-11-24 : **seul le `code` les distingue** (contrat §5.2). `UNAUTHENTICATED` vient de la couche de sécurité et appelle un rafraîchissement ; `INVALID_PIN`, `INVALID_OTP` et `OTP_EXPIRED` viennent des handlers métier et **ne doivent jamais déclencher de rafraîchissement de jeton.** Se tromper ici produit soit une boucle de rafraîchissement infinie, soit une déconnexion à chaque PIN erroné.
 
 ### 3.4 Rafraîchissement en vol groupé
 

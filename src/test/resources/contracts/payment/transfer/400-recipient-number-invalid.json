@@ -7,9 +7,12 @@
     "instance" : "/payments/transfer",
     "status" : 400,
     "title" : "Bad Request",
+    "type" : "https://github.com/Geekers-Joel237/kora-core/blob/develop/docs/problems.md#validation-failed",
+    "code" : "VALIDATION_FAILED",
     "violations" : [ {
-      "message" : "Recipient phone number must contain 8 to 15 digits",
-      "field" : "toPhoneNumber"
-    } ]
+      "field" : "toPhoneNumber",
+      "message" : "Recipient phone number must contain 8 to 15 digits"
+    } ],
+    "correlationId" : "33333333-3333-3333-3333-333333333333"
   }
 }

@@ -46,6 +46,6 @@ public interface PaymentRequestMapper {
     @Mapping(target = "actorId", source = "request.actorId")
     @Mapping(target = "actorRole", source = "request.actorRole")
     @Mapping(target = "reason", source = "request.reason")
-    @Mapping(target = "correlationId", source = "request.correlationId")
-    ReversePaymentCommand toCommand(ReverseRequest request, String transactionId);
+    @Mapping(target = "correlationId", source = "correlationId", qualifiedByName = CORRELATION_ID)
+    ReversePaymentCommand toCommand(ReverseRequest request, String transactionId, String correlationId);
 }

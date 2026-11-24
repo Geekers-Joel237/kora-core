@@ -84,12 +84,12 @@ class CashInContractTest {
     }
 
     @Test
-    void no_token_is_a_401_in_the_security_format() {
+    void no_token_is_a_401_unauthenticated() {
         assertMatches("payment/cash-in/401-no-token", cashIn(null, VALID));
     }
 
     @Test
-    void a_wrong_pin_is_a_401_in_the_problem_format() {
+    void a_wrong_pin_is_a_401_invalid_pin() {
         bus.fail(CashInCommand.class, new PinValidationException("Invalid PIN"));
 
         assertMatches("payment/cash-in/401-wrong-pin", cashIn(tokens.customer(), VALID));

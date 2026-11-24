@@ -2,8 +2,6 @@ package com.geekersjoel237.koracore.payment.application.command.cashOut;
 
 import com.geekersjoel237.koracore.auth.domain.model.Customer;
 import com.geekersjoel237.koracore.auth.ports.out.repository.CustomerRepository;
-import com.geekersjoel237.koracore.payment.application.command.cashOut.CashOutCommand;
-import com.geekersjoel237.koracore.payment.application.command.cashOut.CashOutResult;
 import com.geekersjoel237.koracore.payment.domain.SystemConstants;
 import com.geekersjoel237.koracore.payment.domain.enums.ProviderOperationType;
 import com.geekersjoel237.koracore.payment.domain.enums.TransactionType;

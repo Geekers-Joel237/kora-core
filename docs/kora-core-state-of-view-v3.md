@@ -263,6 +263,10 @@ mobile team reported this on 2026-08-06; it is still open.
 > so a refusal during a reversal no longer escapes as a 500; a timeout leaves the
 > transaction `UNKNOWN`. Still open: `ReverseResult.success` is ignored. The drafted fix
 > is obsolete: it kept a timed-out reversal `AUTHORIZED`.
+>
+> **Still open — 2026-11-23.** Confirmed by reading `ReversePaymentService.execute`, and
+> wider than stated: the provider's reversal reference is dropped as well, so the history
+> row of a release records `providerRef = null`. See §9.2, R-3.
 
 **L-14 · The XAF rule (whole units only) is enforced at the web edge, not in the domain.**
 `@Digits(fraction = 0)` on the three request types is the only guard. `Amount` accepts any
@@ -440,5 +444,276 @@ unchanged.
 
 ---
 
-*v1 — Step 1 snapshot · v2 — Steps 3 and 2A · v3 — review at `d28a6be`, status updated 2026-10-17.*
+## 9. Status at 2026-11-23
+
+**Basis**: commit `42090b1` on `develop`, after pull requests #19 to #23. Full build that day:
+855 tests, 0 failures, 2 skipped (`ProviderSuccessLostE2ETest`, disabled on purpose for L-2).
+Sections 0 to 8 stay as written. This section records the state of every limit, an
+end-to-end review of the operator reversal, the place of the OTP mail in the auth
+transactions, the error contract, tracing and correlation, and what changed since §8. Every claim below
+was re-read in the code at that commit; what was established by reading only, and not by a
+test, says so.
+
+### 9.1 The limits
+
+| ID | Status | Evidence at `42090b1` |
+|---|---|---|
+| L-1 | **Closed** 2026-10-17 | Funds holds (ADR-008); `ConcurrentDebitE2ETest` green |
+| L-2 | **Accepted** | `ProviderSuccessLostE2ETest` still `@Disabled`; caught by reconciliation, Step 6 |
+| L-3 | **Accepted** | No reaper, no detection query; recovery with the cash-out saga, Step 5 |
+| L-4 | **Accepted** | No idempotency store, Step 4. The anti-replay window is still keyed on a client-supplied id and still records it *before* the command runs (§9.2, R-4) |
+| L-5 | **Withdrawn** | — |
+| L-6 | **Closed** 2026-10-17 | `AppendOnlyLedgerDbTest` green; double entry stays a domain rule |
+| L-7 | **Deferred** | Nothing compares `balance_amount` with the ledger sum; Step 6 |
+| L-8 | **Open** | `MailedOtpChallenge.consume` still counts no attempt; a wrong code leaves the challenge alive. Step 4 |
+| L-9 | **Open** | No rate limiting anywhere: no dependency, no filter. Step 4 |
+| L-10 | **Closed** 2026-10-16 | One key per token use, `typ` claim, revocable refresh-token families |
+| L-11 | **Closed** 2026-10-17 | Every test connects as `kora_app`; `ApplicationDatabaseRoleTest` green |
+| L-12 | **Closed** 2026-10-17 | A provider timeout leaves the transaction `UNKNOWN`. Since 2026-11-21 the expiry job leaves it alone too (§9.3, E-2) |
+| L-13 | **Open** | `ReverseResult` ignored, and its reference dropped (§9.2, R-3) |
+| L-14 | **Withdrawn** | — |
+| L-15 | **Open** | The InfluxDB exporter is off in the base configuration and on in `perf` only; no business metric, no alert, no trace |
+| N-1 | **Open — decision pending** | A reversal of a posted payment still calls no provider (§9.2, R-7) |
+| N-3 | **Open** | `refresh_tokens` is never purged: the only scheduled job in `src/main` is the authorization expiry |
+| N-4 | **Open**, by reading | `/error` is still not permitted in `SecurityConfig`. Any exception without a handler — an `IllegalStateException` among them — still reaches the client as 401. Not yet pinned by a test |
+| N-5 | **Open**, by reading — new | The OTP mail is sent synchronously, inside the transaction of registration and login, with no SMTP timeout (§9.3) |
+| N-6 | **Closed** 2026-11-24 | Every error, security included, is a problem detail (§9.4) |
+| N-7 | **Closed** 2026-11-24 | Every problem carries a `type` and a stable `code`, catalogued in `docs/problems.md` (§9.4) |
+| N-8 | **Closed** 2026-11-24 for the correlation id; tracing open | Every command answers with its correlation id, in a header and in its problem; reads carry none by design, and nothing is traced yet (§9.4, §9.5) |
+| N-9 | **Closed** 2026-11-24 for the correlation id | Every line logged during a request or a command names its correlation id, observed in a captured log (§9.5) |
+
+Unchanged since §3.5: no measurement above 25 req/s; one Tomcat thread blocked per provider
+call, virtual threads off, no timeout and no circuit breaker on the provider; BCrypt the first
+CPU bottleneck; the OTP store and the anti-replay window in the JVM heap, so one instance only.
+The `/test/**` endpoints are still compiled into every build, active under `perf` only.
+
+### 9.2 The operator reversal, end to end
+
+`POST /admin/payments/{txId}/reverse`, `ROLE_ADMIN` → `ReverseAction` → `PaymentRequestMapper`
+→ `ReversePaymentCommand` → the bus (correlation id, validation, anti-replay) →
+`ReversePaymentService`, which classifies the transaction in one transaction, then either
+releases an authorization at the provider (`AUTHORIZED`) or compensates in the ledger
+(`CAPTURED` to `COMPLETED`). Any other state is refused with 422.
+
+**What holds.** Every invariant of `CLAUDE.md` §6 that the reversal touches: the provider
+call sits between two transactions (`ReversePaymentService.java:76`); retry wraps the
+boundary; the compensation is a mirrored pair written with the balance change, double entry
+verified; the account debited is locked and its holds respected; a release resolves the hold,
+a timeout keeps it `ACTIVE` and moves the transaction to `UNKNOWN`; transitions go through
+named methods and a rollback happens by throwing.
+
+**What does not.**
+
+- **R-1 · High — the actor is declared by the client.** `actorId` and `actorRole` come from
+  the request body (`ReverseRequest.java:7`), not from the authenticated token. Any admin can
+  record a reversal in another's name, and the history row stores whatever `actorId` was sent.
+  `actorRole` is carried to the command and recorded nowhere.
+- **R-2 · High — no HTTP test.** No e2e test and no contract test call the endpoint; only the
+  service is unit-tested. It is outside `api-contract/payments.openapi.json`, and `ReverseApi`
+  declares 200, 401 and 403, while the endpoint can also answer 400, 404, 409, 422, 502 and 503.
+- **R-3 · L-13 — the provider's answer is ignored.** A `ReverseResult` with `success = false`
+  still marks the transaction `REVERSED`, cancels the authorization record and releases the
+  hold, while the provider keeps the funds. Its `reversalReference` is dropped, and the history
+  row of the release records `providerRef = null` (line 162).
+- **R-4 · Medium — the correlation id comes from the body.** The `X-Correlation-Id` header the
+  endpoint declares is ignored — the known gap of `CLAUDE.md` §9. Across every command, the
+  anti-replay middleware records the id before the command runs: a reversal refused by the
+  provider (502) cannot be retried with the same id for five minutes; it gets 409.
+
+  > **Closed — 2026-11-24.** `ReverseAction` reads the correlation id from the header, like every other command, and the field left `ReverseRequest`. The anti-replay window still records an id before the command runs; that goes with the idempotency key of Step 4.
+- **R-5 · Medium — mistyped errors.** An unknown transaction raises
+  `AccountNotFoundException("Transaction not found")`, a 404 that names an account. An
+  `AUTHORIZED` transaction without an active authorization raises `IllegalStateException`,
+  which has no handler: 500, then 401 through N-4.
+- **R-6 · Finding — the provider branch is unreachable today.** No flow commits a transaction
+  in `AUTHORIZED`: in TX-2, `authorize()` is always followed by `capture()`, `failCapture()` or
+  `markUnknown()`. Only tests build that state. Half of the reversal therefore serves an
+  asynchronous capture that does not exist yet. A payment left `UNKNOWN` cannot be reversed,
+  consistently with L-12: reconciliation decides.
+- **R-7 · Decision — N-1.** Reversing a posted cash-out credits the wallet back while the
+  provider has already paid out: unless the money is recovered outside the system, Kora carries
+  the loss. Reversing a posted cash-in debits the wallet and refunds nothing to the customer's
+  mobile-money account. Whether a reversal goes back through the provider needs an ADR.
+- **R-8 · Low — two operators, one authorized payment.** Nothing serialises two reversals of
+  the same `AUTHORIZED` payment before the provider call, so both would call `provider.reverse`.
+  Unreachable while R-6 holds.
+
+R-1 to R-6 and R-8 come from reading the code at `42090b1`; none was reproduced by an HTTP
+request, because no test drives the endpoint over HTTP (R-2).
+
+### 9.3 The OTP mail, inside the transaction
+
+**N-5 · The one-time code is mailed synchronously, inside the use case's transaction.**
+`RegisterService.execute` and `LoginService.execute` call `otpChallenge.issue` from within
+`boundary.execute`: the SMTP exchange happens while the transaction is open and holds a
+database connection. ADR-004 removed exactly this from the payment path — a network call
+inside a transaction — but the invariant of `CLAUDE.md` §6 names the provider only, and the
+mail was left inside.
+
+- **No bound on the wait.** `MailedOtpChallenge` tries up to three times, sleeping 100 then
+  200 ms between attempts, and no profile sets an SMTP connection or read timeout, so JavaMail
+  waits indefinitely by default. A mail server that accepts the connection and stops
+  answering holds a database connection and a request thread for as long as it hangs — the
+  pool exhaustion of ADR-004, reached through `/auth/register` and `/auth/login`.
+- **The code and the transaction disagree.** The code is put in the expiring store before it
+  is mailed, and that store is not transactional. A mail delivered before a commit that then
+  fails hands the customer a code for a registration that was rolled back. Symmetrically,
+  `VerifyOtpService` consumes the code inside its transaction: if issuing the tokens fails
+  afterwards, the code is gone and the rollback does not bring it back.
+- **Delivery is not guaranteed.** A delivery failure rolls the registration back and answers
+  503, so no account is left without its code; but nothing retries once the request is over,
+  and a crash between the send and the commit loses the outcome. This mail is critical: without
+  it, a customer can neither finish registering nor log in.
+
+**Direction.** The mail leaves the transaction: the use case commits the challenge, and the
+code is delivered asynchronously after the commit, through a durable outbox with bounded
+retries, so a mail the customer depends on is either delivered or visibly failed — Step 5,
+with the transactional outbox. Until then, SMTP connection and read timeouts bound the wait.
+
+Established by reading `RegisterService`, `LoginService`, `VerifyOtpService`,
+`MailedOtpChallenge` and every `application*.yaml` at `42090b1`; not reproduced by a test.
+
+### 9.4 The error contract
+
+The API follows the convention of the reference APIs, and it holds: a success returns the
+resource itself, with no envelope — `TransactionResponse`, or a page `{items, nextCursor}` for
+the history — and the HTTP status tells success from failure. Errors are RFC 9457 problem
+details, `application/problem+json`, declared in the OpenAPI document and pinned by the
+contract tests. An envelope shared by success and error was considered and is not the
+direction: it repeats the status, weakens the OpenAPI types into a `oneOf`, and blinds the
+HTTP tooling that reads the status. Three gaps remain against the standard Kora aims at.
+
+- **N-6 · A 401 or a 403 is not a problem detail.** The `authenticationEntryPoint` and the
+  `accessDeniedHandler` of `SecurityConfig` write `{"status":401,"error":"Unauthorized"}` and
+  `{"status":403,"error":"Forbidden"}` by hand, as `application/json`
+  (`contracts/payment/cash-in/401-no-token.json`, `403-admin-token.json`). Every other error is
+  `application/problem+json`, so a client parses two formats. Same piece of work as N-4.
+
+  > **Closed — 2026-11-24.** The security entry point and access-denied handler hand their failure to the exception handlers, so a 401 is `UNAUTHENTICATED` and a 403 `FORBIDDEN`, both `application/problem+json`. The mobile client tells the two 401s apart by `code` in the same delivery.
+- **N-7 · No error carries a machine-readable code.** `ProblemDetails.of` sets a status and a
+  free-text `detail`, and no `type`: a problem reads `"title": "Bad Request"` with
+  `"detail": "Unknown payment method: BITCOIN"`. Insufficient funds, a blocked account and an
+  invalid transition are three 422s that a client can tell apart only by parsing their message.
+  RFC 9457 answers with a documented `type` URI per problem, and an extension such as
+  `code: "INSUFFICIENT_FUNDS"` for clients that switch on a string.
+
+  > **Closed — 2026-11-24.** `BusinessException` is abstract and every refusal declares its `code()`; the handlers map a status and ask `ex.code()`. `type` points to the code's entry in `docs/problems.md`, and a test in each module fails when a code is missing from it.
+- **N-8 · No response carries the correlation id.** `X-Correlation-Id` is read from the
+  request and never written back, in a header or in a problem. When the client omits it, the
+  server generates one the client never learns. Support has nothing to ask a customer for,
+  where Stripe returns a `request_id`. Related to R-4.
+
+  > **Closed — 2026-11-24.** `CorrelationIdFilter` keeps the `X-Correlation-Id` a request sent, or gives a command one, returns it in the response header, and every problem carries it as `correlationId` — a 401 or 403 from the security chain included. Pinned by `CorrelationIdContractTest`.
+
+Each fix changes the body or the headers of existing responses, so each goes through a
+reviewed diff of the contract files and of `api-contract/payments.openapi.json`. The mobile
+client classifies errors by status today; a stable code lets it be finer without parsing text.
+
+### 9.5 Tracing and correlation
+
+Three identifiers answer three questions, and Kora has only one of them, doing two jobs.
+
+| | Trace id | Correlation id | Idempotency key |
+|---|---|---|---|
+| Answers | what happened during *this request*: which calls, how long each, where it failed | what happened to *this operation*, end to end | was *this intent* already handled? |
+| Lives | one request and its downstream calls | the whole operation: retries, provider calls, events, reconciliation | the de-duplication window |
+| Created by | the server at the edge, or continued from an incoming `traceparent` | the client or the server, when the operation starts | the client |
+| Standard | W3C Trace Context, OpenTelemetry | none — `X-Correlation-Id` by convention | `Idempotency-Key` |
+| Stored | no — logs and traces | yes — the transaction's history | yes — with the original result |
+
+A client that retries a cash-out sends two requests, so two trace ids, sharing one correlation
+id and one idempotency key. Kora has the correlation id only: commands carry it, the history
+stores it, and the anti-replay middleware uses it as a de-duplication key (L-4, R-4).
+
+- **N-8, extended · Reads carry no identifier, and nothing is traced.** `CorrelationIdMiddleware`
+  puts the correlation id in the MDC around a command's dispatch, then removes it. A query —
+  balance, history — has none by design (`Query` carries no correlation id), and neither has
+  anything outside the bus: the security filter, the exception handlers that run after the
+  middleware has removed the key. There is no tracing library: neither Micrometer Tracing nor
+  OpenTelemetry. A read request therefore leaves no identifier to follow.
+
+  > **Closed — 2026-11-24.** For the correlation id: the filter publishes it in the MDC for the whole request, the security filter and the exception handlers included; the command bus publishes it only for a command born elsewhere, such as the expiry job. Reads still carry none, and the trace id waits for the tracing work.
+- **N-9 · The correlation id is printed in no log line.** No `logging.pattern` is configured
+  and there is no `logback` file. Spring Boot's default pattern prints the `traceId` and
+  `spanId` of a tracer, not an arbitrary MDC key, so the `correlationId` placed in the MDC
+  never reaches the output. `CommandBusChainTest` asserts the value is in the MDC, not that it
+  is logged. The README and the engineering standards stated that it is "propagated into every
+  log line"; they were corrected on 2026-11-23. Established by reading the configuration; not
+  yet observed in a captured log.
+
+  > **Closed — 2026-11-24.** `logging.pattern.correlation` prints `[%X{correlationId:-}]` on every line. `CorrelationIdLoggingE2ETest` observes it in a captured log: the warning of the JWT filter, logged before the command bus, names the request's correlation id.
+
+**Direction.** Every request, read or write, gets a trace id: Micrometer Tracing with the
+OpenTelemetry bridge creates one per HTTP request, continues an incoming `traceparent`, puts
+`traceId` and `spanId` in the MDC, which the default pattern already prints, and the id is
+returned in a response header and in every problem detail. No exporter is needed for that;
+OTLP export to a tracing backend comes with Step 10. The correlation id keeps its business
+role — read from the header, generated when absent, returned, and added to the log pattern —
+and stops being a de-duplication key when the idempotency key arrives in Step 4. The hexagon
+is untouched: tracing lives in adapters and configuration, and the allow-list of
+`application/` and `ports/` stays empty. This is also the first concrete step on L-15.
+
+### 9.6 Found and fixed since §8
+
+- **E-1 · An expired cash-out authorization kept its funds hold `ACTIVE`** — fixed 2026-11-21
+  (`2a24ae4`). The payment ended `AUTHORIZATION_FAILED` while the money stayed blocked on the
+  wallet. The expiry job now releases the hold of an `AUTHORIZED` payment it fails. Found
+  while writing the unit tests behind the coverage gate (§9.7), reproduced red first.
+- **E-2 · One `UNKNOWN` payment stopped every authorization from expiring** — fixed 2026-11-21
+  (`2a24ae4`). After a capture timeout, the expiry job called `failAuthorization()` on an
+  `UNKNOWN` transaction; the refusal rolled back the whole run, every minute. The job now acts
+  on `AUTHORIZED` payments only; any other state keeps its transaction, hold and authorization
+  for reconciliation.
+- **A cash-out reaches TX-2 only with its hold** (`390ef05`). The fallback that posted without a
+  hold could follow only an out-of-band change to `funds_holds`, and hid it; TX-2 now fails.
+
+### 9.7 What else changed
+
+- **Tests**: 78 classes and 855 tests — unit 577, integration 119, contract 60, e2e 79 —
+  against 62 and 621 in §8.3.
+- **A fourth level, contract**, on cash-in, cash-out, transfer, balance and history, with the
+  published `api-contract/payments.openapi.json` held to what the contracts observe (#20).
+- **A coverage gate** on every build (#21): unit coverage of the hexagon at 99.9 % lines and
+  99.3 % branches, payment at 100 / 100, all suites at 97.1 / 94.4. Floors: 100 % for payment
+  and 90 % for the rest of the hexagon in the unit suite; a ratchet for all suites.
+- **MapStruct at the two edges**, request to command and snapshot to entity (#19, #20).
+- **The application layer by intent**, `command/<intent>/` and `query/<intent>/`.
+- **One provider per payment method** (#22): `PaymentProviderRouter` sends every step to
+  `OrangeMoneyProvider`, `MomoProvider` or `CardProvider`, all three still composing the
+  latency-simulating stub of D-11. `capture` and `reverse` now name the payment method.
+- **Schema**: 8 Flyway migrations, against 4 in §1.
+- **Documentation** to open-source standards (#23): `SECURITY.md`, GitHub templates,
+  `docs/development/`, `docs/engineering-standards.md` (formerly `HELP.md`), an ADR index.
+
+### 9.8 Documentation drift still present
+
+- `ROADMAP.md:137-138` still counts eleven classes crossing the modules and places
+  `PhoneNumber` in `auth`; the truth is eight, and `PhoneNumber` is in the kernel.
+- ADR-004 still dates its gap fixes to "Step 3".
+- ADR-006 points to `CONTRIBUTING.md` §3.2.2, whose content now lives in
+  `docs/development/local-setup.md` §4 and §5. ADRs are records and stay as written.
+
+### 9.9 What comes next
+
+Ordered by risk removed per unit of work. The operator reversal comes first: it is the only
+operator action, and its audit trail can be forged.
+
+| Order | Work | Closes |
+|---|---|---|
+| 1 | **Pin the reversal over HTTP**: an e2e and a contract test, every response declared in the OpenAPI document | R-2 |
+| 2 | **The actor comes from the token**; `actorId` and `actorRole` leave the request | R-1 |
+| 3 | **Typed errors**: a `TransactionNotFoundException`, a domain exception for a missing authorization, and `/error` permitted | R-5, N-4 |
+| 4 | **Honour the provider's answer**: a refusal leaves the transaction `AUTHORIZED` and answers 502; the reversal reference is recorded | R-3, L-13 |
+| 5 | **The correlation id comes from the header** — done 2026-11-24 | R-4 |
+| 6 | **Decide, in an ADR, whether a posted reversal goes back through the provider** | R-7, N-1 |
+| 7 | **Abuse controls**: an attempt counter on OTP challenges, rate limits on `/auth/**` and on PIN checks | L-8, L-9 |
+| 8 | **Always-on business metrics** | L-15 |
+| 9 | **Take the OTP mail out of the transaction**: SMTP timeouts now; asynchronous delivery after commit through the outbox, with bounded retries, in Step 5 | N-5 |
+| 10 | **One error contract**: a problem detail for 401 and 403, a stable `type` and `code` per problem, the correlation id returned in a header and in every problem — done 2026-11-24 | N-6, N-7, N-8 |
+| 11 | **A trace id on every request**, read or write: Micrometer Tracing with the OpenTelemetry bridge, the id in the logs, in a response header and in every problem; the correlation id added to the log pattern | N-8, N-9, first step of L-15 |
+| 12 | Fix the drift of §9.8 in `ROADMAP.md` | §9.8 |
+
+---
+
+*v1 — Step 1 snapshot · v2 — Steps 3 and 2A · v3 — review at `d28a6be`, status updated 2026-10-17 and 2026-11-23.*
 *[github.com/Geekers-Joel237](https://github.com/Geekers-Joel237) · [geekersjoel237.substack.com](https://geekersjoel237.substack.com)*

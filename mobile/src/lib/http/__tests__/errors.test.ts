@@ -4,20 +4,20 @@ const READ = { path: '/payments/history', isMoneyMovement: false };
 const MONEY = { path: '/payments/transfer', isMoneyMovement: true };
 
 describe('isTokenExpiry — contrat §5.2, le point le plus délicat du socle', () => {
-  it('traite { status, error } comme un jeton expiré → rafraîchissement', () => {
-    expect(isTokenExpiry(401, { status: 401, error: 'Unauthorized' })).toBe(true);
+  it('traite le code UNAUTHENTICATED comme un jeton expiré → rafraîchissement', () => {
+    expect(isTokenExpiry(401, { status: 401, code: 'UNAUTHENTICATED', detail: 'A valid access token is required' })).toBe(true);
   });
 
-  it('traite un ProblemDetail « Invalid PIN » comme un PIN erroné → AUCUN rafraîchissement', () => {
-    expect(isTokenExpiry(401, { status: 401, detail: 'Invalid PIN' })).toBe(false);
+  it('traite le code INVALID_PIN comme un PIN erroné → AUCUN rafraîchissement', () => {
+    expect(isTokenExpiry(401, { status: 401, code: 'INVALID_PIN', detail: 'Invalid PIN' })).toBe(false);
   });
 
-  it('traite un ProblemDetail d’OTP comme un OTP erroné → AUCUN rafraîchissement', () => {
-    expect(isTokenExpiry(401, { status: 401, detail: 'OTP code does not match' })).toBe(false);
+  it('traite le code INVALID_OTP comme un OTP erroné → AUCUN rafraîchissement', () => {
+    expect(isTokenExpiry(401, { status: 401, code: 'INVALID_OTP', detail: 'OTP code does not match' })).toBe(false);
   });
 
   it('ne déclenche jamais de rafraîchissement hors 401', () => {
-    expect(isTokenExpiry(403, { status: 403, error: 'Forbidden' })).toBe(false);
+    expect(isTokenExpiry(403, { status: 403, code: 'FORBIDDEN' })).toBe(false);
     expect(isTokenExpiry(422, { detail: 'Insufficient funds' })).toBe(false);
     expect(isTokenExpiry(500, null)).toBe(false);
   });
@@ -45,8 +45,13 @@ describe('normalizeHttpError — les trois formats du contrat §5.1', () => {
     expect(error.isAuthExpired).toBe(false);
   });
 
-  it('format 2 — couche de sécurité Spring', () => {
-    const error = normalizeHttpError(401, { status: 401, error: 'Unauthorized' }, READ);
+  it('un 401 de la couche de sécurité est un ProblemDetail UNAUTHENTICATED', () => {
+    const error = normalizeHttpError(
+      401,
+      { status: 401, code: 'UNAUTHENTICATED', detail: 'A valid access token is required' },
+      READ,
+      'application/problem+json',
+    );
     expect(error.code).toBe('TOKEN_EXPIRED');
     expect(error.isAuthExpired).toBe(true);
   });
@@ -69,12 +74,12 @@ describe('normalizeHttpError — les trois formats du contrat §5.1', () => {
   });
 
   it('distingue un 401 de PIN d’un 401 de jeton', () => {
-    const pin = normalizeHttpError(401, { status: 401, detail: 'Invalid PIN' }, MONEY);
+    const pin = normalizeHttpError(401, { status: 401, code: 'INVALID_PIN', detail: 'Invalid PIN' }, MONEY);
     expect(pin.code).toBe('INVALID_PIN');
     expect(pin.isAuthExpired).toBe(false);
     expect(pin.isOutcomeUnknown).toBe(false);
 
-    const token = normalizeHttpError(401, { status: 401, error: 'Unauthorized' }, MONEY);
+    const token = normalizeHttpError(401, { status: 401, code: 'UNAUTHENTICATED' }, MONEY);
     expect(token.code).toBe('TOKEN_EXPIRED');
     expect(token.isAuthExpired).toBe(true);
   });
@@ -140,16 +145,31 @@ describe('réponses classées comme le contrat Swagger les déclare — api-cont
     expect(normalizeHttpError(500, { status: 500 }, MONEY, 'application/json').isOutcomeUnknown).toBe(true);
   });
 
-  it('lit un 401 en application/problem+json comme un PIN erroné, quel que soit son corps', () => {
-    const error = normalizeHttpError(401, { status: 401, error: 'Unauthorized', detail: 'Invalid PIN' }, MONEY, PROBLEM);
-    expect(error.code).toBe('INVALID_PIN');
+  it('distingue deux 401 problem+json par leur code, jamais par leur type de contenu', () => {
+    const pin = normalizeHttpError(401, { status: 401, code: 'INVALID_PIN', detail: 'Invalid PIN' }, MONEY, PROBLEM);
+    expect(pin.code).toBe('INVALID_PIN');
+    expect(pin.isAuthExpired).toBe(false);
+
+    const token = normalizeHttpError(401, { status: 401, code: 'UNAUTHENTICATED' }, MONEY, PROBLEM);
+    expect(token.code).toBe('TOKEN_EXPIRED');
+    expect(token.isAuthExpired).toBe(true);
+  });
+
+  it('classe un OTP expiré comme un OTP erroné, sans rafraîchir', () => {
+    const error = normalizeHttpError(401, { status: 401, code: 'OTP_EXPIRED' }, READ, PROBLEM);
+    expect(error.code).toBe('INVALID_OTP');
     expect(error.isAuthExpired).toBe(false);
   });
 
-  it('lit un 401 en application/json comme un jeton expiré', () => {
-    const error = normalizeHttpError(401, { status: 401, error: 'Unauthorized' }, MONEY, 'application/json');
-    expect(error.code).toBe('TOKEN_EXPIRED');
-    expect(error.isAuthExpired).toBe(true);
+  it('expose le code du problème et l’identifiant de corrélation pour le support', () => {
+    const error = normalizeHttpError(
+      422,
+      { status: 422, code: 'INSUFFICIENT_FUNDS', detail: 'Insufficient funds', correlationId: 'corr-001' },
+      MONEY,
+      PROBLEM,
+    );
+    expect(error.problemCode).toBe('INSUFFICIENT_FUNDS');
+    expect(error.correlationId).toBe('corr-001');
   });
 });
 

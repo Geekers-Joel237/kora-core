@@ -69,14 +69,14 @@ class UserTest {
     @Test
     void should_let_an_active_user_through_require_active() {
         User user = User.create(VALID_ID, FULL_NAME, EMAIL, ROLE);
-        assertDoesNotThrow(user::requireActive);
+        assertDoesNotThrow(user::requireActiveOrThrowException);
     }
 
     @Test
     void should_stop_a_suspended_user_at_require_active() {
         User user = User.create(VALID_ID, FULL_NAME, EMAIL, ROLE);
         user.suspend();
-        assertThrows(UserNotActiveException.class, user::requireActive);
+        assertThrows(UserNotActiveException.class, user::requireActiveOrThrowException);
     }
 
     @Test

@@ -6,6 +6,9 @@
     "detail" : "Retries exhausted",
     "instance" : "/payments/cash-in",
     "status" : 503,
-    "title" : "Service Unavailable"
+    "title" : "Service Unavailable",
+    "type" : "https://github.com/Geekers-Joel237/kora-core/blob/develop/docs/problems.md#retry-exhausted",
+    "code" : "RETRY_EXHAUSTED",
+    "correlationId" : "33333333-3333-3333-3333-333333333333"
   }
 }

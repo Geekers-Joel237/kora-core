@@ -7,4 +7,8 @@ public class CommandReplayedException extends RuntimeException {
     public CommandReplayedException(Id correlationId) {
         super("Command already received under correlation id: " + correlationId.value());
     }
+
+    public String code() {
+        return "COMMAND_REPLAYED";
+    }
 }

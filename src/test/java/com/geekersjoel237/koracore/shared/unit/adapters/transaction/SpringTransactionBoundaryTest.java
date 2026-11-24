@@ -48,7 +48,7 @@ class SpringTransactionBoundaryTest {
             var boundary = new SpringTransactionBoundary(manager);
 
             assertThatThrownBy(() -> boundary.<String>execute(() -> {
-                throw new BusinessException("balance is 0, required 5000");
+                throw new Refused("balance is 0, required 5000");
             })).isInstanceOf(BusinessException.class);
 
             assertThat(manager.rolledBack())
@@ -136,11 +136,23 @@ class SpringTransactionBoundaryTest {
             var boundary = new SpringTransactionBoundary(new NoopTransactionManager());
 
             assertThatThrownBy(() -> boundary.<String>execute(() -> {
-                throw new BusinessException("balance is 0, required 5000");
+                throw new Refused("balance is 0, required 5000");
             }))
                     .describedAs("only concurrency failures are translated")
                     .isInstanceOf(BusinessException.class)
                     .hasMessage("balance is 0, required 5000");
+        }
+    }
+
+    private static final class Refused extends BusinessException {
+
+        private Refused(String message) {
+            super(message);
+        }
+
+        @Override
+        public String code() {
+            return "REFUSED";
         }
     }
 }

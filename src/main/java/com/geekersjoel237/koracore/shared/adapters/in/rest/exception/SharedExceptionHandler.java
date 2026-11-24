@@ -13,13 +13,12 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import java.util.List;
 import java.util.Map;
 
-
 @RestControllerAdvice
 public class SharedExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     ProblemDetail onValidationFailure(MethodArgumentNotValidException ex) {
-        ProblemDetail detail = ProblemDetails.of(HttpStatus.BAD_REQUEST, "Request validation failed");
+        ProblemDetail detail = ProblemDetails.of(HttpStatus.BAD_REQUEST, "VALIDATION_FAILED", "Request validation failed");
         List<Map<String, String>> violations = ex.getBindingResult()
                 .getFieldErrors()
                 .stream()
@@ -35,26 +34,26 @@ public class SharedExceptionHandler {
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     ProblemDetail onUnreadableMessage() {
-        return ProblemDetails.of(HttpStatus.BAD_REQUEST, "Malformed request body");
+        return ProblemDetails.of(HttpStatus.BAD_REQUEST, "MALFORMED_REQUEST", "Malformed request body");
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
     ProblemDetail onBadRequest(IllegalArgumentException ex) {
-        return ProblemDetails.of(HttpStatus.BAD_REQUEST, ex.getMessage());
+        return ProblemDetails.of(HttpStatus.BAD_REQUEST, "INVALID_ARGUMENT", ex.getMessage());
     }
 
     @ExceptionHandler(CommandReplayedException.class)
     ProblemDetail onReplay(CommandReplayedException ex) {
-        return ProblemDetails.of(HttpStatus.CONFLICT, ex.getMessage());
+        return ProblemDetails.of(HttpStatus.CONFLICT, ex.code(), ex.getMessage());
     }
 
     @ExceptionHandler(CurrencyMismatchException.class)
     ProblemDetail onCurrencyMismatch(CurrencyMismatchException ex) {
-        return ProblemDetails.of(HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());
+        return ProblemDetails.of(HttpStatus.UNPROCESSABLE_CONTENT, ex);
     }
 
     @ExceptionHandler(RetryExhaustedException.class)
     ProblemDetail onRetryExhausted(RetryExhaustedException ex) {
-        return ProblemDetails.of(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
+        return ProblemDetails.of(HttpStatus.SERVICE_UNAVAILABLE, ex.code(), ex.getMessage());
     }
 }

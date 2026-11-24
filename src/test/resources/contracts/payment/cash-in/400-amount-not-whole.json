@@ -7,9 +7,12 @@
     "instance" : "/payments/cash-in",
     "status" : 400,
     "title" : "Bad Request",
+    "type" : "https://github.com/Geekers-Joel237/kora-core/blob/develop/docs/problems.md#validation-failed",
+    "code" : "VALIDATION_FAILED",
     "violations" : [ {
-      "message" : "XAF has no minor unit: amount must be a whole number",
-      "field" : "amount"
-    } ]
+      "field" : "amount",
+      "message" : "XAF has no minor unit: amount must be a whole number"
+    } ],
+    "correlationId" : "33333333-3333-3333-3333-333333333333"
   }
 }

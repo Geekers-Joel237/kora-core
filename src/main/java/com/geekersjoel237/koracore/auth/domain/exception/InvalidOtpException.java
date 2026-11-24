@@ -5,4 +5,9 @@ public class InvalidOtpException extends BusinessException {
     public InvalidOtpException(String message) {
         super(message);
     }
+
+    @Override
+    public String code() {
+        return "INVALID_OTP";
+    }
 }

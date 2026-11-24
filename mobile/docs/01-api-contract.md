@@ -325,22 +325,36 @@ En lecture, `channel` de l'historique prend l'une des quatre valeurs du tableau 
 
 ### 5.1 Format d'erreur — RFC 9457
 
-Toute erreur gérée renvoie un `application/problem+json`. Le champ `type` est **absent** : il vaudrait `about:blank`, que la norme permet d'omettre.
+> **Depuis le 2026-11-24.** Toute erreur, sécurité comprise, est un `ProblemDetail` en
+> `application/problem+json` portant un `code` stable. Le catalogue des codes est
+> [`docs/problems.md`](../../docs/problems.md) dans `kora-core`. Avant cette date, un `401` ou
+> un `403` de la couche de sécurité arrivait en `application/json` sous la forme
+> `{"status":401,"error":"Unauthorized"}`, et aucune erreur ne portait de `code`.
 
 ```jsonc
 {
-  "title":    "Unprocessable Content",
-  "status":    422,
-  "detail":   "Insufficient funds for account ACC-20260806-A3F91C2D",
-  "instance": "/payments/transfer"
+  "type":          "https://github.com/Geekers-Joel237/kora-core/blob/develop/docs/problems.md#insufficient-funds",
+  "title":         "Unprocessable Content",
+  "status":        422,
+  "detail":        "Insufficient funds for account ACC-20260806-A3F91C2D",
+  "instance":      "/payments/transfer",
+  "code":          "INSUFFICIENT_FUNDS",
+  "correlationId": "33333333-3333-3333-3333-333333333333"
 }
 ```
 
-Sur un `400` de validation, un champ supplémentaire apparaît :
+- **`code`** est le nom stable du problème. L'app décide sur le `code`, jamais sur `detail`, qui
+  est écrit pour un humain et peut changer.
+- **`correlationId`** est présent sur toute commande (`POST`), et sur toute requête qui en envoie
+  un. Il est aussi renvoyé dans l'en-tête `X-Correlation-Id` de **chaque** réponse d'une commande,
+  succès compris ; si l'app n'en envoie pas, le serveur en génère un. C'est l'identifiant à citer
+  au support.
+- **`violations`** apparaît sur un `400` de validation (`VALIDATION_FAILED`) :
 
 ```jsonc
 {
   "status": 400,
+  "code": "VALIDATION_FAILED",
   "detail": "Request validation failed",
   "violations": [
     { "field": "phoneNumber", "message": "Phone number must contain 8 to 15 digits" }
@@ -348,39 +362,38 @@ Sur un `400` de validation, un champ supplémentaire apparaît :
 }
 ```
 
-**Trois formats coexistent.** Le client HTTP doit tous les normaliser vers une erreur interne unique.
+**Deux formats coexistent.** Le client HTTP doit les normaliser vers une erreur interne unique.
 
 | # | Format | Producteur | Cas |
 |---|---|---|---|
-| 1 | `ProblemDetail` (RFC 9457), `application/problem+json` | `SharedExceptionHandler`, `PaymentExceptionHandler`, `AuthExceptionHandler` | Toute exception métier mappée, `502` du provider compris |
-| 2 | `{ "status": n, "error": "…" }`, `application/json` | Couche de sécurité Spring | `401` jeton absent/invalide, `403` rôle insuffisant |
-| 3 | Corps d'erreur Spring par défaut | Aucun handler | `500` sur une exception que personne ne mappe — un défaut, plus aucun cas connu |
+| 1 | `ProblemDetail` (RFC 9457), `application/problem+json`, avec `code` | les gestionnaires d'exceptions, sécurité comprise | toute erreur déclarée : métier, validation, `401`, `403`, `502` du provider, `503` |
+| 2 | Corps d'erreur Spring par défaut | aucun gestionnaire | `500` sur une exception que personne ne mappe — un défaut |
 
 ```jsonc
-{ "status": 401, "error": "Unauthorized" }   // format 2 — jeton absent, invalide ou expiré
-{ "status": 403, "error": "Forbidden" }      // format 2 — rôle insuffisant
-```
-
-```jsonc
-// format 3 — exception non mappée
+// format 2 — exception non mappée
 { "timestamp": "2026-08-06T11:42:13.401+00:00", "status": 500,
   "error": "Internal Server Error", "path": "/payments/cash-in" }
 ```
 
-Le **type de contenu** distingue les formats 1 et 2 sans lire le corps : `application/problem+json` contre `application/json`.
-
-Le parseur doit être défensif : un corps **non-JSON** ou vide reste possible, et ne doit jamais faire planter la couche HTTP.
+Le parseur doit être défensif : un corps **non-JSON** ou vide reste possible, et ne doit jamais
+faire planter la couche HTTP.
 
 ### 5.2 Distinguer les deux `401`
 
-Un `401` sur `/payments/**` a deux causes qui appellent des réactions opposées :
+Un `401` a deux causes qui appellent des réactions opposées. Les deux arrivent en
+`application/problem+json` : **seul le `code` les distingue.**
 
-| Corps de la réponse | Cause | Réaction |
+| `code` | Cause | Réaction |
 |---|---|---|
-| `{"status":401,"error":"Unauthorized"}` | Jeton expiré ou invalide | Rafraîchir le jeton, rejouer **une** fois |
-| `ProblemDetail` avec `detail: "Invalid PIN"` | PIN erroné | **Ne pas rafraîchir. Ne pas rejouer.** Afficher l'erreur de PIN |
+| `UNAUTHENTICATED` | Jeton d'accès absent, invalide ou expiré | Rafraîchir le jeton, rejouer **une** fois |
+| `INVALID_PIN` | PIN erroné | **Ne pas rafraîchir. Ne pas rejouer.** Afficher l'erreur de PIN |
+| `INVALID_OTP`, `OTP_EXPIRED` | Code OTP erroné, expiré ou déjà utilisé | Ne pas rafraîchir ; redemander un code |
+| `TOKEN_INVALID` | Jeton de rafraîchissement refusé — révoqué, expiré, ou rejoué | Fin de session : se reconnecter |
 
-Confondre les deux produit soit une boucle de rafraîchissement infinie, soit une déconnexion injustifiée. C'est le bug le plus probable de l'intercepteur HTTP.
+Un `401` au corps vide ou illisible ne peut venir que d'une passerelle : il est traité comme un
+jeton à rafraîchir. Confondre les cas produit soit une boucle de rafraîchissement infinie, soit une
+déconnexion injustifiée. C'est le bug le plus probable de l'intercepteur HTTP ;
+`src/lib/http/errors.ts` l'implémente, et ses tests le figent.
 
 ### 5.3 Manipulation des montants — règle non négociable
 

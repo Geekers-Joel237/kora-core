@@ -329,7 +329,7 @@ mapper; a response is built by hand in `*Response.from(...)`.
 
 ### 8.7 Logging
 
-- The correlation id is born at the HTTP edge and propagated into every log line.
+- Every command carries a correlation id, stored with the transaction's history. The target is a trace id on every request, read or write, and both ids in every log line — not there yet ([state of view](./kora-core-state-of-view-v3.md) §9.5).
 - Never log PII — email, phone number, full name — at any level, nor a secret, a token, an
   OTP code or a PIN. `Pin`, `PhoneNumber`, `OtpCode` and the tokens redact themselves in
   `toString()`.

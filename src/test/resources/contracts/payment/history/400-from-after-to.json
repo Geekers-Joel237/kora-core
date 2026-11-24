@@ -6,6 +6,8 @@
     "detail" : "'from' (2026-11-19) cannot be after 'to' (2026-11-01)",
     "instance" : "/payments/history",
     "status" : 400,
-    "title" : "Bad Request"
+    "title" : "Bad Request",
+    "type" : "https://github.com/Geekers-Joel237/kora-core/blob/develop/docs/problems.md#invalid-argument",
+    "code" : "INVALID_ARGUMENT"
   }
 }

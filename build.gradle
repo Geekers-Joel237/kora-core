@@ -77,6 +77,10 @@ tasks.withType(Test).configureEach {
             '.env.example')
             .withPropertyName('configurationGuardInputs')
             .withPathSensitivity(PathSensitivity.RELATIVE)
+
+    inputs.file('docs/problems.md')
+            .withPropertyName('problemCatalog')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 apply from: 'gradle/coverage.gradle'

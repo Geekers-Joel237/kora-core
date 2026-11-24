@@ -6,6 +6,9 @@
     "detail" : "Cannot transfer to your own wallet",
     "instance" : "/payments/transfer",
     "status" : 422,
-    "title" : "Unprocessable Content"
+    "title" : "Unprocessable Content",
+    "type" : "https://github.com/Geekers-Joel237/kora-core/blob/develop/docs/problems.md#self-transfer",
+    "code" : "SELF_TRANSFER",
+    "correlationId" : "33333333-3333-3333-3333-333333333333"
   }
 }

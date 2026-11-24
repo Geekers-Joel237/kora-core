@@ -6,4 +6,9 @@ public class SelfTransferException extends BusinessException {
     public SelfTransferException(String message) {
         super(message);
     }
+
+    @Override
+    public String code() {
+        return "SELF_TRANSFER";
+    }
 }

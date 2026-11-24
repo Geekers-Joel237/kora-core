@@ -123,7 +123,7 @@ async function performRefresh(refreshToken: string): Promise<ApiTokensResponse> 
   // Un 200 au corps illisible est traité comme un échec de rafraîchissement :
   // continuer avec des jetons inexistants produirait une boucle de 401.
   if (typeof body !== 'object' || body === null || !('accessToken' in body)) {
-    throw normalizeHttpError(401, { error: 'Unauthorized' }, {
+    throw normalizeHttpError(401, { code: 'UNAUTHENTICATED' }, {
       path: '/auth/refresh',
       isMoneyMovement: false,
     });
@@ -142,7 +142,7 @@ async function refreshTokens(): Promise<ApiTokensResponse> {
   const refreshToken = provider?.getRefreshToken();
 
   if (!provider || !refreshToken) {
-    throw normalizeHttpError(401, { error: 'Unauthorized' }, {
+    throw normalizeHttpError(401, { code: 'UNAUTHENTICATED' }, {
       path: '/auth/refresh',
       isMoneyMovement: false,
     });

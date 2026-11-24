@@ -5,4 +5,9 @@ public class OtpExpiredException extends BusinessException {
     public OtpExpiredException(String message) {
         super(message);
     }
+
+    @Override
+    public String code() {
+        return "OTP_EXPIRED";
+    }
 }

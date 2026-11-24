@@ -23,3 +23,7 @@ spring:
     # Quoted on purpose: YAML 1.1 reads a bare off as the boolean false, which
     # does not bind to the Banner.Mode enum.
     banner-mode: "off"
+
+logging:
+  pattern:
+    correlation: "[%X{correlationId:-}] "

@@ -15,7 +15,6 @@ import static com.geekersjoel237.koracore.shared.adapters.in.rest.ApiSchemas.BEA
 import static com.geekersjoel237.koracore.shared.adapters.in.rest.ApiSchemas.JSON;
 import static com.geekersjoel237.koracore.shared.adapters.in.rest.ApiSchemas.PROBLEM_JSON;
 import static com.geekersjoel237.koracore.shared.adapters.in.rest.ApiSchemas.PROBLEM_REF;
-import static com.geekersjoel237.koracore.shared.adapters.in.rest.ApiSchemas.SECURITY_ERROR_REF;
 
 @Tag(name = "Payments")
 @RequestMapping("/payments")
@@ -25,10 +24,10 @@ public interface BalanceApi {
     @Operation(summary = "Get current wallet balance")
     @ApiResponse(responseCode = "200", description = "amount is the available balance; ledgerAmount the ledger balance",
             content = @Content(mediaType = JSON, schema = @Schema(implementation = BalanceResponse.class)))
-    @ApiResponse(responseCode = "401", description = "Missing or invalid token",
-            content = @Content(mediaType = JSON, schema = @Schema(ref = SECURITY_ERROR_REF)))
+    @ApiResponse(responseCode = "401", description = "Missing or invalid token (UNAUTHENTICATED)",
+            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(ref = PROBLEM_REF)))
     @ApiResponse(responseCode = "403", description = "The token's role does not grant customer payments",
-            content = @Content(mediaType = JSON, schema = @Schema(ref = SECURITY_ERROR_REF)))
+            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(ref = PROBLEM_REF)))
     @ApiResponse(responseCode = "404", description = "The caller's wallet does not exist",
             content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(ref = PROBLEM_REF)))
     @GetMapping("/balance")

@@ -20,6 +20,7 @@ Where everything is, by what you want to do.
 | [../CLAUDE.md](../CLAUDE.md) | the invariants, the domain vocabulary and the rules a review applies to a diff |
 | [adr/](./adr/README.md) | every significant decision, and what it cost |
 | [../api-contract/payments.openapi.json](../api-contract/payments.openapi.json) | the published contract of the payment API |
+| [problems.md](./problems.md) | every error code the API returns, what raises it and what a client should do |
 | [design/steps/](./design/steps) | the design notes of each roadmap step |
 
 ## Follow the project

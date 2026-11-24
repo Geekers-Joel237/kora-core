@@ -6,6 +6,9 @@
     "detail" : "Command already received under correlation id: 33333333-3333-3333-3333-333333333333",
     "instance" : "/payments/cash-out",
     "status" : 409,
-    "title" : "Conflict"
+    "title" : "Conflict",
+    "type" : "https://github.com/Geekers-Joel237/kora-core/blob/develop/docs/problems.md#command-replayed",
+    "code" : "COMMAND_REPLAYED",
+    "correlationId" : "33333333-3333-3333-3333-333333333333"
   }
 }

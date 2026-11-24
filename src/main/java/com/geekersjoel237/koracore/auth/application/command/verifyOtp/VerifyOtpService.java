@@ -1,6 +1,5 @@
 package com.geekersjoel237.koracore.auth.application.command.verifyOtp;
 
-import com.geekersjoel237.koracore.auth.application.command.verifyOtp.VerifyOtpCommand;
 import com.geekersjoel237.koracore.auth.domain.exception.CustomerNotFoundException;
 import com.geekersjoel237.koracore.auth.domain.model.Customer;
 import com.geekersjoel237.koracore.auth.domain.model.User;

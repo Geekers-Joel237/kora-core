@@ -6,4 +6,9 @@ public class InvalidAccountException extends BusinessException {
     public InvalidAccountException(String message) {
         super(message);
     }
+
+    @Override
+    public String code() {
+        return "INVALID_ACCOUNT";
+    }
 }

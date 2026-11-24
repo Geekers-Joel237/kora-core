@@ -4,4 +4,9 @@ public class PaymentTimeoutProviderException extends PaymentProviderException {
     public PaymentTimeoutProviderException(String message) {
         super(message);
     }
+
+    @Override
+    public String code() {
+        return "PROVIDER_TIMEOUT";
+    }
 }
