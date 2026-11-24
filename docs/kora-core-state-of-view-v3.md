@@ -477,10 +477,10 @@ test, says so.
 | N-3 | **Open** | `refresh_tokens` is never purged: the only scheduled job in `src/main` is the authorization expiry |
 | N-4 | **Open**, by reading | `/error` is still not permitted in `SecurityConfig`. Any exception without a handler — an `IllegalStateException` among them — still reaches the client as 401. Not yet pinned by a test |
 | N-5 | **Open**, by reading — new | The OTP mail is sent synchronously, inside the transaction of registration and login, with no SMTP timeout (§9.3) |
-| N-6 | **Open** — new | A 401 or a 403 is not a problem detail: two error formats coexist (§9.4) |
-| N-7 | **Open** — new | No error carries a machine-readable code; three 422s differ only by their message (§9.4) |
-| N-8 | **Open** — new | No response carries the correlation id; reads carry no identifier at all, and there is no tracing (§9.4, §9.5) |
-| N-9 | **Open**, by reading — new | The correlation id is printed in no log line (§9.5) |
+| N-6 | **Closed** 2026-11-24 | Every error, security included, is a problem detail (§9.4) |
+| N-7 | **Closed** 2026-11-24 | Every problem carries a `type` and a stable `code`, catalogued in `docs/problems.md` (§9.4) |
+| N-8 | **Closed** 2026-11-24 for the correlation id; tracing open | Every command answers with its correlation id, in a header and in its problem; reads carry none by design, and nothing is traced yet (§9.4, §9.5) |
+| N-9 | **Closed** 2026-11-24 for the correlation id | Every line logged during a request or a command names its correlation id, observed in a captured log (§9.5) |
 
 Unchanged since §3.5: no measurement above 25 req/s; one Tomcat thread blocked per provider
 call, virtual threads off, no timeout and no circuit breaker on the provider; BCrypt the first
@@ -519,6 +519,8 @@ named methods and a rollback happens by throwing.
   endpoint declares is ignored — the known gap of `CLAUDE.md` §9. Across every command, the
   anti-replay middleware records the id before the command runs: a reversal refused by the
   provider (502) cannot be retried with the same id for five minutes; it gets 409.
+
+  > **Closed — 2026-11-24.** `ReverseAction` reads the correlation id from the header, like every other command, and the field left `ReverseRequest`. The anti-replay window still records an id before the command runs; that goes with the idempotency key of Step 4.
 - **R-5 · Medium — mistyped errors.** An unknown transaction raises
   `AccountNotFoundException("Transaction not found")`, a 404 that names an account. An
   `AUTHORIZED` transaction without an active authorization raises `IllegalStateException`,
@@ -586,16 +588,22 @@ HTTP tooling that reads the status. Three gaps remain against the standard Kora 
   `{"status":403,"error":"Forbidden"}` by hand, as `application/json`
   (`contracts/payment/cash-in/401-no-token.json`, `403-admin-token.json`). Every other error is
   `application/problem+json`, so a client parses two formats. Same piece of work as N-4.
+
+  > **Closed — 2026-11-24.** The security entry point and access-denied handler hand their failure to the exception handlers, so a 401 is `UNAUTHENTICATED` and a 403 `FORBIDDEN`, both `application/problem+json`. The mobile client tells the two 401s apart by `code` in the same delivery.
 - **N-7 · No error carries a machine-readable code.** `ProblemDetails.of` sets a status and a
   free-text `detail`, and no `type`: a problem reads `"title": "Bad Request"` with
   `"detail": "Unknown payment method: BITCOIN"`. Insufficient funds, a blocked account and an
   invalid transition are three 422s that a client can tell apart only by parsing their message.
   RFC 9457 answers with a documented `type` URI per problem, and an extension such as
   `code: "INSUFFICIENT_FUNDS"` for clients that switch on a string.
+
+  > **Closed — 2026-11-24.** `BusinessException` is abstract and every refusal declares its `code()`; the handlers map a status and ask `ex.code()`. `type` points to the code's entry in `docs/problems.md`, and a test in each module fails when a code is missing from it.
 - **N-8 · No response carries the correlation id.** `X-Correlation-Id` is read from the
   request and never written back, in a header or in a problem. When the client omits it, the
   server generates one the client never learns. Support has nothing to ask a customer for,
   where Stripe returns a `request_id`. Related to R-4.
+
+  > **Closed — 2026-11-24.** `CorrelationIdFilter` keeps the `X-Correlation-Id` a request sent, or gives a command one, returns it in the response header, and every problem carries it as `correlationId` — a 401 or 403 from the security chain included. Pinned by `CorrelationIdContractTest`.
 
 Each fix changes the body or the headers of existing responses, so each goes through a
 reviewed diff of the contract files and of `api-contract/payments.openapi.json`. The mobile
@@ -623,6 +631,8 @@ stores it, and the anti-replay middleware uses it as a de-duplication key (L-4, 
   anything outside the bus: the security filter, the exception handlers that run after the
   middleware has removed the key. There is no tracing library: neither Micrometer Tracing nor
   OpenTelemetry. A read request therefore leaves no identifier to follow.
+
+  > **Closed — 2026-11-24.** For the correlation id: the filter publishes it in the MDC for the whole request, the security filter and the exception handlers included; the command bus publishes it only for a command born elsewhere, such as the expiry job. Reads still carry none, and the trace id waits for the tracing work.
 - **N-9 · The correlation id is printed in no log line.** No `logging.pattern` is configured
   and there is no `logback` file. Spring Boot's default pattern prints the `traceId` and
   `spanId` of a tracer, not an arbitrary MDC key, so the `correlationId` placed in the MDC
@@ -630,6 +640,8 @@ stores it, and the anti-replay middleware uses it as a de-duplication key (L-4, 
   is logged. The README and the engineering standards stated that it is "propagated into every
   log line"; they were corrected on 2026-11-23. Established by reading the configuration; not
   yet observed in a captured log.
+
+  > **Closed — 2026-11-24.** `logging.pattern.correlation` prints `[%X{correlationId:-}]` on every line. `CorrelationIdLoggingE2ETest` observes it in a captured log: the warning of the JWT filter, logged before the command bus, names the request's correlation id.
 
 **Direction.** Every request, read or write, gets a trace id: Micrometer Tracing with the
 OpenTelemetry bridge creates one per HTTP request, continues an incoming `traceparent`, puts
@@ -692,12 +704,12 @@ operator action, and its audit trail can be forged.
 | 2 | **The actor comes from the token**; `actorId` and `actorRole` leave the request | R-1 |
 | 3 | **Typed errors**: a `TransactionNotFoundException`, a domain exception for a missing authorization, and `/error` permitted | R-5, N-4 |
 | 4 | **Honour the provider's answer**: a refusal leaves the transaction `AUTHORIZED` and answers 502; the reversal reference is recorded | R-3, L-13 |
-| 5 | **The correlation id comes from the header** | R-4 |
+| 5 | **The correlation id comes from the header** — done 2026-11-24 | R-4 |
 | 6 | **Decide, in an ADR, whether a posted reversal goes back through the provider** | R-7, N-1 |
 | 7 | **Abuse controls**: an attempt counter on OTP challenges, rate limits on `/auth/**` and on PIN checks | L-8, L-9 |
 | 8 | **Always-on business metrics** | L-15 |
 | 9 | **Take the OTP mail out of the transaction**: SMTP timeouts now; asynchronous delivery after commit through the outbox, with bounded retries, in Step 5 | N-5 |
-| 10 | **One error contract**: a problem detail for 401 and 403, a stable `type` and `code` per problem, the correlation id returned in a header and in every problem | N-6, N-7, N-8 |
+| 10 | **One error contract**: a problem detail for 401 and 403, a stable `type` and `code` per problem, the correlation id returned in a header and in every problem — done 2026-11-24 | N-6, N-7, N-8 |
 | 11 | **A trace id on every request**, read or write: Micrometer Tracing with the OpenTelemetry bridge, the id in the logs, in a response header and in every problem; the correlation id added to the log pattern | N-8, N-9, first step of L-15 |
 | 12 | Fix the drift of §9.8 in `ROADMAP.md` | §9.8 |
 

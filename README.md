@@ -113,6 +113,7 @@ A wallet backend with registration, OTP login, cash-in, cash-out, P2P transfer, 
 ### 7️⃣ A payment API boundary that cannot change unnoticed
 - **Contract tests** on cash-in, cash-out, transfer, balance and history: the real web layer, security filter chain and exception handlers, with the use cases replaced by doubles — no database, about ten seconds. Every status, content type and body is compared to a committed file; a difference fails the build until the change is reviewed.
 - **A published contract**, [`api-contract/payments.openapi.json`](./api-contract/payments.openapi.json): every response declared with its content type, required and nullable fields, enumerations taken from the Java sources, whole-unit amounts. The build asserts the declared responses are exactly the ones the contract tests observe.
+- **One error contract**: every error is an RFC 9457 problem detail with a stable `code` from [the catalog](./docs/problems.md), and every command answers with its correlation id, in the `X-Correlation-Id` header and in its problem.
 - The operator reversal is not under contract yet; its full journey comes later.
 
 ### 8️⃣ Quality enforced by the build
