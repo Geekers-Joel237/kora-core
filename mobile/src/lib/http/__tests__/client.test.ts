@@ -101,7 +101,7 @@ describe('injection des en-têtes', () => {
 describe('les deux 401 — contrat §5.2', () => {
   it('rafraîchit et rejoue UNE fois sur un 401 de jeton', async () => {
     queue(
-      { status: 401, body: { status: 401, error: 'Unauthorized' } },
+      { status: 401, body: { status: 401, code: 'UNAUTHENTICATED' } },
       { status: 200, body: TOKENS }, // /auth/refresh
       { status: 200, body: { amount: 125000 } }, // rejeu
     );
@@ -115,7 +115,7 @@ describe('les deux 401 — contrat §5.2', () => {
   });
 
   it('ne rafraîchit JAMAIS sur un 401 de PIN', async () => {
-    queue({ status: 401, body: { status: 401, detail: 'Invalid PIN' } });
+    queue({ status: 401, body: { status: 401, code: 'INVALID_PIN', detail: 'Invalid PIN' } });
 
     await expect(
       request('/payments/transfer', { method: 'POST', body: {} }),
@@ -126,7 +126,7 @@ describe('les deux 401 — contrat §5.2', () => {
   });
 
   it('ne rafraîchit JAMAIS sur un 401 d’OTP', async () => {
-    queue({ status: 401, body: { status: 401, detail: 'OTP code does not match' } });
+    queue({ status: 401, body: { status: 401, code: 'INVALID_OTP', detail: 'OTP code does not match' } });
 
     await expect(
       request('/auth/verify-otp', { method: 'POST', body: {}, auth: false }),
@@ -137,8 +137,8 @@ describe('les deux 401 — contrat §5.2', () => {
 
   it('signale la session expirée quand le rafraîchissement échoue', async () => {
     queue(
-      { status: 401, body: { status: 401, error: 'Unauthorized' } },
-      { status: 401, body: { status: 401, error: 'Unauthorized' } }, // /auth/refresh
+      { status: 401, body: { status: 401, code: 'UNAUTHENTICATED' } },
+      { status: 401, body: { status: 401, code: 'UNAUTHENTICATED' } }, // /auth/refresh
     );
 
     await expect(request('/payments/balance')).rejects.toMatchObject({
@@ -150,9 +150,9 @@ describe('les deux 401 — contrat §5.2', () => {
 
   it('ne tente qu’un seul rafraîchissement par requête', async () => {
     queue(
-      { status: 401, body: { status: 401, error: 'Unauthorized' } },
+      { status: 401, body: { status: 401, code: 'UNAUTHENTICATED' } },
       { status: 200, body: TOKENS },
-      { status: 401, body: { status: 401, error: 'Unauthorized' } }, // rejeu, encore 401
+      { status: 401, body: { status: 401, code: 'UNAUTHENTICATED' } }, // rejeu, encore 401
     );
 
     await expect(request('/payments/balance')).rejects.toMatchObject({
@@ -173,7 +173,7 @@ describe('rafraîchissement en vol groupé — architecture §3.4', () => {
       const key = String(url);
       served[key] = (served[key] ?? 0) + 1;
       return served[key] === 1
-        ? jsonResponse({ status: 401, body: { status: 401, error: 'Unauthorized' } })
+        ? jsonResponse({ status: 401, body: { status: 401, code: 'UNAUTHENTICATED' } })
         : jsonResponse({ status: 200, body: { ok: true } });
     });
     const served: Record<string, number> = {};

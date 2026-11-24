@@ -139,7 +139,7 @@ describe('signal de rafraîchissement de jeton — §3', () => {
       }
       call += 1;
       return call === 1
-        ? { status: 401, ok: false, text: async () => JSON.stringify({ status: 401, error: 'Unauthorized' }) }
+        ? { status: 401, ok: false, text: async () => JSON.stringify({ status: 401, code: 'UNAUTHENTICATED' }) }
         : { status: 200, ok: true, text: async () => '{}' };
     }) as unknown as typeof fetch;
 

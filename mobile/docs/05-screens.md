@@ -462,7 +462,7 @@ Déconnexion : `Dialog` de confirmation → purge de SecureStore, du cache de re
 Le cas qui trahit le plus vite une application mal construite.
 
 ```
-1. Une requête renvoie 401 avec { error: "Unauthorized" }
+1. Une requête renvoie 401 avec { code: "UNAUTHENTICATED" }
 2. L'intercepteur tente un rafraîchissement unique, en vol groupé
 3. Succès → la requête d'origine est rejouée, l'utilisateur ne voit rien
 4. Échec  → purge, une Sheet non bloquante remonte : « Session expirée »
