@@ -1,15 +1,12 @@
 package com.geekersjoel237.koracore.shared.adapters.in.rest;
 
-import com.geekersjoel237.koracore.shared.domain.vo.Id;
-
 public final class CorrelationId {
 
     public static final String HEADER = "X-Correlation-Id";
+    public static final String ATTRIBUTE = CorrelationId.class.getName();
+    public static final String PROPERTY = "correlationId";
+    public static final String MDC_KEY = "correlationId";
 
     private CorrelationId() {
-    }
-
-    public static Id fromHeaderOrNew(String header) {
-        return header == null || header.isBlank() ? Id.generate() : new Id(header.trim());
     }
 }

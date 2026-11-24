@@ -5,4 +5,9 @@ public class CustomerNotFoundException extends BusinessException {
     public CustomerNotFoundException(String message) {
         super(message);
     }
+
+    @Override
+    public String code() {
+        return "CUSTOMER_NOT_FOUND";
+    }
 }

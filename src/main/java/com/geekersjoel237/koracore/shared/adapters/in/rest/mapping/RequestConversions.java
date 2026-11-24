@@ -1,6 +1,5 @@
 package com.geekersjoel237.koracore.shared.adapters.in.rest.mapping;
 
-import com.geekersjoel237.koracore.shared.adapters.in.rest.CorrelationId;
 import com.geekersjoel237.koracore.shared.domain.vo.Id;
 import com.geekersjoel237.koracore.shared.domain.vo.Pin;
 import org.mapstruct.Named;
@@ -17,7 +16,7 @@ public class RequestConversions {
 
     @Named(CORRELATION_ID)
     public Id correlationId(String header) {
-        return CorrelationId.fromHeaderOrNew(header);
+        return new Id(header);
     }
 
     public Pin pin(String raw) {

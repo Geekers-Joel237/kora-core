@@ -6,6 +6,9 @@
     "detail" : "Account is blocked",
     "instance" : "/payments/cash-in",
     "status" : 422,
-    "title" : "Unprocessable Content"
+    "title" : "Unprocessable Content",
+    "type" : "https://github.com/Geekers-Joel237/kora-core/blob/develop/docs/problems.md#account-blocked",
+    "code" : "ACCOUNT_BLOCKED",
+    "correlationId" : "33333333-3333-3333-3333-333333333333"
   }
 }

@@ -5,4 +5,9 @@ public class PinValidationException extends BusinessException {
     public PinValidationException(String message) {
         super(message);
     }
+
+    @Override
+    public String code() {
+        return "INVALID_PIN";
+    }
 }

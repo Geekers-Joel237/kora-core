@@ -6,6 +6,9 @@
     "detail" : "Invalid PIN",
     "instance" : "/payments/cash-in",
     "status" : 401,
-    "title" : "Unauthorized"
+    "title" : "Unauthorized",
+    "type" : "https://github.com/Geekers-Joel237/kora-core/blob/develop/docs/problems.md#invalid-pin",
+    "code" : "INVALID_PIN",
+    "correlationId" : "33333333-3333-3333-3333-333333333333"
   }
 }

@@ -1,7 +1,7 @@
 package com.geekersjoel237.koracore.auth.config;
 
 import com.geekersjoel237.koracore.auth.adapters.in.security.JwtAuthenticationFilter;
-import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -13,6 +13,7 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.servlet.HandlerExceptionResolver;
 import com.geekersjoel237.koracore.auth.domain.enums.Role;
 
 @Configuration
@@ -21,9 +22,12 @@ import com.geekersjoel237.koracore.auth.domain.enums.Role;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtFilter;
+    private final HandlerExceptionResolver exceptionResolver;
 
-    public SecurityConfig(JwtAuthenticationFilter jwtFilter) {
+    public SecurityConfig(JwtAuthenticationFilter jwtFilter,
+                          @Qualifier("handlerExceptionResolver") HandlerExceptionResolver exceptionResolver) {
         this.jwtFilter = jwtFilter;
+        this.exceptionResolver = exceptionResolver;
     }
 
     @Bean
@@ -41,16 +45,8 @@ public class SecurityConfig {
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(ex -> ex
-                        .authenticationEntryPoint((req, res, e) -> {
-                            res.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                            res.setContentType("application/json");
-                            res.getWriter().write("{\"status\":401,\"error\":\"Unauthorized\"}");
-                        })
-                        .accessDeniedHandler((req, res, e) -> {
-                            res.setStatus(HttpServletResponse.SC_FORBIDDEN);
-                            res.setContentType("application/json");
-                            res.getWriter().write("{\"status\":403,\"error\":\"Forbidden\"}");
-                        }))
+                        .authenticationEntryPoint((req, res, e) -> exceptionResolver.resolveException(req, res, null, e))
+                        .accessDeniedHandler((req, res, e) -> exceptionResolver.resolveException(req, res, null, e)))
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
     }

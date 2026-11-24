@@ -6,6 +6,9 @@
     "detail" : "Unknown payment method: BITCOIN",
     "instance" : "/payments/cash-out",
     "status" : 400,
-    "title" : "Bad Request"
+    "title" : "Bad Request",
+    "type" : "https://github.com/Geekers-Joel237/kora-core/blob/develop/docs/problems.md#invalid-argument",
+    "code" : "INVALID_ARGUMENT",
+    "correlationId" : "33333333-3333-3333-3333-333333333333"
   }
 }

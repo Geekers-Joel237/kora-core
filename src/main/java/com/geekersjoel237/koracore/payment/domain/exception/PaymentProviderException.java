@@ -5,4 +5,9 @@ public class PaymentProviderException extends BusinessException {
     public PaymentProviderException(String message) {
         super(message);
     }
+
+    @Override
+    public String code() {
+        return "PROVIDER_REFUSED";
+    }
 }

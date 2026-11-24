@@ -1,9 +1,13 @@
 {
   "operation" : "GET /payments/history",
   "status" : 403,
-  "contentType" : "application/json",
+  "contentType" : "application/problem+json",
   "body" : {
+    "detail" : "The token's role does not grant this route",
+    "instance" : "/payments/history",
     "status" : 403,
-    "error" : "Forbidden"
+    "title" : "Forbidden",
+    "type" : "https://github.com/Geekers-Joel237/kora-core/blob/develop/docs/problems.md#forbidden",
+    "code" : "FORBIDDEN"
   }
 }

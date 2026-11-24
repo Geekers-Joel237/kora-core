@@ -87,12 +87,12 @@ class TransferContractTest {
     }
 
     @Test
-    void no_token_is_a_401_in_the_security_format() {
+    void no_token_is_a_401_unauthenticated() {
         assertMatches("payment/transfer/401-no-token", transfer(null, VALID));
     }
 
     @Test
-    void a_wrong_pin_is_a_401_in_the_problem_format() {
+    void a_wrong_pin_is_a_401_invalid_pin() {
         bus.fail(TransferCommand.class, new PinValidationException("Invalid PIN"));
 
         assertMatches("payment/transfer/401-wrong-pin", transfer(tokens.customer(), VALID));

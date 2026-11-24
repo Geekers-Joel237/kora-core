@@ -124,3 +124,7 @@ kora:
       refresh-token-expiration-days: 7
     otp:
       expiration-minutes: 5
+
+logging:
+  pattern:
+    correlation: "[%X{correlationId:-}] "

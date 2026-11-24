@@ -104,6 +104,26 @@ class CommandBusChainTest {
                 .isNull();
     }
 
+    @Test
+    void leaves_the_correlation_id_an_http_request_already_published() {
+        List<String> seenInside = new ArrayList<>();
+        CommandRegistry registry = new CommandRegistry()
+                .register(SampleCommands.Sample.class, command -> {
+                    seenInside.add(MDC.get(CorrelationIdMiddleware.MDC_KEY));
+                    return ANSWER;
+                });
+        MDC.put(CorrelationIdMiddleware.MDC_KEY, "from-the-request");
+        try {
+            new RegisteredCommandBus(registry, List.of(new CorrelationIdMiddleware()))
+                    .dispatch(SampleCommands.sample(CORRELATION));
+
+            assertThat(seenInside).containsExactly("from-the-request");
+            assertThat(MDC.get(CorrelationIdMiddleware.MDC_KEY)).isEqualTo("from-the-request");
+        } finally {
+            MDC.remove(CorrelationIdMiddleware.MDC_KEY);
+        }
+    }
+
     /**
      * The one place tempted to render a command. It must name the type and stop
      * there: the log of a wallet backend is not where a PIN belongs.

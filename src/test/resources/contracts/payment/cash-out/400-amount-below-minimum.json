@@ -7,9 +7,12 @@
     "instance" : "/payments/cash-out",
     "status" : 400,
     "title" : "Bad Request",
+    "type" : "https://github.com/Geekers-Joel237/kora-core/blob/develop/docs/problems.md#validation-failed",
+    "code" : "VALIDATION_FAILED",
     "violations" : [ {
-      "message" : "Amount must be at least 1 XAF",
-      "field" : "amount"
-    } ]
+      "field" : "amount",
+      "message" : "Amount must be at least 1 XAF"
+    } ],
+    "correlationId" : "33333333-3333-3333-3333-333333333333"
   }
 }

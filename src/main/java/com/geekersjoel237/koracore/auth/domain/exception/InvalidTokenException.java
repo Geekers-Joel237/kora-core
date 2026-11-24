@@ -7,4 +7,9 @@ public class InvalidTokenException extends BusinessException {
     public InvalidTokenException() {
         super("Token is not valid");
     }
+
+    @Override
+    public String code() {
+        return "TOKEN_INVALID";
+    }
 }

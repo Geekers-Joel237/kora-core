@@ -8,13 +8,12 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-
 @RestControllerAdvice
 public class PaymentExceptionHandler {
 
     @ExceptionHandler(AccountNotFoundException.class)
     ProblemDetail onNotFound(AccountNotFoundException ex) {
-        return ProblemDetails.of(HttpStatus.NOT_FOUND, ex.getMessage());
+        return ProblemDetails.of(HttpStatus.NOT_FOUND, ex);
     }
 
     @ExceptionHandler({InsufficientFundsException.class, AccountBlockedException.class,
@@ -22,11 +21,11 @@ public class PaymentExceptionHandler {
             InvalidAccountException.class, InvalidStateTransitionException.class,
             HoldNotActiveException.class})
     ProblemDetail onUnprocessable(BusinessException ex) {
-        return ProblemDetails.of(HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());
+        return ProblemDetails.of(HttpStatus.UNPROCESSABLE_CONTENT, ex);
     }
 
-    @ExceptionHandler({PaymentProviderException.class, PaymentTimeoutProviderException.class})
+    @ExceptionHandler(PaymentProviderException.class)
     ProblemDetail onProviderFailure(PaymentProviderException ex) {
-        return ProblemDetails.of(HttpStatus.BAD_GATEWAY, ex.getMessage());
+        return ProblemDetails.of(HttpStatus.BAD_GATEWAY, ex);
     }
 }

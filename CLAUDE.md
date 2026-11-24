@@ -142,7 +142,7 @@ Kernel contracts:
 | `TransactionBoundary` | Runs a supplier in one transaction. **Not a Unit of Work** (ADR-007) |
 | `MailPort` / `Mail` | Sends a written message. Composition belongs to the caller |
 | `ExpiringStore<V>` | Keyed store whose entries expire; the value is opaque |
-| `BusinessException` | The domain refused. Throwing one inside a boundary rolls it back |
+| `BusinessException` | The domain refused. Throwing one inside a boundary rolls it back. Abstract: each refusal declares its `code()`, the stable name `docs/problems.md` documents |
 | `RetryExhaustedException` | Retries ran out. Nothing was refused — 503, not 4xx |
 
 Every aggregate exposes `snapshot()` returning an inner record, plus a static
@@ -215,7 +215,9 @@ Assertions to apply to a diff. Each one is decidable by reading the diff alone.
     `none` in `src/test/resources/application-test.yaml`.
 15. A new domain exception without a matching `@ExceptionHandler` entry in the module's
     handler (`AuthExceptionHandler`, `PaymentExceptionHandler`) or in
-    `SharedExceptionHandler` is a defect.
+    `SharedExceptionHandler` is a defect. So is one whose `code()` is missing from
+    `docs/problems.md`, or a handler that names a code instead of asking `ex.code()`; only
+    a framework failure, which has no `code()`, is given its code in the handler.
 16. New domain behaviour without a Spring-free unit test is a defect.
 17. A test placed outside `<module>/{unit,integration,contract,e2e}/` is a defect, as is a
     `@SpringBootTest` under `unit/`, an HTTP client under `integration/`, or a database or
@@ -242,7 +244,7 @@ Assertions to apply to a diff. Each one is decidable by reading the diff alone.
 
 ## 8. Testing strategy
 
-78 test classes under `src/test/java`. The tree states the pyramid level first, and
+81 test classes under `src/test/java`. The tree states the pyramid level first, and
 `TestPyramidTest` checks that the statement is true.
 
 ```
@@ -339,9 +341,9 @@ Deliberate and tracked. Do not raise them on a PR.
 - Two concurrent exchanges of the same refresh token count as a replay and end the
   session. The mobile client sends one refresh at a time (`mobile/docs/06-architecture.md`).
 - The operator reversal, `POST /admin/payments/{txId}/reverse`, is outside the contract
-  level and outside `api-contract/payments.openapi.json`, and `ReverseAction` takes the
-  correlation id from the request body, ignoring the `X-Correlation-Id` header it declares.
-  Its full journey is revisited as one piece later (`docs/technical-foundation.md` §14).
+  level and outside `api-contract/payments.openapi.json`. Its full journey is revisited as
+  one piece later (`docs/technical-foundation.md` §14); the open findings are R-1 to R-8 of
+  the state of view v3, §9.2.
 
 ## 10. Key files
 
@@ -351,6 +353,7 @@ Deliberate and tracked. Do not raise them on a PR.
 - `CONTRIBUTING.md` — the contribution workflow: Git Flow, Conventional Commits, gates, pull request checklist
 - `docs/development/` — `local-setup.md` (environment, Compose, profiles, configuration assignment), `testing.md` (levels, coverage gate, API contract), `database.md` (migration naming, enum constraints, roles), `troubleshooting.md`; configuration assignment and migration naming are both test-enforced
 - `SECURITY.md` — vulnerability reporting, through GitHub private reporting
+- `docs/problems.md` — the catalog of error codes: one entry per `code()`, each the target of a problem's `type`
 - `docs/kora-core-state-of-view-v3.md` — review at `d28a6be`: what holds, what does
   not, ranked limits L-1 to L-15. Kept as written; a closed limit gets a dated note.
   `docs/kora-core-state-of-view-v2.md` is the Steps 2 and 3 retrospective and

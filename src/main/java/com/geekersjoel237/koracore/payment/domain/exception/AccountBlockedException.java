@@ -5,4 +5,9 @@ public class AccountBlockedException extends BusinessException {
     public AccountBlockedException(String message) {
         super(message);
     }
+
+    @Override
+    public String code() {
+        return "ACCOUNT_BLOCKED";
+    }
 }

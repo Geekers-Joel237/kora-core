@@ -1,9 +1,13 @@
 {
   "operation" : "GET /payments/history",
   "status" : 401,
-  "contentType" : "application/json",
+  "contentType" : "application/problem+json",
   "body" : {
+    "detail" : "A valid access token is required",
+    "instance" : "/payments/history",
     "status" : 401,
-    "error" : "Unauthorized"
+    "title" : "Unauthorized",
+    "type" : "https://github.com/Geekers-Joel237/kora-core/blob/develop/docs/problems.md#unauthenticated",
+    "code" : "UNAUTHENTICATED"
   }
 }

@@ -6,6 +6,9 @@
     "detail" : "Account not found for customer",
     "instance" : "/payments/cash-out",
     "status" : 404,
-    "title" : "Not Found"
+    "title" : "Not Found",
+    "type" : "https://github.com/Geekers-Joel237/kora-core/blob/develop/docs/problems.md#account-not-found",
+    "code" : "ACCOUNT_NOT_FOUND",
+    "correlationId" : "33333333-3333-3333-3333-333333333333"
   }
 }

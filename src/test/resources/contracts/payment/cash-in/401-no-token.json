@@ -1,9 +1,14 @@
 {
   "operation" : "POST /payments/cash-in",
   "status" : 401,
-  "contentType" : "application/json",
+  "contentType" : "application/problem+json",
   "body" : {
+    "detail" : "A valid access token is required",
+    "instance" : "/payments/cash-in",
     "status" : 401,
-    "error" : "Unauthorized"
+    "title" : "Unauthorized",
+    "type" : "https://github.com/Geekers-Joel237/kora-core/blob/develop/docs/problems.md#unauthenticated",
+    "code" : "UNAUTHENTICATED",
+    "correlationId" : "33333333-3333-3333-3333-333333333333"
   }
 }

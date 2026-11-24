@@ -6,4 +6,9 @@ public class MailDeliveryException extends BusinessException {
     public MailDeliveryException(String message, Throwable cause) {
         super(message, cause);
     }
+
+    @Override
+    public String code() {
+        return "MAIL_DELIVERY_FAILED";
+    }
 }

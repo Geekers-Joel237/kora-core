@@ -6,6 +6,9 @@
     "detail" : "Insufficient funds",
     "instance" : "/payments/cash-out",
     "status" : 422,
-    "title" : "Unprocessable Content"
+    "title" : "Unprocessable Content",
+    "type" : "https://github.com/Geekers-Joel237/kora-core/blob/develop/docs/problems.md#insufficient-funds",
+    "code" : "INSUFFICIENT_FUNDS",
+    "correlationId" : "33333333-3333-3333-3333-333333333333"
   }
 }

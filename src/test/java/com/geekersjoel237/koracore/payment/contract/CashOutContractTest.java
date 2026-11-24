@@ -103,12 +103,12 @@ class CashOutContractTest {
     }
 
     @Test
-    void no_token_is_a_401_in_the_security_format() {
+    void no_token_is_a_401_unauthenticated() {
         assertMatches("payment/cash-out/401-no-token", cashOut(null, VALID));
     }
 
     @Test
-    void an_unreadable_token_is_a_401_in_the_security_format() {
+    void an_unreadable_token_is_a_401_unauthenticated() {
         assertMatches("payment/cash-out/401-invalid-token", cashOut("not-a-token", VALID));
     }
 
@@ -118,7 +118,7 @@ class CashOutContractTest {
     }
 
     @Test
-    void a_wrong_pin_is_a_401_in_the_problem_format_not_the_security_one() {
+    void a_wrong_pin_is_a_401_invalid_pin_not_unauthenticated() {
         bus.fail(CashOutCommand.class, new PinValidationException("Invalid PIN"));
 
         assertMatches("payment/cash-out/401-wrong-pin", cashOut(tokens.customer(), VALID));

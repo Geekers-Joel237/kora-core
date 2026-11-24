@@ -5,4 +5,9 @@ public class CurrencyMismatchException extends BusinessException {
     public CurrencyMismatchException(String expected, String actual) {
         super("Currency mismatch: expected " + expected + " but got " + actual);
     }
+
+    @Override
+    public String code() {
+        return "CURRENCY_MISMATCH";
+    }
 }

@@ -5,4 +5,9 @@ public class AccountSuspendedException extends BusinessException {
     public AccountSuspendedException(String message) {
         super(message);
     }
+
+    @Override
+    public String code() {
+        return "ACCOUNT_SUSPENDED";
+    }
 }

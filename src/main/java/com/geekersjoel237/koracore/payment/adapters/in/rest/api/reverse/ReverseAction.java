@@ -20,7 +20,7 @@ public class ReverseAction implements ReverseApi {
 
     @Override
     public ResponseEntity<TransactionResponse> reverse(String txId, ReverseRequest request, String correlationId) {
-        ReversePaymentResult result = bus.dispatch(mapper.toCommand(request, txId));
+        ReversePaymentResult result = bus.dispatch(mapper.toCommand(request, txId, correlationId));
         return ResponseEntity.ok(TransactionResponse.from(result));
     }
 }

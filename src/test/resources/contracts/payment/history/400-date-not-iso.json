@@ -6,6 +6,8 @@
     "detail" : "Invalid date for from: expected YYYY-MM-DD, got: 19-11-2026",
     "instance" : "/payments/history",
     "status" : 400,
-    "title" : "Bad Request"
+    "title" : "Bad Request",
+    "type" : "https://github.com/Geekers-Joel237/kora-core/blob/develop/docs/problems.md#invalid-argument",
+    "code" : "INVALID_ARGUMENT"
   }
 }

@@ -6,6 +6,9 @@
     "detail" : "Malformed request body",
     "instance" : "/payments/cash-out",
     "status" : 400,
-    "title" : "Bad Request"
+    "title" : "Bad Request",
+    "type" : "https://github.com/Geekers-Joel237/kora-core/blob/develop/docs/problems.md#malformed-request",
+    "code" : "MALFORMED_REQUEST",
+    "correlationId" : "33333333-3333-3333-3333-333333333333"
   }
 }

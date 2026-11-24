@@ -7,4 +7,9 @@ public class UserNotActiveException extends BusinessException {
     public UserNotActiveException(String message) {
         super(message);
     }
+
+    @Override
+    public String code() {
+        return "USER_NOT_ACTIVE";
+    }
 }

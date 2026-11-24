@@ -5,4 +5,9 @@ public class DuplicateEmailException extends BusinessException {
     public DuplicateEmailException(String message) {
         super(message);
     }
+
+    @Override
+    public String code() {
+        return "EMAIL_ALREADY_REGISTERED";
+    }
 }
